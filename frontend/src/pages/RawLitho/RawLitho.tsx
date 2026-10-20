@@ -208,6 +208,8 @@ function RawLitho() {
         lookupStatus={lookupStatus}
         onRowChange={workspace.updateRow}
         onDepthCommit={workspace.commitDepthEdit}
+        onPasteCells={workspace.pasteCells}
+        showToast={showToast}
         onAddRow={workspace.tryAddRow}
         onRemoveLastRow={removal.requestRemoveLastRow}
         isEnabled={isPageEnabled}

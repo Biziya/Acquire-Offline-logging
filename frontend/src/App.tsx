@@ -1,6 +1,5 @@
 import { Route, Routes } from "react-router-dom";
 import Sidebar from "./components/Sidebar";
-import StatusIndicator from "./components/StatusIndicator";
 import Home from "./pages/Home";
 import RawLitho from "./pages/RawLitho/RawLitho";
 import UploadData from "./pages/UploadData/UploadData";
@@ -12,10 +11,6 @@ function App() {
       <Sidebar />
 
       <main className="page-content">
-        <div className="backend-status-bar">
-          <StatusIndicator />
-        </div>
-
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/raw-litho" element={<RawLitho />} />

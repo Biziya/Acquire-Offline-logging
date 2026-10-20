@@ -13,10 +13,6 @@
   padding: 6px 16px 10px;
 }
 
-.backend-status-bar {
-  flex-shrink: 0;
-}
-
 .home-page,
 .upload-data-page {
   flex: 1;

@@ -90,6 +90,13 @@ export const ROW_COPY_FIELD_KEYS = Object.freeze<RowField[]>([
   "ox",
 ]);
 
+// Free-text fields keep exactly what the user typed, including leading,
+// trailing and repeated spaces. Codes and depths are still trimmed on load.
+export const COMMENT_FIELD_KEYS = new Set<RowField>([
+  "lithologyComments",
+  "lithologicalDescription",
+]);
+
 export const COMPACT_COLUMN_KEYS = new Set<RowField>([
   "ca",
   "om",
@@ -198,6 +205,36 @@ export const TOAST_NOTIFICATIONS = {
     message: "Invalid lookup codes",
     type: "warning",
     duration: 2500,
+  },
+  cellsCopied: {
+    message: "Cells copied",
+    type: "info",
+    duration: 1500,
+  },
+  invalidPasteValue: {
+    message: "Invalid pasted value",
+    type: "warning",
+    duration: 2500,
+  },
+  pasteShapeMismatch: {
+    message: "Selection does not match clipboard",
+    type: "warning",
+    duration: 3000,
+  },
+  pasteOutOfRange: {
+    message: "Paste exceeds table",
+    type: "warning",
+    duration: 2500,
+  },
+  pasteNotEditable: {
+    message: "Cells not editable",
+    type: "warning",
+    duration: 2500,
+  },
+  clipboardUnavailable: {
+    message: "Clipboard unavailable",
+    type: "error",
+    duration: 3000,
   },
 } satisfies Record<string, ToastNotification>;
 

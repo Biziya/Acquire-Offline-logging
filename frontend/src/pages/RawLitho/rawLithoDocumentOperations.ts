@@ -2,7 +2,9 @@ import type {
   AddRowResult,
   DocumentFallback,
   RawLithoDocument,
+  RawLithoRow,
   RowIssue,
+  RowIssueKind,
   RowField,
   RowId,
 } from "../../types/domain";
@@ -12,8 +14,14 @@ import {
   getNextRowId,
   touchRawLithoDocument,
 } from "./rawLithoHelpers";
-import { findRowIssue, isInvertedDepthRange } from "./rawLithoValidation";
+import {
+  findRowIssue,
+  getMissingRequiredFields,
+  isDuplicateInterval,
+  isInvertedDepthRange,
+} from "./rawLithoValidation";
 import { sortRowsByLithoFrom } from "./rawLithoSorting";
+import type { CellEdit } from "./rawLithoClipboard";
 
 export function createBlankDocument(
   fallback: DocumentFallback = {},
@@ -56,6 +64,64 @@ export function commitDepth(
       reverted ? editRow(lithoDocument, rowId, field, previousValue) : lithoDocument,
     ),
     reverted,
+  };
+}
+
+function findEditIssue(
+  original: RawLithoRow,
+  row: RawLithoRow,
+  rows: RawLithoRow[],
+): RowIssueKind | null {
+  const missingBefore = getMissingRequiredFields(original);
+
+  if (getMissingRequiredFields(row).some((field) => !missingBefore.includes(field)))
+    return "missingRequiredFields";
+  if (isInvertedDepthRange(row)) return "invalidDepthRange";
+  if (isDuplicateInterval(row, rows)) return "duplicateInterval";
+  return null;
+}
+
+/*
+ * Applies a multi-cell paste as one edit: either every value lands and the rows
+ * are re-sorted, or the document is returned unchanged with the reason.
+ *
+ * A paste may not empty a required field that has a value, invert a depth range
+ * or create a duplicate interval. Rows keep their ids and complete objects.
+ */
+export function applyCellEdits(
+  lithoDocument: RawLithoDocument,
+  edits: CellEdit[],
+): { document: RawLithoDocument; issue: RowIssueKind | null } {
+  const rows = lithoDocument.rows.map((row) =>
+    edits
+      .filter((edit) => edit.rowId === String(row.id))
+      .reduce(
+        (next, edit) =>
+          next[edit.columnKey] === edit.value
+            ? next
+            : { ...next, [edit.columnKey]: edit.value },
+        row,
+      ),
+  );
+
+  let hasChanges = false;
+
+  for (const [index, row] of rows.entries()) {
+    const original = lithoDocument.rows[index];
+    if (!original || row === original) continue;
+
+    const issue = findEditIssue(original, row, rows);
+    if (issue) return { document: lithoDocument, issue };
+    hasChanges = true;
+  }
+
+  if (!hasChanges) return { document: lithoDocument, issue: null };
+
+  return {
+    document: touchRawLithoDocument(lithoDocument, {
+      rows: sortRowsByLithoFrom(rows),
+    }),
+    issue: null,
   };
 }
 

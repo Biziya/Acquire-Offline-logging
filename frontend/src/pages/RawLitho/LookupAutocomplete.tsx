@@ -2,7 +2,7 @@ import type { LookupDefinition, LookupRecord } from "../../types/domain";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  handleArrowNavigation,
+  handleCellNavigation,
   isClearCellRequest,
   isNavigationFocus,
   markKeyAsHandled,
@@ -268,7 +268,7 @@ function LookupAutocomplete({
    *
    * It only fires when there is something valid to accept, so a query with no
    * match can never write a wrong value into the cell. A cell the user has not
-   * typed into is left to `handleArrowNavigation`, which keeps the ordinary
+   * typed into is left to `handleCellNavigation`, which keeps the ordinary
    * caret-edge behaviour for reading and editing an existing value.
    */
   function acceptClosestMatch(event: React.KeyboardEvent<HTMLInputElement>) {
@@ -307,15 +307,18 @@ function LookupAutocomplete({
       return;
     }
 
+    // Tab / Shift + Tab settle the value exactly as before, then move like
+    // ArrowRight / ArrowLeft through the shared table navigation.
     if (event.key === "Tab") {
       finishEditing();
+      handleCellNavigation(event);
       return;
     }
 
     if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
       if (acceptClosestMatch(event)) return;
 
-      handleArrowNavigation(event);
+      handleCellNavigation(event);
       return;
     }
 
@@ -327,7 +330,7 @@ function LookupAutocomplete({
      *      reaches `handleTableKeyDown` and appends a row.
      */
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-      handleArrowNavigation(event);
+      handleCellNavigation(event);
       return;
     }
 

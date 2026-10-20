@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
+import StatusIndicator from "./StatusIndicator";
 import "../css/Sidebar.css";
 
 function HomeIcon() {
@@ -116,6 +117,10 @@ function Sidebar() {
           {!collapsed && <span className="sidebar-label">Upload Data</span>}
         </NavLink>
       </nav>
+
+      <div className="sidebar-footer">
+        <StatusIndicator />
+      </div>
     </aside>
   );
 }

@@ -45,19 +45,27 @@ src/
 `main.tsx` mounts `<App />` inside `StrictMode` and `HashRouter`, and imports
 `css/index.css`.
 
-`App.tsx` renders the persistent layout — `Sidebar`, the status bar, and
-`Routes` — so the sidebar stays mounted while the route changes.
+`App.tsx` renders the persistent layout — `Sidebar` and `Routes` — so the
+sidebar stays mounted while the route changes.
 
 ```text
 App
 ├── Sidebar                collapsible, NavLink-based, owns its collapsed state
+│   └── StatusIndicator    footer; polls GET /api/status every 5s (900ms timeout)
 └── main.page-content
-    ├── StatusIndicator    polls GET /api/status every 5s (900ms timeout)
     └── Routes
         ├── /              Home
         ├── /raw-litho     RawLitho
         └── /upload-data   UploadData
 ```
+
+The backend status (green "Online", amber "Offline") sits in `.sidebar-footer`
+at the bottom-left of the sidebar. The sidebar is a flex column: the navigation
+takes the free height and scrolls if it ever runs out of room, and the footer
+never shrinks, so the indicator stays pinned without overlapping the links.
+When the sidebar is collapsed only the coloured light is shown; its `title`
+still reads "Backend online" / "Backend offline". There is exactly one
+`StatusIndicator` in the app.
 
 `StrictMode` double-invokes effects in development. Data-loading hooks are
 written for it: `useDrillholes` and `useRawLithoLookups` use `AbortController`,

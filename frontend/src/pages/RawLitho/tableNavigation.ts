@@ -8,7 +8,7 @@ export const EDITABLE_SELECTOR = [
   "textarea:not([disabled])",
 ].join(", ");
 
-const ARROW_KEYS = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"]);
+const VERTICAL_KEYS = new Set(["ArrowUp", "ArrowDown"]);
 
 let isMovingFocus = false;
 
@@ -70,22 +70,22 @@ function focusEditable(cell: Element | null | undefined) {
   return focusElement(cell?.querySelector(EDITABLE_SELECTOR));
 }
 
+/*
+ * Moves to the previous / next editable cell of the rendered page, in reading
+ * order: past the end of a row it continues on the next row, and before the
+ * start of a row on the previous one. Disabled cells are skipped. Returns false
+ * at the edge of the page, where the table decides what happens next.
+ */
 function moveHorizontally(cell: HTMLTableCellElement, step: number) {
-  let candidate =
-    step > 0 ? cell.nextElementSibling : cell.previousElementSibling;
+  const tbody = cell.closest("tbody");
+  const current = cell.querySelector(EDITABLE_SELECTOR);
+  if (!tbody || !current) return false;
 
-  while (candidate) {
-    if (focusEditable(candidate)) {
-      return true;
-    }
+  const editables = Array.from(tbody.querySelectorAll(EDITABLE_SELECTOR));
+  const index = editables.indexOf(current);
+  if (index === -1) return false;
 
-    candidate =
-      step > 0
-        ? candidate.nextElementSibling
-        : candidate.previousElementSibling;
-  }
-
-  return false;
+  return focusElement(editables[index + step]);
 }
 
 function moveVertically(cell: HTMLTableCellElement, step: number) {
@@ -209,15 +209,32 @@ export function isClearCellRequest(event: TableKeyEvent) {
   return shouldClearCell(event.target);
 }
 
-export function handleArrowNavigation(event: TableKeyEvent) {
-  if (!ARROW_KEYS.has(event.key)) {
-    return false;
-  }
+/*
+ * Horizontal direction requested by a key: 1 forward, -1 backward, 0 none.
+ *
+ * Tab and Shift + Tab always leave the cell. ArrowRight / ArrowLeft only leave
+ * it once the caret has reached that edge of the text, so they still move the
+ * caret while editing. Both the cell handler and the table handler ask this
+ * one function, so the four keys can never drift apart.
+ */
+export function getHorizontalStep(event: TableKeyEvent) {
+  if (event.altKey || event.ctrlKey || event.metaKey) return 0;
 
-  if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
-    return false;
-  }
+  if (event.key === "Tab") return event.shiftKey ? -1 : 1;
+  if (event.shiftKey) return 0;
 
+  const step =
+    event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+
+  return step !== 0 && canLeaveCell(event.target, step) ? step : 0;
+}
+
+/*
+ * Arrow keys, Tab and Shift + Tab inside a cell. Returns true and marks the
+ * event when focus moved. When it returns false at the edge of the page, the
+ * event bubbles to the table, which changes page or appends a row.
+ */
+export function handleCellNavigation(event: TableKeyEvent) {
   const element = event.target;
   const cell = element instanceof Element ? element.closest("td") : null;
 
@@ -225,9 +242,11 @@ export function handleArrowNavigation(event: TableKeyEvent) {
     return false;
   }
 
-  const isVertical = event.key === "ArrowUp" || event.key === "ArrowDown";
+  if (VERTICAL_KEYS.has(event.key)) {
+    if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+      return false;
+    }
 
-  if (isVertical) {
     if (element instanceof HTMLInputElement && element.type === "number") {
       event.preventDefault();
     }
@@ -241,9 +260,9 @@ export function handleArrowNavigation(event: TableKeyEvent) {
     return false;
   }
 
-  const step = event.key === "ArrowRight" ? 1 : -1;
+  const step = getHorizontalStep(event);
 
-  if (!canLeaveCell(element, step) || !moveHorizontally(cell, step)) {
+  if (step === 0 || !moveHorizontally(cell, step)) {
     return false;
   }
 

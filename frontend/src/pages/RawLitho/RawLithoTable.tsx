@@ -5,17 +5,35 @@ import type {
   LookupStatuses,
   RowChange,
   AddRowResult,
+  Notify,
 } from "../../types/domain";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import RawLithoRow from "./RawLithoRow";
 import { useRawLithoShortcuts } from "./hooks/useRawLithoShortcuts";
 import { useRawLithoRowFocus } from "./hooks/useRawLithoRowFocus";
-import { isKeyAlreadyHandled, isRowCreationKey } from "./tableNavigation";
+import {
+  focusCellInRow,
+  getHorizontalStep,
+  getRowIdFromElement,
+  isKeyAlreadyHandled,
+  isRowCreationKey,
+} from "./tableNavigation";
+import {
+  buildClipboardText,
+  getCellRef,
+  isSameCell,
+  isTabularClipboard,
+  parseClipboardText,
+  planPaste,
+  type CellEdit,
+  type CellRef,
+} from "./rawLithoClipboard";
 import { findDuplicateIntervalRowIds } from "./rawLithoValidation";
 import {
   COMPACT_COLUMN_KEYS,
   RAW_LITHO_ROWS_PER_PAGE,
   REQUIRED_COLUMN_KEYS,
+  TOAST_NOTIFICATIONS,
   tableColumns,
 } from "./constants";
 
@@ -28,20 +46,17 @@ interface RawLithoTableProps {
   lookupStatus: LookupStatuses;
   onRowChange: RowChange;
   onDepthCommit: RowChange;
+  onPasteCells: (edits: CellEdit[]) => void;
+  showToast: Notify;
   onAddRow: () => AddRowResult;
   onRemoveLastRow: () => void;
   isEnabled: boolean;
   isBlocked?: boolean;
 }
 
-
-
-
-
-
-
-
 const FALLBACK_FOCUS_FIELD = "lithoTo";
+const FIRST_COLUMN_KEY = tableColumns[0]?.key ?? null;
+const LAST_COLUMN_KEY = tableColumns[tableColumns.length - 1]?.key ?? null;
 
 function buildHeaderClassName(columnKey: RowField, isRequired: boolean) {
   return [
@@ -63,6 +78,8 @@ function RawLithoTable({
   lookupStatus,
   onRowChange,
   onDepthCommit,
+  onPasteCells,
+  showToast,
   onAddRow,
   onRemoveLastRow,
   isEnabled,
@@ -70,6 +87,8 @@ function RawLithoTable({
 }: RawLithoTableProps) {
   const tableWrapperRef = useRef<HTMLDivElement>(null);
   const tableBodyRef = useRef<HTMLTableSectionElement>(null);
+  // Ctrl + click selection, by row id and column key so it survives sorting.
+  const [selectedCells, setSelectedCells] = useState<CellRef[]>([]);
 
   const pageStartIndex = (currentPage - 1) * RAW_LITHO_ROWS_PER_PAGE;
   const visibleRows = useMemo(
@@ -80,6 +99,18 @@ function RawLithoTable({
     () => findDuplicateIntervalRowIds(rows),
     [rows],
   );
+  const selectedColumnsByRow = useMemo(() => {
+    const columnsByRow = new Map<string, Set<RowField>>();
+
+    selectedCells.forEach(({ rowId, columnKey }) => {
+      const columnKeys = columnsByRow.get(rowId) ?? new Set<RowField>();
+
+      columnKeys.add(columnKey);
+      columnsByRow.set(rowId, columnKeys);
+    });
+
+    return columnsByRow;
+  }, [selectedCells]);
   const firstVisibleRow = rows.length === 0 ? 0 : pageStartIndex + 1;
   const lastVisibleRow = Math.min(
     pageStartIndex + visibleRows.length,
@@ -95,6 +126,46 @@ function RawLithoTable({
       tableWrapperRef.current.scrollTop = 0;
     }
   }, [currentPage]);
+
+  /*
+   * Ctrl + click toggles a cell in the selection and focuses it, so Ctrl + C /
+   * Ctrl + V reach the table. A plain click anywhere outside the selection
+   * clears it. Listening on the document covers clicks outside the table too.
+   */
+  useEffect(() => {
+    function handleMouseDown(event: MouseEvent) {
+      if (event.button !== 0) return;
+
+      const tbody = tableBodyRef.current;
+      const cell =
+        tbody && event.target instanceof Node && tbody.contains(event.target)
+          ? getCellRef(event.target)
+          : null;
+
+      if (!event.ctrlKey && !event.metaKey) {
+        setSelectedCells((current) =>
+          current.length === 0 ||
+          (cell && current.some((item) => isSameCell(item, cell)))
+            ? current
+            : [],
+        );
+        return;
+      }
+
+      if (!cell) return;
+
+      event.preventDefault();
+      setSelectedCells((current) =>
+        current.some((item) => isSameCell(item, cell))
+          ? current.filter((item) => !isSameCell(item, cell))
+          : [...current, cell],
+      );
+      focusCellInRow(tbody, cell.rowId, cell.columnKey);
+    }
+
+    document.addEventListener("mousedown", handleMouseDown);
+    return () => document.removeEventListener("mousedown", handleMouseDown);
+  }, []);
 
   const { focusRowCell, requestFocus, handleTableFocus } = useRawLithoRowFocus({
     tableBodyRef,
@@ -138,13 +209,38 @@ function RawLithoTable({
     onPageChange,
   });
 
+  /*
+   * Tab / Shift + Tab / ArrowRight / ArrowLeft at the edge of the rendered page:
+   * the cell handler found no neighbour, so continue in the adjacent row on the
+   * next or previous page. Returns false at either end of the document.
+   */
+  function focusAdjacentPageRow(element: EventTarget, step: number) {
+    const rowId = getRowIdFromElement(element);
+    const index = rows.findIndex((row) => String(row.id) === rowId);
+    const target = index === -1 ? undefined : rows[index + step];
+
+    if (!target) return false;
+
+    focusRowCell(target.id, step > 0 ? FIRST_COLUMN_KEY : LAST_COLUMN_KEY);
+    return true;
+  }
+
   function handleTableKeyDown(
     event: React.KeyboardEvent<HTMLTableSectionElement>,
   ) {
+    if (event.key === "Escape") setSelectedCells([]);
+
     if (!isEnabled || isBlocked) return;
 
     // A cell handler (arrow navigation, lookup dropdown) already used this key.
     if (isKeyAlreadyHandled(event)) return;
+
+    const step = getHorizontalStep(event);
+
+    if (step !== 0 && focusAdjacentPageRow(event.target, step)) {
+      event.preventDefault();
+      return;
+    }
 
     // Only the final page ends at the final row of the document.
     if (!isLastRowVisible) return;
@@ -152,6 +248,69 @@ function RawLithoTable({
 
     event.preventDefault();
     requestAddRow();
+  }
+
+  /* With cells selected, Ctrl + C copies them; otherwise the input's own text. */
+  function handleCopy(event: React.ClipboardEvent<HTMLTableSectionElement>) {
+    if (selectedCells.length === 0) return;
+
+    event.preventDefault();
+
+    try {
+      event.clipboardData.setData(
+        "text/plain",
+        buildClipboardText(rows, selectedCells),
+      );
+      showToast(TOAST_NOTIFICATIONS.cellsCopied);
+    } catch {
+      showToast(TOAST_NOTIFICATIONS.clipboardUnavailable);
+    }
+  }
+
+  /*
+   * Ctrl + V into the selection, or into the focused cell when the clipboard
+   * holds several cells (copied from Excel). A single value pasted without a
+   * selection is left to the input, so ordinary text paste is unchanged.
+   */
+  function handlePaste(event: React.ClipboardEvent<HTMLTableSectionElement>) {
+    if (!isEnabled || isBlocked) return;
+
+    let text: string;
+
+    try {
+      text = event.clipboardData.getData("text/plain");
+    } catch {
+      if (selectedCells.length === 0) return;
+
+      event.preventDefault();
+      showToast(TOAST_NOTIFICATIONS.clipboardUnavailable);
+      return;
+    }
+
+    const grid = parseClipboardText(text);
+    const focusedCell = getCellRef(event.target);
+
+    if (selectedCells.length === 0 && !isTabularClipboard(grid)) return;
+
+    const targets =
+      selectedCells.length > 0
+        ? selectedCells
+        : focusedCell
+          ? [focusedCell]
+          : [];
+    if (targets.length === 0) return;
+
+    event.preventDefault();
+    if (text === "") return;
+
+    const plan = planPaste(rows, targets, grid, lookupData);
+
+    if ("issue" in plan) {
+      showToast(TOAST_NOTIFICATIONS[plan.issue]);
+      return;
+    }
+
+    onPasteCells(plan.edits);
   }
 
   return (
@@ -189,6 +348,8 @@ function RawLithoTable({
             ref={tableBodyRef}
             onKeyDown={handleTableKeyDown}
             onFocus={handleTableFocus}
+            onCopy={handleCopy}
+            onPaste={handlePaste}
           >
             {visibleRows.map((row, pageRowIndex) => (
               <RawLithoRow
@@ -201,6 +362,7 @@ function RawLithoTable({
                 onDepthCommit={onDepthCommit}
                 isEnabled={isEnabled}
                 hasDuplicateInterval={duplicateRowIds.has(row.id)}
+                selectedColumns={selectedColumnsByRow.get(String(row.id))}
               />
             ))}
           </tbody>

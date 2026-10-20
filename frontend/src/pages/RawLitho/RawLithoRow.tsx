@@ -12,7 +12,7 @@ import {
   REQUIRED_COLUMN_KEYS,
   tableColumns,
 } from "./constants";
-import { handleArrowNavigation, isClearCellRequest } from "./tableNavigation";
+import { handleCellNavigation, isClearCellRequest } from "./tableNavigation";
 import { RAW_LITHO_LOOKUP_BY_FIELD } from "../../services/rawLithoLookupConfig";
 
 interface RawLithoRowProps {
@@ -24,6 +24,7 @@ interface RawLithoRowProps {
   onDepthCommit: RowChange;
   isEnabled: boolean;
   hasDuplicateInterval?: boolean;
+  selectedColumns?: ReadonlySet<RowField>;
 }
 
 
@@ -43,12 +44,14 @@ function buildCellClassName({
   isRequired,
   isMissingValue,
   isDuplicateCell,
+  isSelected,
 }: {
   columnKey: RowField;
   isCompact: boolean;
   isRequired: boolean;
   isMissingValue: boolean;
   isDuplicateCell: boolean;
+  isSelected: boolean;
 }) {
   return [
     "raw-litho-col",
@@ -57,6 +60,7 @@ function buildCellClassName({
     isRequired ? "raw-litho-cell--required" : "",
     isMissingValue ? "raw-litho-cell--missing" : "",
     isDuplicateCell ? "raw-litho-cell--duplicate" : "",
+    isSelected ? "raw-litho-cell--selected" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -71,6 +75,7 @@ function RawLithoRow({
   onDepthCommit,
   isEnabled,
   hasDuplicateInterval = false,
+  selectedColumns,
 }: RawLithoRowProps) {
   const valueBeforeEdit = useRef<Partial<Record<RowField, string>>>({});
   const isEvenRow = rowIndex % 2 === 1;
@@ -111,6 +116,7 @@ function RawLithoRow({
           isRequired,
           isMissingValue,
           isDuplicateCell,
+          isSelected: selectedColumns?.has(column.key) ?? false,
         });
 
         return (
@@ -174,7 +180,7 @@ function RawLithoRow({
                     return;
                   }
 
-                  handleArrowNavigation(event);
+                  handleCellNavigation(event);
                 }}
                 onChange={(event) =>
                   onRowChange(row.id, column.key, event.target.value)

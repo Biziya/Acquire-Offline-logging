@@ -48,6 +48,7 @@ RawLitho/
 ├── Toast.tsx                       top-centre notification
 ├── constants.ts                    columns, required keys, toasts, row factory
 ├── drillholeOrdering.ts            recent-first / newest-first drillhole order
+├── rawLithoClipboard.ts            copy text + paste planning for selected cells
 ├── rawLithoDocumentOperations.ts    storage-free document transformations
 ├── rawLithoHelpers.ts             document normalisation, import read, export
 ├── rawLithoImportService.ts        validates an import before touching storage
@@ -71,7 +72,9 @@ RawLithoTable.tsx
 - renders the header, the visible page of rows, pagination and row buttons
 - owns the tbody DOM ref and ALL focus movement
 - requestAddRow(): the single funnel for Add Row / F4 / Tab / ArrowDown
-- handleTableKeyDown(): Tab and ArrowDown row creation
+- handleTableKeyDown(): page crossing for Tab / arrows, Tab and ArrowDown row
+  creation
+- owns the Ctrl + click cell selection and the copy / paste handlers
 - calls useRawLithoShortcuts
 
 RawLithoRow.tsx
@@ -515,7 +518,16 @@ on the table beneath it, and animations collapse to 1ms under
 | `missingRequiredFields` | Complete required fields | warning | a required cell is empty |
 | `duplicateInterval` | Duplicate interval | warning | the interval already exists |
 | `invalidDepthRange` | Invalid depth range | warning | Litho From is past Litho To |
-| `invalidLookupValue` | Invalid lookup codes | warning | Save blocked by unknown codes |
+| `invalidLookupValue` | Invalid lookup codes | warning | Save blocked by unknown codes, or a paste holds one |
+| `cellsCopied` | Cells copied | info | selected cells were copied |
+| `invalidPasteValue` | Invalid pasted value | warning | a pasted depth is not a number |
+| `pasteShapeMismatch` | Selection does not match clipboard | warning | multi-value paste into a selection of another shape |
+| `pasteOutOfRange` | Paste exceeds table | warning | the pasted block runs past the last row or column |
+| `pasteNotEditable` | Cells not editable | warning | the pasted block covers a disabled cell |
+| `clipboardUnavailable` | Clipboard unavailable | error | the browser refused clipboard access |
+
+`missingRequiredFields`, `duplicateInterval` and `invalidDepthRange` are also
+raised by a rejected paste.
 
 ### Row added
 
@@ -615,7 +627,8 @@ which stays swallowed.
 
 | Key | Behaviour |
 | --- | --- |
-| `←` / `→` | Move one cell horizontally, but only when the caret is at the edge of the current value, so normal text editing still works. |
+| `←` / `→` | Move to the previous / next editable cell, but only when the caret is at the edge of the current value, so normal text editing still works. Disabled cells are skipped, the end of a row continues on the next row (and the start on the previous row), and the edge of a page continues on the adjacent page. |
+| `Tab` / `Shift`+`Tab` | Exactly like `→` / `←`, except that they always leave the cell regardless of the caret. In a lookup cell the value is settled by `finishEditing()` first, as before. `Shift`+`Tab` from the very first cell leaves the table normally. |
 | `←` / `→` while typing in a lookup cell | Accept the highlighted closest match, close the dropdown and move one cell left / right. See *Fast accept* below. |
 | `↑` / `↓` | Move one cell vertically in the same column. On `number` inputs the default spinner behaviour is suppressed. Never moves the highlight inside a dropdown. |
 | `↓` on the last row | No cell below, so the table creates the next row and focuses it — from a lookup cell as well as a plain one. |
@@ -623,6 +636,78 @@ which stays swallowed.
 | `Enter` | In a Litho From / Litho To cell, commits the value and reorders the rows without leaving the cell. |
 | `Delete` | Clears the cell when the whole value is selected, the caret is at the end, or the cell is already empty. Otherwise the browser default applies. |
 | `Escape` (lookup cell) | Reverts the typed text and closes the dropdown. |
+| `Escape` (any cell) | Also clears the Ctrl + click cell selection. |
+| `Space` | Never intercepted — it types a space in every cell. |
+
+All four horizontal keys share one mechanism: `getHorizontalStep(event)` in
+`tableNavigation.ts` turns the key into `+1`, `-1` or `0`. The cell handler
+(`handleCellNavigation`) moves within the rendered page; when it finds no
+neighbour the event bubbles to `handleTableKeyDown`, which asks the same
+function and continues in the adjacent row on the next / previous page through
+`focusRowCell` (rows addressed by id, page switched first, cell focused — and so
+scrolled into view — after the render). At the end of the document only `Tab`
+reaches row creation.
+
+### Comment cells
+
+`lithologyComments` (and the hidden `lithologicalDescription`) are listed in
+`COMMENT_FIELD_KEYS` in `constants.ts`. Their text is stored exactly as typed:
+leading, trailing and repeated spaces survive editing, autosave, IndexedDB
+restore, JSON import and JSON export. Every edit is re-normalised by
+`touchRawLithoDocument`, which used to `trim()` every field and so deleted a
+space as soon as it was typed at the end of a word; `normalizeFieldValue` in
+`rawLithoHelpers.ts` now skips trimming for comment fields only. Codes and
+depths are still trimmed on load. Validation can still treat whitespace-only
+text as empty where a rule requires it.
+
+### Cell selection, copy and paste
+
+| Action | Behaviour |
+| --- | --- |
+| `Ctrl` + click (`⌘` + click on macOS) | Adds the cell to the selection, or removes it if it was already selected, and focuses it. Cells may be in any row or column and need not touch. |
+| Plain click on a selected cell | Keeps the selection. |
+| Plain click anywhere else (inside or outside the table) | Clears the selection. |
+| `Escape` | Clears the selection. |
+| `Ctrl` + `C` with a selection | Copies the selected cells (see below). |
+| `Ctrl` + `V` with a selection | Pastes into the selection (see below). |
+| `Ctrl` + `C` / `Ctrl` + `V` without a selection | Native input behaviour. A clipboard holding several cells (from Excel) pasted into a focused cell is the one exception: it pastes as a block from that cell. |
+
+The selection is a list of `{ rowId, columnKey }`, never DOM positions, so the
+highlight follows its rows through sorting and paging. Selecting does not change
+any value. The handlers listen to the `copy` / `paste` events on the table body
+only, so nothing outside the table and no browser shortcut is affected.
+
+**Copy.** The clipboard gets tab-separated columns and newline-separated rows in
+table column order, covering the bounding rectangle of the selection. Unselected
+cells inside that rectangle are written as empty strings, so they keep the
+selected cells' relative positions without exposing their values. Tabs and line
+breaks inside a value become spaces in the clipboard text only.
+
+**Paste.** Tabs separate columns, newlines separate rows, and one trailing line
+break (as Excel writes) is ignored.
+
+| Selection | Clipboard | Result |
+| --- | --- | --- |
+| one cell (or none, with a multi-cell clipboard) | any | The block is pasted with its top-left corner on that cell. |
+| several cells | one value | The value fills every selected editable cell; disabled cells are skipped. |
+| several cells forming a contiguous rectangle of the clipboard's shape | several values | Cell-for-cell mapping. |
+| any other shape | several values | Rejected — "Selection does not match clipboard". |
+
+A paste is all-or-nothing. It is planned by `planPaste` in
+`rawLithoClipboard.ts` and applied by `applyCellEdits` in
+`rawLithoDocumentOperations.ts` as one document edit, and it is rejected with a
+toast — leaving every cell untouched — when:
+
+- the block would run past the last row or column (paste never adds rows);
+- a target is disabled (a lookup with no values loaded);
+- a depth is not a number, or a lookup value is not a known code (codes match
+  case-insensitively and are stored in the lookup's own spelling);
+- it would empty a required field that has a value;
+- it would invert a depth range or create a duplicate interval.
+
+Accepted pastes keep row ids and whole row objects, are re-sorted by
+`sortRowsByLithoFrom()`, and are autosaved to IndexedDB through the normal
+`commitDocument` path.
 
 ### Fast accept: `→` / `←` in a lookup cell
 
@@ -905,10 +990,22 @@ requestAddRow()
 
 handleTableKeyDown(event)
 - bound to <tbody> onKeyDown
-- returns early when: the page is disabled or blocked, a cell handler already
-  used the key, the current page is not the last page, or the key is not a
-  row-creation key
+- Escape clears the cell selection
+- returns early when: the page is disabled or blocked, or a cell handler already
+  used the key
+- Tab / Shift + Tab / ← / → at the page edge: focusAdjacentPageRow()
+- otherwise returns early unless on the last page with a row-creation key
 - for Tab-at-row-end and ArrowDown-on-last-row: preventDefault + requestAddRow()
+
+document mousedown listener
+- Ctrl / ⌘ + click on a cell: toggle it in selectedCells and focus it
+- plain click outside the selection: clear selectedCells
+
+handleCopy(event) / handlePaste(event)
+- bound to <tbody> onCopy / onPaste
+- copy: with a selection, writes buildClipboardText() to event.clipboardData
+- paste: with a selection, or a multi-cell clipboard in a focused cell, runs
+  planPaste() and hands the edits to onPasteCells (= workspace.pasteCells)
 ```
 
 ### `useRawLithoWorkspace.ts`
@@ -917,8 +1014,8 @@ The hook owns the working document, selected drillhole, and current page.
 A synchronous ref points to the same working document so edits followed by a
 drillhole switch in the same React batch are staged before the switch.
 
-- `updateRow`, `commitDepthEdit`, `sortRows`, `tryAddRow`, `removeLastRow`
-  delegate transformations to `rawLithoDocumentOperations.ts`.
+- `updateRow`, `commitDepthEdit`, `sortRows`, `pasteCells`, `tryAddRow`,
+  `removeLastRow` delegate transformations to `rawLithoDocumentOperations.ts`.
 - `selectDrillhole` flushes pending edits and disables editing until the new
   draft is successfully loaded.
 - `setRawLithoDocument` stages a document update; `flushPendingSaves` requests
@@ -961,7 +1058,8 @@ handleShortcut(event, options)
 
 ```text
 onKeyDown  Delete clears the cell (isClearCellRequest); Enter commits a depth
-           cell via commitDepth; otherwise handleArrowNavigation moves focus
+           cell via commitDepth; otherwise handleCellNavigation moves focus
+           (arrows, Tab, Shift + Tab)
 onFocus    remembers the pre-edit value of the depth cells
 onChange   onRowChange(row.id, column.key, value) — never sorts
 onBlur     depth cells call commitDepth, which forwards to onDepthCommit
@@ -980,8 +1078,9 @@ handleQueryChange   filters suggestions; clears the committed value while the
                     text no longer matches it
 acceptClosestMatch  → / ← while typing: commit the highlighted match and move
                     one cell; returns false when there is nothing valid to take
-↑ / ↓               handed straight to handleArrowNavigation — cell navigation,
+↑ / ↓               handed straight to handleCellNavigation — cell navigation,
                     or bubble up so the table can add a row
+Tab / Shift + Tab   finishEditing, then handleCellNavigation
 finishEditing       on blur/Tab: empty clears, an exact match commits, anything
                     else is flagged "Select a valid value"
 selectSuggestion    commits a clicked or Enter-selected option
@@ -1051,6 +1150,9 @@ handleSave   see "Save button" above
 | Which fields are copied to a new row? | `ROW_COPY_FIELD_KEYS` in `constants.ts` |
 | Where do I change rows per page? | `RAW_LITHO_ROWS_PER_PAGE` in `constants.ts` |
 | Where are the shortcuts? | `hooks/useRawLithoShortcuts.ts` |
+| Where is horizontal navigation (arrows, Tab)? | `getHorizontalStep` / `handleCellNavigation` in `tableNavigation.ts`, page crossing in `RawLithoTable.tsx` |
+| Where is copy / paste? | `rawLithoClipboard.ts` (pure), handlers in `RawLithoTable.tsx`, `applyCellEdits` in `rawLithoDocumentOperations.ts` |
+| Which fields keep their spaces? | `COMMENT_FIELD_KEYS` in `constants.ts` |
 | How do I accept a partly typed lookup code? | `→` or `←` — `acceptClosestMatch` in `LookupAutocomplete.tsx` |
 | Why doesn't `↓` move inside a dropdown? | By design — the vertical keys belong to the table, so `↓` can add a row from any cell |
 | Where is the drillhole list order decided? | `orderDrillholes()` in `drillholeOrdering.ts` — the only place |
@@ -1098,3 +1200,10 @@ handleSave   see "Save button" above
 29. Reload after a successful save → the last change and row order are intact. Pagehide flushing of pending edits is best effort.
 30. Clear the drillhole, import a JSON file whose rows are out of order, cancel the dialog → nothing changes; import again and confirm → the rows appear sorted.
 31. Press Save → `<drillhole>.json` downloads with rows in Litho From order and "Changes saved" appears.
+32. Press `Tab` / `Shift`+`Tab` across a row → focus moves exactly like `→` / `←`, skips disabled lookups, wraps to the next / previous row, and crosses from row 50 to row 51 on the next page and back.
+33. Type `Fine grained  sandstone ` (double space, trailing space) in Lithology Comments → every space stays; reload, then Save and re-import the JSON → still identical.
+34. `Ctrl`+click three cells in different rows → all highlighted; `Ctrl`+click one again → deselected; click any other cell → selection cleared.
+35. Select two non-adjacent cells, `Ctrl`+`C`, paste into Excel → the values keep their relative positions with blank cells between them.
+36. Copy a 2 × 3 block from Excel, `Ctrl`+click one cell, `Ctrl`+`V` → the block lands from that cell; a Litho From change re-sorts the rows and the selection follows its rows.
+37. Paste `abc` into Litho From, a block past the last row, or a value that inverts / duplicates an interval → a warning toast appears and no cell changes.
+38. Select several comment cells and paste one value → every selected cell receives it; reload → still there.

@@ -1,12 +1,13 @@
 import type {
   RawLithoDocument,
   RawLithoRow,
+  RowField,
   RowId,
   Drillhole,
   DocumentFallback,
   Clock,
 } from "../../types/domain";
-import { columns, createEmptyRow } from "./constants";
+import { COMMENT_FIELD_KEYS, columns, createEmptyRow } from "./constants";
 import { sortRawLithoDocumentRows } from "./rawLithoSorting";
 
 let fallbackRowId = 0;
@@ -43,6 +44,14 @@ function normalizeText(value: unknown) {
   }
 
   return "";
+}
+
+function normalizeFieldValue(fieldKey: RowField, value: unknown) {
+  if (COMMENT_FIELD_KEYS.has(fieldKey) && typeof value === "string") {
+    return value;
+  }
+
+  return normalizeText(value);
 }
 
 function firstNonEmptyText(...values: unknown[]) {
@@ -105,7 +114,7 @@ export function normalizeRawLithoRows(rows: unknown): RawLithoRow[] {
 
     const normalized = createEmptyRow(rowId);
     for (const fieldKey of ROW_FIELD_KEYS)
-      normalized[fieldKey] = normalizeText(row[fieldKey]);
+      normalized[fieldKey] = normalizeFieldValue(fieldKey, row[fieldKey]);
     return normalized;
   });
 

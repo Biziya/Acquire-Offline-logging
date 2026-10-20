@@ -831,3 +831,11 @@
     animation-duration: 1ms;
   }
 }
+
+/* Cells picked with Ctrl + click for copy / paste. Declared last so the
+   selection stays visible over the missing and duplicate flags. */
+.raw-litho-table tbody td.raw-litho-cell--selected,
+.raw-litho-table tbody td.raw-litho-cell--selected:focus-within {
+  background: #dbeafe;
+  box-shadow: inset 0 0 0 2px #2563eb;
+}

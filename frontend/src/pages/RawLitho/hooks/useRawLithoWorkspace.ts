@@ -12,6 +12,7 @@ import type {
 import { TOAST_NOTIFICATIONS, RAW_LITHO_ROWS_PER_PAGE } from "../constants";
 import {
   addDocumentRow,
+  applyCellEdits,
   commitDepth,
   createBlankDocument,
   editRow,
@@ -19,6 +20,7 @@ import {
   sortDocument,
 } from "../rawLithoDocumentOperations";
 import { getPageForRowIndex } from "../rawLithoSorting";
+import type { CellEdit } from "../rawLithoClipboard";
 import { useRawLithoDraftPersistence } from "./useRawLithoDraftPersistence";
 
 const totalPagesFor = (lithoDocument: RawLithoDocument) =>
@@ -91,6 +93,17 @@ export function useRawLithoWorkspace({
     if (result.reverted) showToast(TOAST_NOTIFICATIONS.invalidDepthRange);
   };
 
+  /* One atomic, validated, sorted edit; autosaved like any other change. */
+  const pasteCells = (edits: CellEdit[]) => {
+    if (!canEdit(draftKey)) return;
+    const result = applyCellEdits(documentRef.current, edits);
+    if (result.issue) {
+      showToast(TOAST_NOTIFICATIONS[result.issue]);
+      return;
+    }
+    commitDocument(result.document);
+  };
+
   const tryAddRow = (): AddRowResult => {
     if (!canEdit(draftKey)) return { created: false };
     const operation = addDocumentRow(documentRef.current);
@@ -142,6 +155,7 @@ export function useRawLithoWorkspace({
     updateRow,
     commitDepthEdit,
     sortRows,
+    pasteCells,
     tryAddRow,
     removeLastRow,
     changeTablePage,
