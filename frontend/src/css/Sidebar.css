@@ -1,0 +1,98 @@
+.sidebar {
+  width: 178px;
+  height: 100vh;
+  flex-shrink: 0;
+  overflow: hidden;
+  color: #e5e7eb;
+  background: #111827;
+  transition: width 0.2s ease;
+}
+
+.sidebar-collapsed {
+  width: 52px;
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 40px;
+  padding: 6px 8px;
+}
+
+.sidebar-header .sidebar-label {
+  overflow: hidden;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  color: #9ca3af;
+}
+
+.sidebar-collapsed .sidebar-header {
+  justify-content: center;
+  padding-inline: 6px;
+}
+
+.sidebar-menu {
+  display: grid;
+  gap: 2px;
+  padding: 4px 6px;
+}
+
+.sidebar-collapsed .sidebar-menu {
+  justify-items: center;
+}
+
+.sidebar-link,
+.sidebar-toggle {
+  display: flex;
+  align-items: center;
+  color: inherit;
+  border: 0;
+  border-radius: 6px;
+}
+
+.sidebar-link {
+  min-height: 32px;
+  gap: 9px;
+  padding: 5px 8px;
+  font-size: 0.82rem;
+  text-decoration: none;
+}
+
+.sidebar-collapsed .sidebar-link {
+  justify-content: center;
+  width: 34px;
+  padding-inline: 0;
+}
+
+.sidebar-link:hover,
+.sidebar-link-active {
+  color: #ffffff;
+  background: #1f2937;
+}
+
+.sidebar-toggle {
+  justify-content: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  background: transparent;
+}
+
+.sidebar-toggle:hover {
+  background: #1f2937;
+}
+
+.sidebar-icon {
+  width: 17px;
+  height: 17px;
+  flex-shrink: 0;
+}
+
+.sidebar-label {
+  white-space: nowrap;
+}

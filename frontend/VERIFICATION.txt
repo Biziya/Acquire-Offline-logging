@@ -1,0 +1,51 @@
+TypeScript migration code review verification — 2026-09-10
+
+Installed local executables were used. package.json build remains:
+npm run typecheck && vite build
+
+TypeScript (strict + noUncheckedIndexedAccess)
+$ node node_modules/typescript/bin/tsc --noEmit
+
+Exit status: 0
+
+ESLint
+$ node node_modules/eslint/bin/eslint.js .
+
+Exit status: 0
+
+Regression tests
+$ node node_modules/vitest/vitest.mjs run
+
+ RUN  v5.0.0 /workspace/scratch/259d3ad638b2/frontend
+
+
+ Test Files  8 passed (8)
+      Tests  52 passed (52)
+   Start at  14:35:18
+   Duration  2.49s (environment 45%, tests 21%, transform 19%, setup 9%, import 6%)
+
+
+Exit status: 0
+
+Production build (typecheck already passed above)
+$ node node_modules/vite/bin/vite.js build
+vite v8.2.2 building client environment for production...
+transforming...
+✓ 75 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   0.36 kB │ gzip:  0.26 kB
+dist/assets/index-CwbMteJD.css   20.28 kB │ gzip:  4.63 kB
+dist/assets/index-BV4peZUH.js   320.90 kB │ gzip: 99.95 kB
+
+✓ built in 249ms
+
+Exit status: 0
+
+Additional automated audit: 71 source/test TypeScript files; no explicit any, unsafe assertions, non-null assertions or TypeScript suppressions. One pre-existing safe literal as const remains in a test. Imports precede declarations.
+All 19 supplied CSS/assets/sample JSON files are byte-identical to the original upload.
+API clients, routing, package scripts, Vite configuration and IndexedDB database schema are unchanged by this review task.
+
+Manual browser, live backend and deployment verification: NOT PERFORMED.
+Tests use jsdom, fake IndexedDB and mocked network/storage failure paths.
+Existing limits: pending failed writes are in memory until storage succeeds; forced termination can lose them. Save ordering covers one application instance, not concurrent tabs.

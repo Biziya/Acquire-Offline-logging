@@ -1,0 +1,25 @@
+.app-layout {
+  display: flex;
+  min-height: 100vh;
+}
+
+.page-content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  height: 100vh;
+  overflow: hidden;
+  padding: 6px 16px 10px;
+}
+
+.backend-status-bar {
+  flex-shrink: 0;
+}
+
+.home-page,
+.upload-data-page {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}

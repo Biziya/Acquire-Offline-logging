@@ -1,0 +1,38 @@
+{
+  "drillhole": "DH-001",
+  "project": "ACQ",
+  "rows": [
+    {
+      "lithoFrom": 0.00,
+      "lithoTo": 5.25,
+      "lithoCode": "SS",
+      "colorCode": "BRN",
+      "redoxCode": "OX",
+      "ca": "N",
+      "om": "L",
+      "omFacies": "A",
+      "py": "N",
+      "ox": "Y",
+      "sedim": "LAM",
+      "granulo": "FINE",
+      "hardness": "SOFT",
+      "lithologyComments": "Fine grained sandstone"
+    },
+    {
+      "lithoFrom": 5.25,
+      "lithoTo": 10.50,
+      "lithoCode": "SH",
+      "colorCode": "GRY",
+      "redoxCode": "RED",
+      "ca": "Y",
+      "om": "H",
+      "omFacies": "B",
+      "py": "L",
+      "ox": "N",
+      "sedim": "MASS",
+      "granulo": "MED",
+      "hardness": "HARD",
+      "lithologyComments": "Grey shale"
+    }
+  ]
+}

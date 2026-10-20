@@ -1,0 +1,94 @@
+@BackendApi_HostAddress = https://localhost:7047
+
+GET {{BackendApi_HostAddress}}/api/status
+Accept: application/json
+
+###
+
+GET {{BackendApi_HostAddress}}/api/drillholes
+Accept: application/json
+
+###
+
+GET {{BackendApi_HostAddress}}/api/lithocodes
+Accept: application/json
+
+###
+
+GET {{BackendApi_HostAddress}}/api/colour
+Accept: application/json
+
+###
+
+GET {{BackendApi_HostAddress}}/api/ca
+Accept: application/json
+
+###
+
+GET {{BackendApi_HostAddress}}/api/om
+Accept: application/json
+
+###
+
+GET {{BackendApi_HostAddress}}/api/omfacies
+Accept: application/json
+
+###
+
+GET {{BackendApi_HostAddress}}/api/py
+Accept: application/json
+
+###
+
+GET {{BackendApi_HostAddress}}/api/ox
+Accept: application/json
+
+###
+
+GET {{BackendApi_HostAddress}}/api/sedim
+Accept: application/json
+
+###
+
+GET {{BackendApi_HostAddress}}/api/redoxcode
+Accept: application/json
+
+###
+
+POST {{BackendApi_HostAddress}}/api/uploaddata
+Content-Type: application/json
+
+{
+  "project": "Project A",
+  "campaign": "Campaign 2026",
+  "drillhole": "DH-001",
+  "created_at": "2026-08-06T09:15:00Z",
+  "modified_at": "2026-08-06T14:30:00Z",
+  "rows": [
+    {
+      "id": 1,
+      "extractionType": "",
+      "corePass": "1",
+      "recoveryStart": "",
+      "recoveryEnd": "",
+      "coreEnd": "",
+      "lithoFrom": "10",
+      "lithoTo": "12",
+      "lithoCode": "",
+      "colorCode": "21e12",
+      "ca": "12e1",
+      "om": "",
+      "omFacies": "",
+      "py": "",
+      "ox": "",
+      "sedim": "",
+      "redoxCode": "",
+      "granulo": "",
+      "hardness": "",
+      "lithologyComments": "",
+      "lithologicalDescription": ""
+    }
+  ]
+}
+
+###
