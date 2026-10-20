@@ -199,3 +199,53 @@ describe("Upload Data page", () => {
     );
   });
 });
+
+describe("Upload Data drag and drop", () => {
+  beforeEach(() => vi.mocked(importUploadData).mockClear());
+
+  const zone = () => screen.getByTestId("upload-drop-zone");
+  const drag = (files: File[]) => ({ dataTransfer: { types: ["Files"], files } });
+
+  it("highlights while dragging and loads a dropped file without uploading it", async () => {
+    render(<UploadData />);
+    const file = jsonFile(uploadDocument());
+
+    fireEvent.dragEnter(zone(), drag([file]));
+    expect(zone()).toHaveClass("upload-drop-zone--active");
+    fireEvent.dragLeave(zone(), drag([file]));
+    expect(zone()).not.toHaveClass("upload-drop-zone--active");
+
+    fireEvent.dragOver(zone(), drag([file]));
+    fireEvent.drop(zone(), drag([file]));
+    expect(zone()).not.toHaveClass("upload-drop-zone--active");
+    expect(await screen.findByLabelText("Lithology Comments, record 1")).toBeInTheDocument();
+    expect(screen.getByText("Selected: upload.json")).toBeInTheDocument();
+    expect(importUploadData).not.toHaveBeenCalled();
+  });
+
+  it("rejects several files or a non-JSON file and keeps the loaded dataset", async () => {
+    render(<UploadData />);
+    fireEvent.drop(zone(), drag([jsonFile(uploadDocument())]));
+    await screen.findByLabelText("Lithology Comments, record 1");
+
+    fireEvent.drop(zone(), drag([jsonFile({}), jsonFile({})]));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Drop one JSON file at a time.",
+    );
+
+    fireEvent.drop(zone(), drag([new File(["x"], "notes.txt", { type: "text/plain" })]));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      '"notes.txt" is not a JSON file.',
+    );
+    expect(screen.getByLabelText("Lithology Comments, record 1")).toBeInTheDocument();
+    expect(screen.getByText("Selected: upload.json")).toBeInTheDocument();
+  });
+
+  it("stops the browser opening a file dropped beside the zone", () => {
+    render(<UploadData />);
+    const outside = new Event("drop", { bubbles: true, cancelable: true });
+    Object.defineProperty(outside, "dataTransfer", { value: { types: ["Files"] } });
+    window.dispatchEvent(outside);
+    expect(outside.defaultPrevented).toBe(true);
+  });
+});

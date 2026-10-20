@@ -8,7 +8,10 @@ table:
   rowHeight: 28          # px; must stay fixed, the virtual scroller relies on it
   overscan: 10           # rows rendered above and below the visible window
   height: 420            # px, height of the scrollable preview
-  minWidth: 1090         # px; narrower windows scroll horizontally
+  # Column widths below are proportions, so the table fits the section
+  # width. minWidth is only a readability floor - below it the table
+  # scrolls inside its own frame.
+  minWidth: 680          # px
   indexColumnWidth: 56   # px, the record-number column
   statusColumnWidth: 52  # px, the validation-status column
 
@@ -16,7 +19,7 @@ table:
   # (types/rawLithoSchema.ts). A hidden column's values are still kept and
   # uploaded unchanged.
   #   label    header text (also the cell's accessible name)
-  #   width    px; omit to take the remaining width
+  #   width    relative width (px at a 1090 px table); required when visible
   #   visible  false hides the column
   columns:
     extractionType: { label: "Extraction Type", visible: false }
@@ -35,7 +38,7 @@ table:
     ox: { label: "OX", width: 44, visible: true }
     sedim: { label: "Sedim", width: 52, visible: true }
     redoxCode: { label: "Redox Code", width: 80, visible: true }
-    lithologyComments: { label: "Lithology Comments", visible: true }
+    lithologyComments: { label: "Lithology Comments", width: 176, visible: true }
     granulo: { label: "Granulo", width: 56, visible: true }
     hardness: { label: "Hardness", width: 60, visible: true }
     lithologicalDescription: { label: "Lithological Description", visible: false }

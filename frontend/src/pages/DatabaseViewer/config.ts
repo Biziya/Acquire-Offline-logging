@@ -1,12 +1,13 @@
 import { createConfigReader } from "../../config/yamlConfig";
-import { LITHOLOGY_COLUMN_KEYS } from "./databaseViewerTypes";
 import configText from "./config.yaml?raw";
 
-/* Typed copy of config.yaml, parsed and validated once at module load. */
+/*
+ * Typed copy of config.yaml, parsed and validated once at module load. Table
+ * appearance comes from Raw Litho's configuration (see DatabaseViewerTable).
+ */
 export function readDatabaseViewerConfig(text: string) {
   const reader = createConfigReader(text, "DatabaseViewer/config.yaml");
   const table = reader.section(reader.root.table, "table");
-  const search = reader.section(reader.root.search, "search");
   const mock = reader.section(reader.root.mockData, "mockData");
 
   const sizes = Array.isArray(mock.sizes)
@@ -20,21 +21,7 @@ export function readDatabaseViewerConfig(text: string) {
 
   return {
     title: reader.string(reader.root.title, "title"),
-    rowHeight: reader.integer(table.rowHeight, "table.rowHeight"),
     overscan: reader.integer(table.overscan, "table.overscan", 0),
-    minWidth: reader.integer(table.minWidth, "table.minWidth"),
-    indexColumnWidth: reader.integer(
-      table.indexColumnWidth,
-      "table.indexColumnWidth",
-    ),
-    columns: reader
-      .columns(table.columns, "table.columns", LITHOLOGY_COLUMN_KEYS)
-      .filter((column) => column.visible),
-    searchDebounceMs: reader.integer(
-      search.debounceMs,
-      "search.debounceMs",
-      0,
-    ),
     mockData: {
       sizes,
       defaultSize,

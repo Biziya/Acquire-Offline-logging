@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import DatabaseViewer from "../src/pages/DatabaseViewer/DatabaseViewer";
@@ -40,32 +40,66 @@ describe("mock lithology data", () => {
 describe("Database Viewer page", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it("renders only a window of rows, filters, and refreshes without requests", async () => {
+  const rows = (container: HTMLElement) =>
+    container.querySelectorAll("tbody tr[aria-rowindex]");
+
+  it("offers only the Drillhole selector and shows its Project and Campaign read-only", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     const user = userEvent.setup();
     const { container } = render(<DatabaseViewer />);
 
     expect(screen.getByText(/Mock data/)).toBeInTheDocument();
-    expect(screen.getByText("Showing 10,000 of 10,000 records")).toBeInTheDocument();
-    const renderedRows = container.querySelectorAll("tbody tr[aria-rowindex]");
-    expect(renderedRows.length).toBeGreaterThan(0);
-    expect(renderedRows.length).toBeLessThan(100);
-    expect(container.querySelector("input, textarea")?.getAttribute("type")).toBe("search");
+    expect(screen.queryByRole("searchbox")).toBeNull();
+    expect(screen.queryByRole("button", { name: /clear filters/i })).toBeNull();
+    expect(screen.getByText("No drillhole selected")).toBeInTheDocument();
+    expect(screen.getByText("Select a drillhole to view its records.")).toBeInTheDocument();
+    expect(rows(container)).toHaveLength(0);
 
-    await user.selectOptions(screen.getByLabelText("Project"), "MOCK-PRJ-01");
-    const filtered = screen.getByText(/^Showing [\d,]+ of 10,000 records$/);
-    expect(filtered.textContent).not.toBe("Showing 10,000 of 10,000 records");
+    await user.selectOptions(screen.getByLabelText("Drillhole"), "MOCK-DH-012-003");
+    expect(screen.getByLabelText("Project")).toHaveTextContent("MOCK-PRJ-01");
+    expect(screen.getByLabelText("Campaign")).toHaveTextContent("MOCK-C2026");
+    expect(screen.getByLabelText("Project").tagName).toBe("OUTPUT");
+    expect(screen.getByText("139 records")).toBeInTheDocument();
 
-    await user.type(screen.getByLabelText("Search"), "no such value");
-    await waitFor(() =>
-      expect(screen.getByText("Showing 0 of 10,000 records")).toBeInTheDocument(),
+    // Read-only: plain text cells, no inputs or row actions.
+    const table = screen.getByRole("region", { name: "Lithology records" });
+    expect(table.querySelector("input, select, textarea, button")).toBeNull();
+    expect(screen.queryByRole("button", { name: /add row|remove|save/i })).toBeNull();
+
+    // Ordered by Litho From, numbered from 1 like Raw Litho's "Ins".
+    const depths = Array.from(rows(container)).map((row) =>
+      Number(row.children[1]?.textContent),
     );
-    await user.click(screen.getByRole("button", { name: "Clear filters" }));
-    expect(screen.getByText("Showing 10,000 of 10,000 records")).toBeInTheDocument();
+    expect(depths[0]).toBe(0);
+    expect(depths).toEqual([...depths].sort((a, b) => a - b));
+    expect(rows(container)[0]?.children[0]).toHaveTextContent("1");
 
-    const before = container.querySelector("tbody tr[aria-rowindex]")?.textContent;
+    const before = rows(container)[1]?.textContent;
     await user.click(screen.getByRole("button", { name: "Refresh" }));
-    expect(container.querySelector("tbody tr[aria-rowindex]")?.textContent).not.toBe(before);
+    expect(rows(container)[1]?.textContent).not.toBe(before);
+    expect(screen.getByLabelText("Project")).toHaveTextContent("MOCK-PRJ-01");
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("uses Raw Litho's columns and renders only a window of a large drillhole", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<DatabaseViewer />);
+
+    expect(
+      Array.from(container.querySelectorAll("thead th")).map((th) => th.textContent),
+    ).toEqual([
+      "Ins", "Litho From (m)", "Litho To (m)", "Litho Code", "Color Code", "CA", "OM",
+      "OM Facies", "PY", "OX", "Sedim", "Redox Code", "Lithology Comments", "Granulo",
+      "Hardness",
+    ]);
+
+    await user.selectOptions(screen.getByLabelText("Mock records"), "100000");
+    await user.selectOptions(screen.getByLabelText("Drillhole"), "MOCK-DH-011-001");
+    expect(screen.getByText("1,389 records")).toBeInTheDocument();
+    expect(rows(container).length).toBeGreaterThan(0);
+    expect(rows(container).length).toBeLessThan(100);
+
+    await user.selectOptions(screen.getByLabelText("Drillhole"), "");
+    expect(rows(container)).toHaveLength(0);
   });
 });

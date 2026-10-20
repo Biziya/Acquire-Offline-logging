@@ -10,7 +10,9 @@ src/
 ├── assets/          images (badrakh-logo.png, hero.png, react.svg, vite.svg) — unreferenced
 ├── components/      shared UI
 │   ├── Sidebar.tsx
-│   └── StatusIndicator.tsx
+│   ├── StatusIndicator.tsx
+│   ├── dataTableStyles.ts  table look + proportional widths, shared by all tables
+│   └── fieldStyles.ts      labelled field / select / read-only value look
 ├── config/
 │   └── yamlConfig.ts  strict reader for the pages' config.yaml files
 ├── contexts/        empty
@@ -96,6 +98,8 @@ Styling is Tailwind CSS v4 through the `@tailwindcss/vite` plugin
 | File | Role |
 | --- | --- |
 | `css/index.css` | `@import "tailwindcss"`; the `@theme` design tokens; keyframes; a small base layer |
+| `components/dataTableStyles.ts` | The data-table look (frame, header, cells, zebra rows) and `toPercentWidths`, used by Raw Litho, Upload Data and Database Viewer |
+| `components/fieldStyles.ts` | Field label, text input / select and read-only value, used by Raw Litho and Database Viewer |
 | `pages/RawLitho/rawLithoStyles.ts` | Class lists shared by several Raw Litho components |
 | `pages/UploadData/uploadDataStyles.ts` | Class lists shared by the Upload Data sections |
 | `css/RawExtraction.css` | Legacy, for the unrouted `RawExtraction.tsx` only |
@@ -117,6 +121,26 @@ Styling is Tailwind CSS v4 through the `@tailwindcss/vite` plugin
 - **Configurable sizes.** Values that come from YAML, such as column widths and
   row heights, are applied as inline `style` values. Tailwind cannot generate
   classes for numbers known only at runtime.
+
+### No horizontal page scrolling
+
+The sidebar is fixed width and `main` takes the rest (`min-w-0 flex-1`). Pages
+must fit that width:
+
+- **Table widths are proportions.** YAML column widths are converted to
+  percentages by `toPercentWidths`, so a table fills its container and keeps
+  its column proportions at any width. A table's `minWidth` is only a
+  readability floor (Raw Litho 760 px, Upload Data 680 px). Below it the table
+  scrolls inside its own rounded frame, so nothing is clipped and the page
+  itself never scrolls sideways. In practice that happens only on windows
+  narrower than about 970 px with the sidebar expanded.
+- **Grids and flex rows.** Grid tracks that hold wide content use
+  `grid-cols-[minmax(0,1fr)]`. Flex rows of controls wrap (`flex-wrap`).
+- **Fixed minimums can shrink.** Fixed minimum widths are written so they can
+  shrink on tiny screens, for example `min-w-[min(190px,100%)]` or
+  `w-[220px] max-w-full`.
+- **Clipping is not a fix.** Never hide overflow with `overflow-x-hidden`.
+  Correct the width instead.
 
 ## Configuration (YAML)
 

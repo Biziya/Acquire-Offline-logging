@@ -7,6 +7,14 @@ import { parseClipboardText } from "../RawLitho/rawLithoClipboard";
 import { cellText, isEditableValue, type CellEdit } from "./uploadDataDocument";
 import type { RowStatus, UploadValidation } from "./uploadDataValidation";
 import { uploadDataConfig } from "./config";
+import {
+  BODY_CELL,
+  HEADER_CELL,
+  TABLE,
+  TABLE_FRAME,
+  bodyRowClass,
+  toPercentWidths,
+} from "../../components/dataTableStyles";
 
 interface UploadDataTableProps {
   rows: readonly unknown[];
@@ -34,13 +42,12 @@ const {
   statusColumnWidth,
 } = uploadDataConfig;
 
-const HEADER_CELL = [
-  "sticky top-0 z-[3] border border-rl-grid bg-rl-navy-softer p-[3px] text-center",
-  "text-[0.7rem] leading-[1.1] font-semibold tracking-[0.01em] whitespace-normal",
-  "text-rl-text [overflow-wrap:anywhere]",
-  "shadow-[inset_1px_0_0_var(--color-rl-grid),inset_-1px_0_0_var(--color-rl-grid),inset_0_1px_0_var(--color-rl-grid),inset_0_-1px_0_var(--color-rl-border-strong)]",
-].join(" ");
-const CELL = "border border-rl-grid p-0 text-center text-[0.78rem]";
+// Configured widths are proportions: the table always fills the section.
+const [indexWidth, statusWidth, ...columnWidths] = toPercentWidths([
+  indexColumnWidth,
+  statusColumnWidth,
+  ...columns.map((column) => column.width),
+]);
 
 // Strongest first: the Ctrl + click selection shows over error / warning.
 const CELL_STATES = {
@@ -325,27 +332,27 @@ function UploadDataTable({
     <>
       <div
         ref={scrollRef}
-        className="w-full overflow-auto rounded-xl border border-rl-border bg-white shadow-[0_1px_2px_rgb(16_35_61/6%)]"
+        className={TABLE_FRAME}
         style={{ height }}
       >
         <table
-          className="w-full table-fixed border-collapse bg-white"
+          className={TABLE}
           style={{ minWidth }}
           aria-rowcount={visibleRows.length + 1}
         >
           <thead>
             <tr>
-              <th className={HEADER_CELL} style={{ width: indexColumnWidth }}>
+              <th className={HEADER_CELL} style={{ width: indexWidth }}>
                 #
               </th>
-              <th className={HEADER_CELL} style={{ width: statusColumnWidth }}>
+              <th className={HEADER_CELL} style={{ width: statusWidth }}>
                 Status
               </th>
-              {columns.map((column) => (
+              {columns.map((column, columnIndex) => (
                 <th
                   key={column.key}
                   className={HEADER_CELL}
-                  style={{ width: column.width }}
+                  style={{ width: columnWidths[columnIndex] }}
                 >
                   {column.label}
                 </th>
@@ -380,13 +387,13 @@ function UploadDataTable({
               return (
                 <tr
                   key={rowIndex}
-                  className={`${item.index % 2 === 1 ? "bg-[#f9fbfd]" : "bg-white"} hover:bg-rl-navy-soft`}
+                  className={bodyRowClass(item.index)}
                   style={{ height: rowHeight }}
                   aria-rowindex={item.index + 2}
                 >
-                  <td className={`${CELL} text-rl-text-muted`}>{rowIndex + 1}</td>
+                  <td className={`${BODY_CELL} text-rl-text-muted`}>{rowIndex + 1}</td>
                   <td
-                    className={`${CELL} font-bold ${mark?.className ?? ""}`}
+                    className={`${BODY_CELL} font-bold ${mark?.className ?? ""}`}
                     title={messages.join("\n") || mark?.text}
                   >
                     {mark && (
@@ -424,7 +431,7 @@ function UploadDataTable({
                     return (
                       <td
                         key={column.key}
-                        className={`${CELL} focus-within:relative focus-within:z-[1] ${state}`}
+                        className={`${BODY_CELL} focus-within:relative focus-within:z-[1] ${state}`}
                         title={cellIssues?.map((issue) => issue.message).join("\n")}
                       >
                         <input

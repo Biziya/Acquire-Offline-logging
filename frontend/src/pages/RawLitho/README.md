@@ -175,7 +175,10 @@ rawLithoImportService.ts
 `rawLithoSchema.ts` defines all 20 persisted fields, their keyed column definitions
 and defaults. `constants.ts` re-exports `columns`; `tableColumns` controls which are
 displayed; it is built from `config.yaml` (order, label, width, compact,
-`visible`). Six are intentionally `visible: false` and marked "do not delete" for
+`visible`). Widths are proportions turned into percentages, so the table fits
+the page without horizontal scrolling; `table.minWidth` (760 px) is a readability
+floor below which the table scrolls inside its frame. The Database Viewer reads
+the same columns, so both tables always match. Six are intentionally `visible: false` and marked "do not delete" for
 future use (`extractionType`, `corePass`, `recoveryStart`, `recoveryEnd`,
 `coreEnd`, `lithologicalDescription`). They still exist in state, JSON, and
 IndexedDB.

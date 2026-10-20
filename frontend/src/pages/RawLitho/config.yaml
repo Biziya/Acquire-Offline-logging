@@ -8,12 +8,15 @@ title: "Raw Litho"
 table:
   rowsPerPage: 50        # rows per table page (PageUp / PageDown)
   rowHeight: 22          # px, every body row
-  minWidth: 971          # px; narrower windows scroll horizontally
+  # Column widths below are proportions: each column gets its share of the
+  # table, so the table always fits the page width. minWidth is only a
+  # readability floor - below it the table scrolls inside its own frame.
+  minWidth: 760          # px
   indexColumnWidth: 34   # px, the "Ins" column
 
   # Display order, left to right. Every persisted field is listed.
   #   label    header text (also the cell's accessible name)
-  #   width    px; omit to take the remaining width
+  #   width    relative width (px at a 971 px table); required when visible
   #   visible  false hides the column only - the field stays in state, JSON
   #            import/export and IndexedDB
   #   compact  narrow lookup cell with tighter padding
@@ -40,7 +43,7 @@ table:
     ox: { label: "OX", width: 40, visible: true, compact: true }
     sedim: { label: "Sedim", width: 46, visible: true, compact: true }
     redoxCode: { label: "Redox Code", width: 80, visible: true }
-    lithologyComments: { label: "Lithology Comments", visible: true }
+    lithologyComments: { label: "Lithology Comments", width: 170, visible: true }
     granulo: { label: "Granulo", width: 52, visible: true, compact: true }
     hardness: { label: "Hardness", width: 58, visible: true, compact: true }
 

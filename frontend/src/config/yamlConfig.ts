@@ -51,8 +51,8 @@ export function createConfigReader(text: string, file: string) {
 
   /*
    * A `columns:` mapping, in display order. Every key must be one of `keys`
-   * (YAML itself rejects a key listed twice). `width` may be omitted for a
-   * column that should take the remaining space.
+   * (YAML itself rejects a key listed twice). A visible column needs a
+   * `width`; a hidden one may omit it.
    */
   function columns<Key extends string>(
     value: unknown,
@@ -64,14 +64,15 @@ export function createConfigReader(text: string, file: string) {
       if (!keys.some((allowed) => allowed === key))
         fail(keyPath, `is not a known column (${keys.join(", ")}).`);
       const column = section(entry, keyPath);
+      const visible = boolean(column.visible, `${keyPath}.visible`);
 
       return {
         key: key as Key,
         label: string(column.label, `${keyPath}.label`),
-        visible: boolean(column.visible, `${keyPath}.visible`),
+        visible,
         width:
-          column.width === undefined
-            ? undefined
+          column.width === undefined && !visible
+            ? 0
             : integer(column.width, `${keyPath}.width`),
         compact:
           column.compact === undefined
@@ -96,8 +97,12 @@ export interface TableColumnConfig<Key extends string = string> {
   key: Key;
   label: string;
   visible: boolean;
-  /* Pixels; undefined lets the column take the remaining width. */
-  width: number | undefined;
+  /*
+   * Relative width: the column's share of the sum of all visible widths (see
+   * `toPercentWidths`). Written in pixels at the table's design width. 0 for a
+   * hidden column that declares none.
+   */
+  width: number;
   /* Narrow lookup column with tighter padding (Raw Litho). */
   compact: boolean;
 }

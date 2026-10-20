@@ -5,7 +5,12 @@ import databaseViewerText from "../src/pages/DatabaseViewer/config.yaml?raw";
 import { rawLithoConfig, readRawLithoConfig } from "../src/pages/RawLitho/config";
 import { readUploadDataConfig } from "../src/pages/UploadData/config";
 import { readDatabaseViewerConfig } from "../src/pages/DatabaseViewer/config";
-import { RAW_LITHO_ROWS_PER_PAGE, tableColumns } from "../src/pages/RawLitho/constants";
+import {
+  INDEX_COLUMN_WIDTH,
+  RAW_LITHO_ROWS_PER_PAGE,
+  tableColumns,
+} from "../src/pages/RawLitho/constants";
+import { toPercentWidths } from "../src/components/dataTableStyles";
 
 describe("YAML page configuration", () => {
   it("loads the shipped files with the previous defaults", () => {
@@ -42,6 +47,30 @@ describe("YAML page configuration", () => {
     ["a wrong type", (text: string) => text.replace('title: "Raw Litho"', "title: 5"), /title must be a non-empty string/],
   ])("rejects %s with the file and key", (_, mutate, message) => {
     expect(() => readRawLithoConfig(mutate(rawLithoText))).toThrow(message);
+  });
+
+  it("turns configured widths into percentages that fill the table", () => {
+    expect(toPercentWidths([34, 66, 100])).toEqual(["17.000%", "33.000%", "50.000%"]);
+    const total = [INDEX_COLUMN_WIDTH, ...tableColumns.map((column) => column.width)]
+      .map((width) => {
+        expect(width).toMatch(/^\d+(\.\d+)?%$/);
+        return Number.parseFloat(width);
+      })
+      .reduce((sum, width) => sum + width, 0);
+    expect(total).toBeCloseTo(100, 1);
+    // The table may shrink well below its old 971 px design width.
+    expect(rawLithoConfig.minWidth).toBeLessThan(971);
+  });
+
+  it("requires a width for every visible column", () => {
+    expect(() =>
+      readRawLithoConfig(
+        rawLithoText.replace(
+          'lithologyComments: { label: "Lithology Comments", width: 170, visible: true }',
+          'lithologyComments: { label: "Lithology Comments", visible: true }',
+        ),
+      ),
+    ).toThrow(/lithologyComments\.width must be a whole number/);
   });
 
   it("requires the default mock size to be one of the offered sizes", () => {

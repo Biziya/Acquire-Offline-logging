@@ -1,5 +1,11 @@
 import type { Drillhole } from "../../types/domain";
 import { useEffect, useMemo, useState } from "react";
+import {
+  FIELD,
+  FIELD_CONTROL,
+  FIELD_LABEL,
+  READONLY_VALUE,
+} from "../../components/fieldStyles";
 
 interface RawLithoFiltersProps {
   drillholes: Drillhole[];
@@ -14,11 +20,7 @@ interface RawLithoFiltersProps {
 const SUGGESTION_LIMIT = 10;
 const SUGGESTION_LIST_ID = "drillhole-suggestion-list";
 
-const FIELD = "grid gap-[3px]";
-const LABEL = "text-[0.75rem] font-semibold text-rl-text-muted";
 const FIELD_ERROR = "max-w-[220px] text-[0.8rem] text-rl-danger";
-const READONLY_VALUE =
-  "flex h-[30px] min-w-[150px] items-center rounded-md border border-rl-border bg-rl-navy-softer px-2 text-rl-text";
 const CHEVRON = [
   "after:pointer-events-none after:absolute after:right-[11px] after:bottom-[11px]",
   "after:size-2 after:border-r-[1.6px] after:border-b-[1.6px] after:border-rl-text-muted",
@@ -185,16 +187,16 @@ function RawLithoFilters({
   return (
     <div className="mb-2 flex flex-wrap gap-3">
       <div className={FIELD}>
-        <label className={LABEL} htmlFor="drillhole-search">
+        <label className={FIELD_LABEL} htmlFor="drillhole-search">
           Drillhole
         </label>
 
         <div
-          className={`relative min-w-[190px]${showChevron ? ` ${CHEVRON}` : ""}`}
+          className={`relative min-w-[min(190px,100%)]${showChevron ? ` ${CHEVRON}` : ""}`}
         >
           <input
             id="drillhole-search"
-            className="h-[30px] w-full rounded-md border border-rl-border-strong bg-white pr-8 pl-2.5 text-[0.8333rem] text-rl-text transition-[background-color,border-color,box-shadow] duration-140 focus:border-rl-navy focus:shadow-[0_0_0_3px_var(--color-rl-ring-glow)] focus:outline-none enabled:hover:border-rl-navy enabled:hover:bg-rl-navy-softer enabled:active:bg-rl-navy-soft disabled:cursor-not-allowed disabled:opacity-55 aria-invalid:border-rl-required"
+            className={`${FIELD_CONTROL} w-full pr-8 pl-2.5 aria-invalid:border-rl-required`}
             type="text"
             role="combobox"
             value={query}
@@ -288,14 +290,14 @@ function RawLithoFilters({
       </div>
 
       <div className={FIELD}>
-        <span className={LABEL}>Project</span>
+        <span className={FIELD_LABEL}>Project</span>
         <output className={READONLY_VALUE}>
           {selectedDrillhole?.projectCode || "—"}
         </output>
       </div>
 
       <div className={FIELD}>
-        <span className={LABEL}>Campaign</span>
+        <span className={FIELD_LABEL}>Campaign</span>
         <output className={READONLY_VALUE}>
           {selectedDrillhole?.campaign || "—"}
         </output>

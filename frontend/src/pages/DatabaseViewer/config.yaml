@@ -1,40 +1,15 @@
 # Database Viewer page settings. Values only; behaviour stays in TypeScript.
 # Read once when the page module loads (config.ts); a bad value stops start-up
 # with the file and key in the error.
+#
+# The table's columns, labels, widths, row height and minimum width are NOT
+# set here: the viewer reads them from RawLitho/config.yaml so both tables
+# always look the same. Change them there.
 
 title: "Database Viewer"
 
 table:
-  rowHeight: 22          # px; must stay fixed, the virtual scroller relies on it
   overscan: 12           # rows rendered above and below the visible window
-  minWidth: 1180         # px; narrower windows scroll horizontally
-  indexColumnWidth: 56   # px, the row-number column
-
-  # Display order, left to right.
-  #   label    header text
-  #   width    px; omit to take the remaining width
-  #   visible  false hides the column
-  columns:
-    project: { label: "Project", width: 104, visible: true }
-    campaign: { label: "Campaign", width: 92, visible: true }
-    drillhole: { label: "Drillhole", width: 104, visible: true }
-    lithoFrom: { label: "Litho From (m)", width: 67, visible: true }
-    lithoTo: { label: "Litho To (m)", width: 67, visible: true }
-    lithoCode: { label: "Litho Code", width: 79, visible: true }
-    colorCode: { label: "Color Code", width: 88, visible: true }
-    ca: { label: "CA", width: 40, visible: true }
-    om: { label: "OM", width: 40, visible: true }
-    omFacies: { label: "OM Facies", width: 70, visible: true }
-    py: { label: "PY", width: 40, visible: true }
-    ox: { label: "OX", width: 40, visible: true }
-    sedim: { label: "Sedim", width: 46, visible: true }
-    redoxCode: { label: "Redox Code", width: 80, visible: true }
-    lithologyComments: { label: "Lithology Comments", visible: true }
-    granulo: { label: "Granulo", width: 52, visible: true }
-    hardness: { label: "Hardness", width: 58, visible: true }
-
-search:
-  debounceMs: 200        # wait after the last keystroke before filtering
 
 # MOCK DATA ONLY - the page is not connected to the database yet.
 mockData:

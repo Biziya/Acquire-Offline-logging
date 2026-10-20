@@ -30,11 +30,17 @@ import {
 } from "./rawLithoClipboard";
 import { findDuplicateIntervalRowIds } from "./rawLithoValidation";
 import {
+  INDEX_COLUMN_WIDTH,
   RAW_LITHO_ROWS_PER_PAGE,
   REQUIRED_COLUMN_KEYS,
   TOAST_NOTIFICATIONS,
   tableColumns,
 } from "./constants";
+import {
+  HEADER_CELL,
+  TABLE,
+  TABLE_FRAME,
+} from "../../components/dataTableStyles";
 import { rawLithoConfig } from "./config";
 import {
   OUTLINE_BUTTON,
@@ -62,15 +68,6 @@ interface RawLithoTableProps {
 const FALLBACK_FOCUS_FIELD = "lithoTo";
 const FIRST_COLUMN_KEY = tableColumns[0]?.key ?? null;
 const LAST_COLUMN_KEY = tableColumns[tableColumns.length - 1]?.key ?? null;
-
-// Sticky header cell. The inset shadows redraw the grid lines, which
-// `border-collapse` would otherwise lose while the header floats over rows.
-const HEADER_CELL = [
-  "sticky top-0 z-[3] border border-rl-grid bg-rl-navy-softer p-[3px] text-center",
-  "text-[0.7rem] leading-[1.1] font-semibold tracking-[0.01em] whitespace-normal",
-  "text-rl-text [overflow-wrap:anywhere]",
-  "shadow-[inset_1px_0_0_var(--color-rl-grid),inset_-1px_0_0_var(--color-rl-grid),inset_0_1px_0_var(--color-rl-grid),inset_0_-1px_0_var(--color-rl-border-strong)]",
-].join(" ");
 
 const PAGINATION_BUTTON = `${OUTLINE_BUTTON} ${OUTLINE_BUTTON_NAVY} ${OUTLINE_BUTTON_DISABLED} h-7 min-w-[76px] px-2.5 text-[0.8rem] max-sm:min-w-0`;
 const ROW_ACTION_BUTTON = `${OUTLINE_BUTTON} ${OUTLINE_BUTTON_DISABLED} h-7 px-3 text-[0.8rem]`;
@@ -321,20 +318,11 @@ function RawLithoTable({
 
   return (
     <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col">
-      <div
-        ref={tableWrapperRef}
-        className="min-h-0 w-full max-w-full flex-1 overflow-auto scroll-smooth rounded-xl border border-rl-border bg-white shadow-[0_1px_2px_rgb(16_35_61/6%)]"
-      >
-        <table
-          className="w-full table-fixed border-collapse bg-white"
-          style={{ minWidth: rawLithoConfig.minWidth }}
-        >
+      <div ref={tableWrapperRef} className={`${TABLE_FRAME} scroll-smooth`}>
+        <table className={TABLE} style={{ minWidth: rawLithoConfig.minWidth }}>
           <thead>
             <tr>
-              <th
-                className={HEADER_CELL}
-                style={{ width: rawLithoConfig.indexColumnWidth }}
-              >
+              <th className={HEADER_CELL} style={{ width: INDEX_COLUMN_WIDTH }}>
                 Ins
               </th>
 

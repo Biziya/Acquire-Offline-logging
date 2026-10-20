@@ -31,13 +31,43 @@ UploadData/
 
 ```text
 Upload Data
-├── 1. File Selection         picker; parse errors shown inline
+├── 1. File Selection         drop zone + Browse Files; errors shown inline
 ├── 2. Dataset Information    file, project, campaign, drillhole, created by,
 │                             uploaded by, total records, file size, status
 ├── 3. Editable JSON Preview  search, status filter, record count, table
 ├── 4. Validation Summary     total / valid / warning / invalid + document issues
 └── Actions                   Cancel · Import Data (→ confirmation)
 ```
+
+The sections sit in a one-column grid (`grid-cols-[minmax(0,1fr)]`), so no
+section can be wider than the page: a table narrower than its readability floor
+scrolls inside its own frame, and the page never scrolls sideways.
+
+## Choosing a file: Browse Files or drag and drop
+
+```text
+Browse Files ─┐
+              ├─▶ handleFileSelect(file)   type check → parse → working document
+drop on zone ─┘
+```
+
+- **One handler:** both routes call `handleFileSelect` in `UploadData.tsx`.
+  The type check, JSON parsing and validation exist only there.
+- **Drag feedback:** while a file is dragged over the zone it turns blue and
+  reads "Drop the JSON file here". Leaving the zone, or moving over its child
+  elements, is handled correctly.
+- **Rejected files:** one file at a time. Dropping several shows "Drop one JSON
+  file at a time." A file that is not `.json` / `application/json` shows
+  "`<name>` is not a JSON file." In both cases the dataset already loaded, with
+  its edits, is kept.
+- **Valid files:** a valid file replaces the current dataset, just as choosing
+  one with Browse Files does. Nothing is uploaded until **Import Data** is
+  confirmed.
+- **Drops beside the zone:** while the page is open, a window-level listener
+  stops the browser from opening a file dropped next to the zone, which would
+  discard the page.
+- **Choosing the same file again** still works: the file input is cleared after
+  every pick.
 
 **Created By / Uploaded By** show "Not available": the Raw Litho JSON format
 records no creator and the application has no signed-in user. Nothing is
@@ -123,7 +153,10 @@ replaces a newer one.
 
 `config.yaml` holds the page title, `rowHeight`, `overscan`, preview `height`,
 `minWidth`, index/status column widths, the column list (label, width,
-visibility) and the search debounce. It is parsed and validated once when the
+visibility) and the search debounce. Column widths are **proportions**: each
+column gets its share of the table (`toPercentWidths`), so the preview fits the
+section at any width. `minWidth` (680 px) is only a readability floor, below
+which the table scrolls inside its frame. Every visible column needs a width. It is parsed and validated once when the
 module loads; a bad value fails start-up (and `npm test`) with the file and key
 in the error.
 
@@ -140,7 +173,10 @@ in the error.
 
 ## Manual test checklist
 
-1. Pick a Raw Litho export → the summary, record count and table fill in.
+1. Pick a Raw Litho export with Browse Files, then drag another onto the zone → the zone highlights while dragging, and the dropped file replaces the first; nothing is uploaded.
+1a. Drop two files, or a `.txt` file → a clear error; the loaded dataset stays.
+1b. Drop a file beside the zone → the browser does not open it.
+1c. At ~1024 px window width → no horizontal scrollbar on the page or the preview.
 2. Pick malformed JSON or an array root → inline error, Import Data disabled.
 3. Scroll a 100,000-record file → scrolling stays smooth; edit a cell, scroll away and back → the edit is still there.
 4. Type `Fine  grained sandstone ` in a comment → every space stays.

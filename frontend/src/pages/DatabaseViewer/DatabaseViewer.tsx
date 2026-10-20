@@ -1,23 +1,53 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import DatabaseViewerTable from "./DatabaseViewerTable";
 import { databaseViewerConfig } from "./config";
 import { generateMockLithologyRecords } from "./databaseViewerMockData";
+import type { LithologyRecord } from "./databaseViewerTypes";
+import {
+  FIELD,
+  FIELD_CONTROL,
+  FIELD_LABEL,
+  READONLY_VALUE,
+} from "../../components/fieldStyles";
 
-const { title, columns, mockData, searchDebounceMs } = databaseViewerConfig;
+const { title, mockData } = databaseViewerConfig;
 
-const FIELD = "grid gap-[3px]";
-const LABEL = "text-[0.75rem] font-semibold text-rl-text-muted";
-const CONTROL =
-  "h-[30px] rounded-md border border-rl-border-strong bg-white px-2.5 text-[0.8333rem] text-rl-text transition-[background-color,border-color,box-shadow] duration-140 hover:border-rl-navy focus:border-rl-navy focus:shadow-[0_0_0_3px_var(--color-rl-ring-glow)] focus:outline-none";
 const BUTTON =
-  "h-[30px] cursor-pointer rounded-md border border-rl-border-strong bg-white px-3 text-[0.8rem] font-[550] text-rl-navy transition-[background-color,border-color,color] duration-140 hover:border-rl-navy hover:bg-rl-navy-soft hover:text-rl-navy-dark focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-rl-cell-ring active:translate-y-px disabled:cursor-not-allowed disabled:border-rl-border disabled:bg-rl-navy-softer disabled:text-rl-disabled";
+  "h-[30px] cursor-pointer rounded-md border border-rl-border-strong bg-white px-3 text-[0.8rem] font-[550] text-rl-navy transition-[background-color,border-color,color] duration-140 hover:border-rl-navy hover:bg-rl-navy-soft hover:text-rl-navy-dark focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-rl-cell-ring active:translate-y-px";
 
 const numberFormat = new Intl.NumberFormat("en-US");
 
-function uniqueSorted(values: Iterable<string>) {
-  return Array.from(new Set(values)).sort((first, second) =>
-    first.localeCompare(second),
+interface DrillholeGroup {
+  project: string;
+  campaign: string;
+  records: LithologyRecord[];
+}
+
+/*
+ * Records grouped by drillhole, each group ordered by Litho From. Built once
+ * per dataset, so choosing a drillhole is a map lookup, not a scan. Project and
+ * Campaign come from the drillhole's own records, so they never change for a
+ * drillhole.
+ */
+function groupByDrillhole(records: readonly LithologyRecord[]) {
+  const groups = new Map<string, DrillholeGroup>();
+
+  records.forEach((record) => {
+    const group = groups.get(record.drillhole);
+    if (group) group.records.push(record);
+    else
+      groups.set(record.drillhole, {
+        project: record.project,
+        campaign: record.campaign,
+        records: [record],
+      });
+  });
+
+  groups.forEach((group) =>
+    group.records.sort((first, second) => first.lithoFrom - second.lithoFrom),
   );
+
+  return groups;
 }
 
 /*
@@ -28,87 +58,24 @@ function uniqueSorted(values: Iterable<string>) {
 function DatabaseViewer() {
   const [size, setSize] = useState(mockData.defaultSize);
   const [seed, setSeed] = useState(1);
-  const [searchInput, setSearchInput] = useState("");
-  const [search, setSearch] = useState("");
-  const [project, setProject] = useState("");
-  const [campaign, setCampaign] = useState("");
   const [drillhole, setDrillhole] = useState("");
 
-  // Generated only when the size or seed changes (Refresh), never per render.
-  const records = useMemo(
-    () => generateMockLithologyRecords(size, seed, mockData),
+  // Generated and grouped only when the size or seed changes (Refresh).
+  const groups = useMemo(
+    () => groupByDrillhole(generateMockLithologyRecords(size, seed, mockData)),
     [size, seed],
   );
-
-  // Lower-cased text of each record's visible cells, built once per dataset
-  // so a search is a single substring test per record.
-  const searchText = useMemo(
-    () =>
-      records.map((record) =>
-        columns
-          .map((column) => String(record[column.key]))
-          .join("\u0000")
-          .toLocaleLowerCase(),
-      ),
-    [records],
+  const drillholes = useMemo(
+    () => Array.from(groups.keys()).sort((a, b) => a.localeCompare(b)),
+    [groups],
   );
 
-  // Filtering waits for typing to pause, so 100,000 records are not scanned
-  // on every keystroke.
-  useEffect(() => {
-    const timer = window.setTimeout(
-      () => setSearch(searchInput.trim().toLocaleLowerCase()),
-      searchDebounceMs,
-    );
-    return () => window.clearTimeout(timer);
-  }, [searchInput]);
-
-  const options = useMemo(
-    () => ({
-      projects: uniqueSorted(records.map((record) => record.project)),
-      campaigns: uniqueSorted(
-        records
-          .filter((record) => !project || record.project === project)
-          .map((record) => record.campaign),
-      ),
-      drillholes: uniqueSorted(
-        records
-          .filter(
-            (record) =>
-              (!project || record.project === project) &&
-              (!campaign || record.campaign === campaign),
-          )
-          .map((record) => record.drillhole),
-      ),
-    }),
-    [campaign, project, records],
-  );
-
-  const visibleRecords = useMemo(
-    () =>
-      records.filter(
-        (record, index) =>
-          (!project || record.project === project) &&
-          (!campaign || record.campaign === campaign) &&
-          (!drillhole || record.drillhole === drillhole) &&
-          (!search || (searchText[index] ?? "").includes(search)),
-      ),
-    [campaign, drillhole, project, records, search, searchText],
-  );
-
-  const hasFilters = Boolean(searchInput || project || campaign || drillhole);
-
-  function clearFilters() {
-    setSearchInput("");
-    setSearch("");
-    setProject("");
-    setCampaign("");
-    setDrillhole("");
-  }
+  const selected = groups.get(drillhole);
+  const records = selected?.records ?? [];
 
   return (
     <section className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden">
-      <div className="mb-1.5 flex flex-wrap items-center justify-between gap-3">
+      <div className="mb-1.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
         <h1 className="m-0 text-[1.3rem] font-[650] tracking-[-0.01em] text-rl-navy">
           {title}
         </h1>
@@ -123,78 +90,37 @@ function DatabaseViewer() {
 
       <div className="mb-2 flex flex-wrap items-end gap-3">
         <label className={FIELD}>
-          <span className={LABEL}>Search</span>
-          <input
-            className={`${CONTROL} min-w-[220px]`}
-            type="search"
-            value={searchInput}
-            placeholder="Search all columns"
-            onChange={(event) => setSearchInput(event.target.value)}
-          />
-        </label>
-
-        <label className={FIELD}>
-          <span className={LABEL}>Project</span>
+          <span className={FIELD_LABEL}>Drillhole</span>
           <select
-            className={`${CONTROL} min-w-[150px]`}
-            value={project}
-            onChange={(event) => {
-              setProject(event.target.value);
-              setCampaign("");
-              setDrillhole("");
-            }}
-          >
-            <option value="">All projects</option>
-            {options.projects.map((value) => (
-              <option key={value}>{value}</option>
-            ))}
-          </select>
-        </label>
-
-        <label className={FIELD}>
-          <span className={LABEL}>Campaign</span>
-          <select
-            className={`${CONTROL} min-w-[130px]`}
-            value={campaign}
-            onChange={(event) => {
-              setCampaign(event.target.value);
-              setDrillhole("");
-            }}
-          >
-            <option value="">All campaigns</option>
-            {options.campaigns.map((value) => (
-              <option key={value}>{value}</option>
-            ))}
-          </select>
-        </label>
-
-        <label className={FIELD}>
-          <span className={LABEL}>Drillhole</span>
-          <select
-            className={`${CONTROL} min-w-[150px]`}
+            className={`${FIELD_CONTROL} w-[190px] max-w-full px-2.5`}
             value={drillhole}
             onChange={(event) => setDrillhole(event.target.value)}
           >
-            <option value="">All drillholes</option>
-            {options.drillholes.map((value) => (
+            <option value="">Select drillhole</option>
+            {drillholes.map((value) => (
               <option key={value}>{value}</option>
             ))}
           </select>
         </label>
 
-        <button
-          className={BUTTON}
-          type="button"
-          onClick={clearFilters}
-          disabled={!hasFilters}
-        >
-          Clear filters
-        </button>
+        <div className={FIELD}>
+          <span className={FIELD_LABEL}>Project</span>
+          <output className={READONLY_VALUE} aria-label="Project">
+            {selected?.project || "—"}
+          </output>
+        </div>
+
+        <div className={FIELD}>
+          <span className={FIELD_LABEL}>Campaign</span>
+          <output className={READONLY_VALUE} aria-label="Campaign">
+            {selected?.campaign || "—"}
+          </output>
+        </div>
 
         <label className={`${FIELD} ml-auto`}>
-          <span className={LABEL}>Mock records</span>
+          <span className={FIELD_LABEL}>Mock records</span>
           <select
-            className={`${CONTROL} min-w-[110px]`}
+            className={`${FIELD_CONTROL} px-2.5`}
             value={size}
             onChange={(event) => setSize(Number(event.target.value))}
           >
@@ -207,13 +133,14 @@ function DatabaseViewer() {
         </label>
       </div>
 
-      <div className="mb-1.5 flex items-center gap-2.5">
-        <p
-          className="m-0 text-[0.8rem] font-semibold text-rl-text"
-          aria-live="polite"
-        >
-          Showing {numberFormat.format(visibleRecords.length)} of{" "}
-          {numberFormat.format(records.length)} records
+      <div className="mb-1.5 flex flex-wrap items-center gap-2.5">
+        <h2 className="m-0 text-[0.85rem] font-semibold text-rl-text">
+          Dataset Records
+        </h2>
+        <p className="m-0 text-[0.8rem] text-rl-text-muted" aria-live="polite">
+          {selected
+            ? `${numberFormat.format(records.length)} records`
+            : "No drillhole selected"}
         </p>
         <button
           className={`${BUTTON} h-7`}
@@ -225,7 +152,16 @@ function DatabaseViewer() {
         </button>
       </div>
 
-      <DatabaseViewerTable records={visibleRecords} />
+      <DatabaseViewerTable
+        // A new drillhole starts at the top of its records.
+        key={drillhole}
+        records={records}
+        emptyMessage={
+          selected
+            ? "This drillhole has no records."
+            : "Select a drillhole to view its records."
+        }
+      />
     </section>
   );
 }

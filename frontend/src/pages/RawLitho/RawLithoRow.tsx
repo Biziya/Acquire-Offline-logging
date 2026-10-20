@@ -15,6 +15,7 @@ import {
 import { handleCellNavigation, isClearCellRequest } from "./tableNavigation";
 import { rawLithoConfig } from "./config";
 import { CELL_INPUT } from "./rawLithoStyles";
+import { BODY_CELL, bodyRowClass } from "../../components/dataTableStyles";
 import { RAW_LITHO_LOOKUP_BY_FIELD } from "../../services/rawLithoLookupConfig";
 
 interface RawLithoRowProps {
@@ -40,7 +41,6 @@ function isEmptyValue(value: unknown) {
   return value === null || value === undefined || String(value).trim() === "";
 }
 
-const CELL = "border border-rl-grid p-0 text-center text-[0.78rem]";
 
 /*
  * One look per cell state, strongest first: the Ctrl + click selection stays
@@ -76,7 +76,7 @@ function buildCellClassName({
         ? CELL_STATES.missing
         : CELL_STATES.normal;
 
-  return `${CELL} focus-within:relative focus-within:z-[1] ${state}`;
+  return `${BODY_CELL} focus-within:relative focus-within:z-[1] ${state}`;
 }
 
 function RawLithoRow({
@@ -91,7 +91,6 @@ function RawLithoRow({
   selectedColumns,
 }: RawLithoRowProps) {
   const valueBeforeEdit = useRef<Partial<Record<RowField, string>>>({});
-  const isEvenRow = rowIndex % 2 === 1;
 
   /*
    * Tells the workspace a depth value has settled, which is what triggers the
@@ -105,11 +104,11 @@ function RawLithoRow({
 
   return (
     <tr
-      className={`${isEvenRow ? "bg-[#f9fbfd]" : "bg-white"} hover:bg-rl-navy-soft`}
+      className={bodyRowClass(rowIndex)}
       style={{ height: rawLithoConfig.rowHeight }}
       data-row-id={row.id}
     >
-      <td className={CELL}>{rowIndex + 1}</td>
+      <td className={BODY_CELL}>{rowIndex + 1}</td>
 
       {tableColumns.map((column) => {
         const lookup = RAW_LITHO_LOOKUP_BY_FIELD[column.key];

@@ -255,7 +255,19 @@ function UploadData() {
     setDatasetVersion((version) => version + 1);
   }
 
+  // The one entry point for a new file: Browse Files and drag-and-drop.
   const handleFileSelect = async (file: File) => {
+    const isJsonFile =
+      file.type === "application/json" ||
+      file.name.toLowerCase().endsWith(".json");
+
+    // Refused before anything is reset, so the loaded dataset (and its edits)
+    // survives a wrong file.
+    if (!isJsonFile) {
+      setFileError(`"${file.name}" is not a JSON file. Choose a .json file.`);
+      return;
+    }
+
     const selectionId = ++fileSelectionIdRef.current;
     requestControllerRef.current?.abort();
     requestControllerRef.current = null;
@@ -266,14 +278,6 @@ function UploadData() {
     resetDataset();
 
     try {
-      const isJsonFile =
-        file.type === "application/json" ||
-        file.name.toLowerCase().endsWith(".json");
-
-      if (!isJsonFile) {
-        throw new Error("Unsupported file type");
-      }
-
       const dataset: unknown = JSON.parse(await file.text());
 
       if (selectionId !== fileSelectionIdRef.current) {
@@ -399,9 +403,11 @@ function UploadData() {
         </h1>
       </header>
 
-      <div className="grid gap-4">
+      {/* minmax(0,1fr): a wide table scrolls inside its frame instead of widening the page. */}
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
         <UploadFileSection
           onFileSelect={handleFileSelect}
+          onFileReject={setFileError}
           fileError={fileError}
           selectedFileName={selectedFile?.name || ""}
         />
@@ -427,7 +433,7 @@ function UploadData() {
                 <label className="grid gap-1 text-[0.8rem] font-semibold text-[#667389]">
                   Search
                   <input
-                    className={`${CONTROL} min-w-[220px]`}
+                    className={`${CONTROL} w-[220px] max-w-full`}
                     type="search"
                     value={searchInput}
                     placeholder="Search records"

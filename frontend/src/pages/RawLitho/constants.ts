@@ -5,6 +5,7 @@ import type {
   ToastNotification,
 } from "../../types/domain";
 import { columnByKey, createSchemaRow } from "../../types/rawLithoSchema";
+import { toPercentWidths } from "../../components/dataTableStyles";
 import { rawLithoConfig } from "./config";
 export { columns } from "../../types/rawLithoSchema";
 
@@ -12,9 +13,19 @@ export { columns } from "../../types/rawLithoSchema";
 // which order, with which header and width (config.yaml). The complete
 // `columns` list above remains the source for state, JSON import/export, and
 // IndexedDB data. Hidden fields are kept in config.yaml with `visible: false`.
-export const tableColumns = rawLithoConfig.columns
-  .filter((column) => column.visible)
-  .map(({ key, label, width }) => ({ ...columnByKey[key], label, width }));
+// Widths become percentages so the table always fits the page.
+const visibleColumns = rawLithoConfig.columns.filter((column) => column.visible);
+const [indexWidth = "auto", ...columnWidths] = toPercentWidths([
+  rawLithoConfig.indexColumnWidth,
+  ...visibleColumns.map((column) => column.width),
+]);
+
+export const INDEX_COLUMN_WIDTH = indexWidth;
+export const tableColumns = visibleColumns.map(({ key, label }, index) => ({
+  ...columnByKey[key],
+  label,
+  width: columnWidths[index] ?? "auto",
+}));
 
 // Ordered so validation can report the FIRST missing required cell and move
 // focus straight to it. `REQUIRED_COLUMN_KEYS` stays a Set for cheap lookups
