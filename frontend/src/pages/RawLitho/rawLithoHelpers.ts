@@ -145,6 +145,9 @@ export function normalizeRawLithoDocument(
     source.holeId,
     fallback.drillhole,
   );
+  // Only the document's own creator: the fallback describes the drillhole, not
+  // who created an existing document, so a legacy draft never gains one.
+  const createdBy = normalizeText(source.created_by);
   const createdAt = toIsoTimestamp(
     source.created_at ??
       source.createdAt ??
@@ -164,6 +167,7 @@ export function normalizeRawLithoDocument(
     project,
     campaign,
     drillhole,
+    ...(createdBy ? { created_by: createdBy } : {}),
     created_at: createdAt,
     modified_at: modifiedAt,
     rows: normalizeRawLithoRows(source.rows),
@@ -175,6 +179,7 @@ export function createRawLithoDocument(
     project = "",
     campaign = "",
     drillhole = "",
+    created_by,
     rows = [],
   }: Partial<RawLithoDocument> = {},
   now = () => new Date().toISOString(),
@@ -186,6 +191,7 @@ export function createRawLithoDocument(
       project,
       campaign,
       drillhole,
+      created_by,
       created_at: timestamp,
       modified_at: timestamp,
       rows,
@@ -223,6 +229,15 @@ export function isStandardRawLithoDocument(
       (item) => typeof item === "string",
     ) ||
     !Array.isArray(value.rows)
+  ) {
+    return false;
+  }
+
+  if (
+    hasOwn(value, "created_by") &&
+    (typeof value.created_by !== "string" ||
+      value.created_by.trim() === "" ||
+      value.created_by !== value.created_by.trim())
   ) {
     return false;
   }
@@ -292,6 +307,15 @@ function validateImportDocument(value: unknown) {
 
   if (normalizeText(value.drillhole) === "") {
     throw new ImportError("The imported drillhole value is required.");
+  }
+
+  // Optional (older files have none); when present it must be text.
+  if (
+    value.created_by !== undefined &&
+    value.created_by !== null &&
+    typeof value.created_by !== "string"
+  ) {
+    throw new ImportError("The imported created_by value must be text.");
   }
 
   if (value.rows.some((row) => !isObject(row))) {

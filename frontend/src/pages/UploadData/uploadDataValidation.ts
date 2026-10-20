@@ -111,6 +111,15 @@ function validateMetadata(document: UploadDocument): UploadIssue[] {
     issues.push({ severity: "error", message: "Campaign must be text." });
   }
 
+  // Optional creator (Raw Litho `created_by`); older files have none.
+  if (
+    document.created_by !== undefined &&
+    document.created_by !== null &&
+    typeof document.created_by !== "string"
+  ) {
+    issues.push({ severity: "warning", message: "created_by is not text." });
+  }
+
   for (const key of ["created_at", "modified_at"] as const) {
     const value = document[key];
     if (value === undefined || value === null || value === "") {

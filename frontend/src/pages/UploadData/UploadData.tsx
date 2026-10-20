@@ -32,6 +32,7 @@ import {
   type UploadValidation,
 } from "./uploadDataValidation";
 import { uploadDataConfig } from "./config";
+import { useCurrentUser } from "../../hooks/useCurrentUser";
 import {
   BUTTON_PRIMARY,
   BUTTON_SECONDARY,
@@ -44,7 +45,7 @@ import {
 
 type StatusFilter = "all" | RowStatus;
 
-const NOT_AVAILABLE = "Not available";
+const UNAVAILABLE = "Unavailable";
 const numberFormat = new Intl.NumberFormat("en-US");
 const CONTROL =
   "h-9 rounded-md border border-[#cbd5e1] bg-white px-2.5 text-[0.9rem] focus:border-[#2563eb] focus:shadow-[0_0_0_3px_rgb(37_99_235/18%)] focus:outline-none";
@@ -55,8 +56,8 @@ function isJsonDocument(dataset: unknown): dataset is Record<string, unknown> {
   );
 }
 
-function displayValue(value: unknown) {
-  return typeof value === "string" && value.trim() ? value.trim() : "—";
+function displayValue(value: unknown, empty = "—") {
+  return typeof value === "string" && value.trim() ? value.trim() : empty;
 }
 
 function formatFileSize(bytes: number) {
@@ -130,6 +131,8 @@ function UploadData() {
   const [isImporting, setIsImporting] = useState(false);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [lookups, setLookups] = useState(createInitialLookups);
+  // Uploaded By: null until a trusted Windows identity source exists.
+  const currentUser = useCurrentUser();
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -232,10 +235,12 @@ function UploadData() {
     project: displayValue(workingDocument?.project),
     campaign: displayValue(workingDocument?.campaign),
     drillhole: displayValue(workingDocument?.drillhole),
-    // The Raw Litho JSON format records no creator, and the application has no
-    // signed-in user, so neither value can be shown.
-    createdBy: workingDocument ? NOT_AVAILABLE : "—",
-    uploadedBy: workingDocument ? NOT_AVAILABLE : "—",
+    // Two different people: the creator recorded in the file, and whoever is
+    // signed in now. Neither is ever guessed.
+    createdBy: workingDocument
+      ? displayValue(workingDocument.created_by, UNAVAILABLE)
+      : "—",
+    uploadedBy: workingDocument ? (currentUser ?? UNAVAILABLE) : "—",
     totalRecords: workingDocument ? numberFormat.format(rows.length) : "—",
     fileSize: selectedFile
       ? `${formatFileSize(selectedFile.size)}${isEdited ? " (original file)" : ""}`
@@ -396,15 +401,20 @@ function UploadData() {
   };
 
   return (
-    <section className="mx-auto min-h-0 w-[min(100%,1200px)] flex-1 overflow-y-auto p-8 text-[#172033] max-[680px]:px-3.5 max-[680px]:py-5">
-      <header className="mb-6">
-        <h1 className="mt-1 mb-2 text-[clamp(1.8rem,4vw,2.35rem)] font-bold">
+    <section className="min-h-0 w-full min-w-0 flex-1 overflow-y-auto pt-1 pb-2 text-[#172033]">
+      <header className="mb-3">
+        <h1 className="m-0 text-[clamp(1.6rem,3vw,2.1rem)] font-bold">
           {uploadDataConfig.title}
         </h1>
       </header>
 
-      {/* minmax(0,1fr): a wide table scrolls inside its frame instead of widening the page. */}
-      <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
+      {/*
+        One column, or on extra-wide screens File Selection beside Dataset
+        Information with the preview and summary full width below.
+        minmax(0, …) lets a wide table scroll inside its frame instead of
+        widening the page.
+      */}
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] xl:[&>*:nth-child(n+3)]:col-span-2">
         <UploadFileSection
           onFileSelect={handleFileSelect}
           onFileReject={setFileError}
@@ -509,7 +519,7 @@ function UploadData() {
 
       {isConfirmOpen && workingDocument && (
         <div
-          className="mt-6 rounded-xl border border-[#bfdbfe] bg-[#eff6ff] p-4"
+          className="mt-4 rounded-xl border border-[#bfdbfe] bg-[#eff6ff] p-4"
           role="alertdialog"
           aria-labelledby="upload-confirm-title"
           aria-describedby="upload-confirm-message"
@@ -547,7 +557,7 @@ function UploadData() {
         </div>
       )}
 
-      <div className="mt-6 flex justify-between gap-3 max-[680px]:flex-col-reverse">
+      <div className="mt-4 flex justify-between gap-3 max-[680px]:flex-col-reverse">
         <button
           className={`${BUTTON_SECONDARY} max-[680px]:w-full`}
           type="button"

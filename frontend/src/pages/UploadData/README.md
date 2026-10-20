@@ -69,9 +69,26 @@ drop on zone ─┘
 - **Choosing the same file again** still works: the file input is cleared after
   every pick.
 
-**Created By / Uploaded By** show "Not available": the Raw Litho JSON format
-records no creator and the application has no signed-in user. Nothing is
-invented.
+### Created By and Uploaded By
+
+These are two different people, and neither is ever guessed:
+
+| Field | Source | When missing |
+| --- | --- | --- |
+| Created By | `created_by` in the selected JSON file (written by Raw Litho) | `Unavailable` — e.g. an older file |
+| Uploaded By | the signed-in Windows user from `useCurrentUser()` | `Unavailable` |
+
+**Uploaded By always shows `Unavailable` today.** No trusted identity source
+exists yet: a browser cannot read the Windows login, and the API has no
+authentication or "current user" endpoint. See `src/services/currentUser.ts`
+for exactly what the backend needs; once it exists, this page shows the user
+with no further change.
+
+Uploading never changes `created_by`, and the uploader is not written into the
+file. The backend contract (`POST /api/uploaddata`) has no uploader field. The
+server ignores unknown fields such as `created_by`, so it neither rejects nor
+stores it. Recording the uploader belongs on the server, from its
+authenticated request, once Windows Authentication is enabled.
 
 ## The working document
 
@@ -94,7 +111,10 @@ edit survives its row scrolling out of the virtual window and back.
 
 - **Virtualized** with `@tanstack/react-virtual`: only the rows in view plus
   `overscan` are in the DOM, so 100,000 records stay responsive. Row height,
-  overscan, table height and columns come from `config.yaml`.
+  overscan, maximum height and columns come from `config.yaml`.
+- **Height follows the records**: the preview is as tall as its rows, up to
+  `maxHeightVh` percent of the window, then scrolls inside its frame. A small
+  file no longer leaves a large empty table box.
 - **Search** across the visible columns (debounced) and a **status filter**
   (all / invalid / warnings / valid). A record edited while a filter is active
   stays listed until the filter changes, so it does not vanish under the caret.
@@ -151,7 +171,7 @@ replaces a newer one.
 
 ## Configuration
 
-`config.yaml` holds the page title, `rowHeight`, `overscan`, preview `height`,
+`config.yaml` holds the page title, `rowHeight`, `overscan`, preview `maxHeightVh`,
 `minWidth`, index/status column widths, the column list (label, width,
 visibility) and the search debounce. Column widths are **proportions**: each
 column gets its share of the table (`toPercentWidths`), so the preview fits the

@@ -16,7 +16,7 @@ uploading, no IndexedDB, and no SQL Server connection.
 DatabaseViewer/
 ├── config.yaml                 title, overscan, mock-data settings
 ├── config.ts                   typed, validated copy of config.yaml
-├── DatabaseViewer.tsx          page: drillhole selector, Project/Campaign, count, refresh
+├── DatabaseViewer.tsx          page: drillhole selector, Project/Campaign, count
 ├── DatabaseViewerTable.tsx     virtualized read-only table
 ├── databaseViewerMockData.ts   MOCK record generator
 ├── databaseViewerTypes.ts      LithologyRecord + column keys
@@ -28,7 +28,7 @@ DatabaseViewer/
 ```text
 Database Viewer                                   [Mock data banner]
 Drillhole [select ▼]   Project [read-only]   Campaign [read-only]   Mock records [10,000 ▼]
-Dataset Records  139 records  [Refresh]
+Dataset Records  139 records
 | Ins | Litho From (m) | Litho To (m) | Litho Code | … | Hardness |
 ```
 
@@ -67,22 +67,23 @@ its own frame instead of squeezing cells.
 ## Mock data
 
 `generateMockLithologyRecords(size, seed, settings)` builds records
-programmatically; there is no fixture file. It is seeded, so the same size and
-seed always give the same records and the same ids (`1…n`).
+programmatically; there is no fixture file. The page always uses the same seed
+(`MOCK_SEED`), so a given size always gives the same records and the same ids
+(`1…n`).
 
 - **Labelling:** every project, campaign and drillhole starts with `MOCK-`.
 - **Fixed identity:** drillhole names and each drillhole's project and campaign
-  are fixed by its position, not by the random seed. A drillhole keeps its
-  Project and Campaign through Refresh and size changes, and so does the
-  current selection.
+  are fixed by its position, not by the random values. A drillhole keeps its
+  Project and Campaign when the size changes, and so does the current
+  selection.
 - **Depths:** intervals are contiguous within each drillhole.
 - **Codes:** plausible shapes, **not** the API lookup tables.
 
 The dataset is generated and grouped by drillhole in one `useMemo` keyed on
-size and seed. It is built once per choice, never per render, and choosing a
+the size. It is built once per choice, never per render, and choosing a
 drillhole is a map lookup. Each group is ordered by Litho From.
 
-**Refresh** moves to the next seed. **Mock records** picks 10,000, 50,000 or
+There is no Refresh button. **Mock records** picks 10,000, 50,000 or
 100,000 records in total, about 139, 694 or 1,389 per drillhole with the
 default 72 drillholes.
 
@@ -106,7 +107,6 @@ with the file and key in the error. The table's appearance is configured in
 1. Replace the `useMemo` that generates and groups mock records with a request
    for the selected drillhole.
 2. Keep `LithologyRecord` as the row shape.
-3. Point Refresh at the reload.
 
 The table does not depend on where the records came from.
 
@@ -116,5 +116,5 @@ The table does not depend on where the records came from.
 2. Choose a drillhole → Project and Campaign fill in (read-only), the count and table update, rows run in Litho From order.
 3. Put Raw Litho and Database Viewer side by side → identical columns, widths, header and rows.
 4. Switch to 100,000 records and a drillhole → smooth scrolling; only a few dozen rows are in the DOM.
-5. Press Refresh → new mock values for the same drillhole, same Project / Campaign, and no network request.
+5. Confirm there is no Refresh button and the network tab shows no request.
 6. Narrow the window to ~1024 px → no horizontal scrollbar on the page or the table.

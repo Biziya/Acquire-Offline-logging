@@ -63,6 +63,8 @@ interface RawLithoTableProps {
   onRemoveLastRow: () => void;
   isEnabled: boolean;
   isBlocked?: boolean;
+  /* Rendered at the right end of the bar under the table (Save). */
+  footerEnd?: React.ReactNode;
 }
 
 const FALLBACK_FOCUS_FIELD = "lithoTo";
@@ -87,6 +89,7 @@ function RawLithoTable({
   onRemoveLastRow,
   isEnabled,
   isBlocked = false,
+  footerEnd,
 }: RawLithoTableProps) {
   const tableWrapperRef = useRef<HTMLDivElement>(null);
   const tableBodyRef = useRef<HTMLTableSectionElement>(null);
@@ -375,68 +378,81 @@ function RawLithoTable({
         </table>
       </div>
 
-      <nav
-        className="flex items-center justify-center gap-3 pt-2 max-sm:gap-2"
-        aria-label="Raw Litho table pages"
-      >
-        <button
-          className={PAGINATION_BUTTON}
-          type="button"
-          onClick={() => onPageChange(currentPage - 1)}
-          disabled={currentPage <= 1}
-          aria-label={`Show previous ${RAW_LITHO_ROWS_PER_PAGE} Raw Litho rows (PageUp)`}
-        >
-          Previous
-        </button>
+      {/*
+        One bar under the table: row actions, pagination, then the page's own
+        controls (Save). Three columns keep the pagination centred on wide
+        screens; on narrow ones the groups wrap.
+      */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pt-2 lg:grid lg:grid-cols-[1fr_auto_1fr]">
+        <div className="flex gap-2">
+          {/*
+            Stays clickable while the page is enabled: `requestAddRow` is what
+            reports the missing fields or the duplicate interval, so disabling the
+            button would hide the reason the row was rejected.
+          */}
+          <button
+            className={`${ROW_ACTION_BUTTON} ${OUTLINE_BUTTON_NAVY}`}
+            type="button"
+            onClick={requestAddRow}
+            disabled={!isEnabled}
+            title="Add Row (F4)"
+          >
+            Add Row (F4)
+          </button>
 
-        <div
-          className="grid min-w-[140px] gap-px text-center text-[0.8rem] font-semibold text-rl-text"
-          aria-live="polite"
-        >
-          <span>
-            Page {currentPage} of {totalPages}
-          </span>
-          <span className="text-[0.75rem] font-normal text-rl-text-muted">
-            Rows {firstVisibleRow}–{lastVisibleRow} of {rows.length}
-          </span>
+          <button
+            className={`${ROW_ACTION_BUTTON} text-rl-danger enabled:hover:border-rl-danger enabled:hover:bg-rl-danger enabled:hover:text-white enabled:active:bg-rl-danger-dark`}
+            type="button"
+            onClick={onRemoveLastRow}
+            disabled={!canRemoveLastRow}
+            title="Remove Last Row (F5)"
+          >
+            Remove Last Row (F5)
+          </button>
         </div>
 
-        <button
-          className={PAGINATION_BUTTON}
-          type="button"
-          onClick={() => onPageChange(currentPage + 1)}
-          disabled={currentPage >= totalPages}
-          aria-label={`Show next ${RAW_LITHO_ROWS_PER_PAGE} Raw Litho rows (PageDown)`}
+        <nav
+          className="flex items-center justify-center gap-3 max-sm:gap-2 lg:justify-self-center"
+          aria-label="Raw Litho table pages"
         >
-          Next
-        </button>
-      </nav>
+          <button
+            className={PAGINATION_BUTTON}
+            type="button"
+            onClick={() => onPageChange(currentPage - 1)}
+            disabled={currentPage <= 1}
+            aria-label={`Show previous ${RAW_LITHO_ROWS_PER_PAGE} Raw Litho rows (PageUp)`}
+          >
+            Previous
+          </button>
 
-      <div className="mt-2 flex gap-2">
-        {/*
-          Stays clickable while the page is enabled: `requestAddRow` is what
-          reports the missing fields or the duplicate interval, so disabling the
-          button would hide the reason the row was rejected.
-        */}
-        <button
-          className={`${ROW_ACTION_BUTTON} ${OUTLINE_BUTTON_NAVY}`}
-          type="button"
-          onClick={requestAddRow}
-          disabled={!isEnabled}
-          title="Add Row (F4)"
-        >
-          Add Row (F4)
-        </button>
+          <div
+            className="grid min-w-[140px] gap-px text-center text-[0.8rem] font-semibold text-rl-text"
+            aria-live="polite"
+          >
+            <span>
+              Page {currentPage} of {totalPages}
+            </span>
+            <span className="text-[0.75rem] font-normal text-rl-text-muted">
+              Rows {firstVisibleRow}–{lastVisibleRow} of {rows.length}
+            </span>
+          </div>
 
-        <button
-          className={`${ROW_ACTION_BUTTON} text-rl-danger enabled:hover:border-rl-danger enabled:hover:bg-rl-danger enabled:hover:text-white enabled:active:bg-rl-danger-dark`}
-          type="button"
-          onClick={onRemoveLastRow}
-          disabled={!canRemoveLastRow}
-          title="Remove Last Row (F5)"
-        >
-          Remove Last Row (F5)
-        </button>
+          <button
+            className={PAGINATION_BUTTON}
+            type="button"
+            onClick={() => onPageChange(currentPage + 1)}
+            disabled={currentPage >= totalPages}
+            aria-label={`Show next ${RAW_LITHO_ROWS_PER_PAGE} Raw Litho rows (PageDown)`}
+          >
+            Next
+          </button>
+        </nav>
+
+        {footerEnd && (
+          <div className="ml-auto flex items-center gap-2 lg:justify-self-end">
+            {footerEnd}
+          </div>
+        )}
       </div>
     </div>
   );

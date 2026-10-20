@@ -74,10 +74,8 @@ describe("Database Viewer page", () => {
     expect(depths).toEqual([...depths].sort((a, b) => a - b));
     expect(rows(container)[0]?.children[0]).toHaveTextContent("1");
 
-    const before = rows(container)[1]?.textContent;
-    await user.click(screen.getByRole("button", { name: "Refresh" }));
-    expect(rows(container)[1]?.textContent).not.toBe(before);
-    expect(screen.getByLabelText("Project")).toHaveTextContent("MOCK-PRJ-01");
+    // No Refresh: the page has no buttons at all.
+    expect(screen.queryByRole("button")).toBeNull();
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 

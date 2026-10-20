@@ -41,7 +41,7 @@ RawLitho/
 ├── RawLitho.tsx                    page container
 ├── RawLithoFilters.tsx             drillhole search + Project/Campaign output
 ├── RawLithoRow.tsx                 one editable table row
-├── RawLithoTable.tsx               table, pagination, row action buttons
+├── RawLithoTable.tsx               table + bottom bar (row actions, pagination, Save slot)
 ├── README.md                       this file
 ├── Toast.tsx                       top-centre notification
 ├── config.yaml                     title, rows per page, row height, columns
@@ -67,7 +67,8 @@ RawLitho.tsx
 - page container; composes the four hooks
 - derives selectedDrillhole (project/campaign) for the filter bar
 - owns isSaving and handleSave (IndexedDB write + JSON export)
-- renders Toast, ConfirmDialog, filters, table, Save button
+- renders Toast, ConfirmDialog, filters, table; passes the Save button to the
+  table's bottom bar (`footerEnd`)
 
 RawLithoTable.tsx
 - renders the header, the visible page of rows, pagination and row buttons
@@ -857,6 +858,47 @@ Session state is restored before writing the active drillhole/page. A user
 selection made during restoration wins over the asynchronous stored session.
 Clearing the selection removes the active session record.
 
+### Layout
+
+The page is a full-height flex column: title and Import JSON, then the
+drillhole / Project / Campaign row, then the table, which takes all the
+remaining height (`flex-1`) and scrolls its rows inside its frame with the
+header sticky. Under it a single bar holds everything else: Add Row and Remove
+Last Row on the left, pagination centred, and Save on the right. On narrow
+screens the three groups wrap. No height is fixed, so the table grows and
+shrinks with the window.
+
+### Created by (`created_by`)
+
+The document has an optional top-level `created_by`, the Windows domain user
+(`DOMAIN\username`) who created the dataset:
+
+```json
+{ "project": "…", "campaign": "…", "drillhole": "…",
+  "created_by": "DOMAIN\\username",
+  "created_at": "…", "modified_at": "…", "rows": [] }
+```
+
+**When it is set**
+- It is stamped once, when selecting a drillhole creates a new, blank document
+  (`buildFallback` → `createBlankDocument`), using the trusted user from
+  `useCurrentUser()`.
+- Saves, edits, autosave, IndexedDB restore, import and export keep it
+  unchanged. `normalizeRawLithoDocument` reads it only from the document
+  itself, never from the fallback.
+
+**When it is not set**
+- An existing or imported document without one (older files and drafts) keeps
+  none; the current user is never filled in.
+- A document created while no identity is available has none. **That is every
+  document today**: there is no trusted identity source yet (see
+  `src/services/currentUser.ts`).
+
+**Compatibility**
+- Older JSON files and IndexedDB drafts without the field load as before.
+- An imported `created_by` that is not text is rejected.
+- The backend ignores the field on upload.
+
 The Save button validates lookup codes, stamps `modified_at`, stages the snapshot,
 flushes pending saves and downloads `<drillhole>.json`. Export is still attempted
 if IndexedDB saving fails, and the pending document is retained for retry.
@@ -906,7 +948,8 @@ Import JSON → file picker → prepareRawLithoImport()      [zero writes]
 Rejected before the dialog appears when the file is unreadable, is not valid
 JSON, is not an object, is missing any of `project`, `campaign`, `drillhole`,
 `created_at`, `modified_at`, `rows`, has a non-array `rows`, has a row that is
-not an object, has an empty `drillhole`, or contains a lookup code that is not
+not an object, has an empty `drillhole`, has a `created_by` that is not text
+(the field itself is optional), or contains a lookup code that is not
 in the loaded lookup data. Lookups that failed to load are skipped rather than
 treated as invalid (`skipUnavailable: true`).
 

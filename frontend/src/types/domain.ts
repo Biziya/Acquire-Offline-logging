@@ -9,6 +9,13 @@ export interface RawLithoDocument {
   project: string;
   campaign: string;
   drillhole: string;
+  /*
+   * Windows domain user ("DOMAIN\username") who created the dataset. Optional:
+   * set only on a new document when a trusted identity is available, then
+   * carried unchanged through edits, autosave, import and export. Legacy
+   * documents have none, and the current user is never filled in for them.
+   */
+  created_by?: string;
   created_at: string;
   modified_at: string;
   rows: RawLithoRow[];

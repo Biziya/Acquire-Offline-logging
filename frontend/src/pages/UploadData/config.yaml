@@ -7,7 +7,9 @@ title: "Upload Data to Database"
 table:
   rowHeight: 28          # px; must stay fixed, the virtual scroller relies on it
   overscan: 10           # rows rendered above and below the visible window
-  height: 420            # px, height of the scrollable preview
+  # The preview is as tall as its records, up to this share of the window
+  # height; beyond that it scrolls inside its frame.
+  maxHeightVh: 65        # percent of the viewport height
   # Column widths below are proportions, so the table fits the section
   # width. minWidth is only a readability floor - below it the table
   # scrolls inside its own frame.

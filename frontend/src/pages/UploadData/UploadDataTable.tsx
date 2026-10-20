@@ -36,7 +36,7 @@ const {
   columns,
   rowHeight,
   overscan,
-  height,
+  maxHeightVh,
   minWidth,
   indexColumnWidth,
   statusColumnWidth,
@@ -106,7 +106,7 @@ function UploadDataTable({
     estimateSize: () => rowHeight,
     overscan,
     getItemKey: (position) => visibleRows[position] ?? position,
-    initialRect: { width: minWidth, height },
+    initialRect: { width: minWidth, height: rowHeight * 20 },
   });
 
   function focusRendered({ position, column }: CellPosition) {
@@ -333,7 +333,8 @@ function UploadDataTable({
       <div
         ref={scrollRef}
         className={TABLE_FRAME}
-        style={{ height }}
+        // Grows with the records, up to the configured share of the window.
+        style={{ maxHeight: `${maxHeightVh}vh` }}
       >
         <table
           className={TABLE}

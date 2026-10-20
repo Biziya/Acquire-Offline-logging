@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import UploadData from "../src/pages/UploadData/UploadData";
 import { stubDesktopViewport } from "./viewport";
 import { importUploadData } from "../src/services/Api/uploadData";
+import { getCurrentWindowsUser } from "../src/services/currentUser";
 import { applyCellEdits } from "../src/pages/UploadData/uploadDataDocument";
 import {
   validateUploadDocument,
@@ -16,6 +17,10 @@ vi.mock("../src/services/Api/uploadData", () => ({
 // Lookup data unavailable: codes are reported as unchecked, never guessed.
 vi.mock("../src/services/Api/rawLithoApi", () => ({
   getRawLithoLookup: vi.fn(() => Promise.reject(new Error("offline"))),
+}));
+// No trusted identity by default, as in the real application today.
+vi.mock("../src/services/currentUser", () => ({
+  getCurrentWindowsUser: vi.fn(async () => null),
 }));
 
 function row(id: number, from: number, to: number) {
@@ -247,5 +252,49 @@ describe("Upload Data drag and drop", () => {
     Object.defineProperty(outside, "dataTransfer", { value: { types: ["Files"] } });
     window.dispatchEvent(outside);
     expect(outside.defaultPrevented).toBe(true);
+  });
+});
+
+describe("Upload Data creator and uploader", () => {
+  const CREATOR = "CORP\\creator";
+  const UPLOADER = "CORP\\uploader";
+
+  beforeEach(() => vi.mocked(importUploadData).mockClear());
+
+  // The value shown next to a Dataset Information label.
+  const summary = (label: string) =>
+    screen.getByText(label, { selector: "dt" }).nextElementSibling?.textContent;
+
+  it("shows the file's creator and marks a missing identity Unavailable", async () => {
+    render(<UploadData />);
+    await loadFile(jsonFile({ ...uploadDocument(), created_by: CREATOR }));
+    expect(summary("Created By")).toBe(CREATOR);
+    expect(summary("Uploaded By")).toBe("Unavailable");
+  });
+
+  it("shows Unavailable for a legacy file without created_by", async () => {
+    render(<UploadData />);
+    await loadFile(jsonFile(uploadDocument()));
+    expect(summary("Created By")).toBe("Unavailable");
+  });
+
+  it("shows the trusted uploader separately and never changes the creator", async () => {
+    vi.mocked(getCurrentWindowsUser).mockResolvedValueOnce(UPLOADER);
+    const user = userEvent.setup();
+    render(<UploadData />);
+    await loadFile(jsonFile({ ...uploadDocument(), created_by: CREATOR }));
+    await waitFor(() => expect(summary("Uploaded By")).toBe(UPLOADER));
+    expect(summary("Created By")).toBe(CREATOR);
+
+    // Edit, upload: the creator travels unchanged and no uploader is added.
+    fireEvent.change(screen.getByLabelText("Lithology Comments, record 1"), {
+      target: { value: "edited" },
+    });
+    await user.click(screen.getByRole("button", { name: "Import Data" }));
+    await user.click(screen.getByRole("button", { name: "Confirm import" }));
+    const uploaded = vi.mocked(importUploadData).mock.calls[0]?.[0] as File;
+    const json = JSON.parse(await uploaded.text());
+    expect(json.created_by).toBe(CREATOR);
+    expect(JSON.stringify(json)).not.toContain("uploader");
   });
 });

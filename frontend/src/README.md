@@ -28,7 +28,9 @@ src/
 │   ├── Home.tsx
 │   └── RawExtraction.tsx   earlier page, no route
 ├── types/           shared domain types and runtime guards
-├── services/        API clients, IndexedDB, lookup config (own README)
+├── hooks/
+│   └── useCurrentUser.ts  signed-in Windows user, or null (see services/currentUser.ts)
+├── services/        API clients, IndexedDB, lookup config, current user (own README)
 ├── App.tsx          layout + routes
 ├── main.tsx         entry point
 └── README.md        this file

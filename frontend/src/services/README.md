@@ -142,6 +142,28 @@ same name. Colour is served as `colourCode` but stored as `colorCode`.
 Adding a lookup means adding one entry here — the client, cache, dropdown, and
 validation all pick it up.
 
+## currentUser.ts
+
+`getCurrentWindowsUser()` is the one place the app asks who is signed in
+(`DOMAIN\username`). It feeds Raw Litho's `created_by` on new documents and
+Upload Data's "Uploaded By", through `hooks/useCurrentUser.ts`.
+
+**It resolves to `null` today: no trusted identity source exists.**
+- A browser cannot read the Windows login.
+- The API has no authentication: no Negotiate or Windows Authentication in
+  `Program.cs`, nothing in `web.config`.
+- There is no endpoint that returns the current user.
+- The hostname, user agent or a typed-in name are not used, because none of
+  them is a trusted identity.
+
+What is missing is all on the backend:
+1. Enable Windows Authentication: IIS `windowsAuthentication`, or `AddNegotiate()`
+   plus `UseAuthentication()`.
+2. Add an endpoint returning `HttpContext.User.Identity.Name`.
+
+Then implement the request in this function, with `credentials: "include"`;
+nothing else in the frontend needs to change.
+
 ## Caching strategy
 
 Reads are network-first with a cache fallback; the working table is local-only.

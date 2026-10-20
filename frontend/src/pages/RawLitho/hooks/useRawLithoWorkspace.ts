@@ -29,9 +29,12 @@ const totalPagesFor = (lithoDocument: RawLithoDocument) =>
 export function useRawLithoWorkspace({
   drillholes,
   showToast,
+  currentUser = null,
 }: {
   drillholes: Drillhole[];
   showToast: Notify;
+  /* Trusted Windows user, stamped as `created_by` on a new document. */
+  currentUser?: string | null;
 }) {
   const [selectedHoleId, setSelectedHoleId] = useState("");
   const [rawLithoDocument, setDocument] = useState(createBlankDocument);
@@ -56,6 +59,9 @@ export function useRawLithoWorkspace({
         drillhole: key,
         project: record?.projectCode ?? "",
         campaign: record?.campaign ?? "",
+        // Used only when this creates a NEW document; normalisation ignores
+        // it for a stored draft, so an existing creator is never replaced.
+        created_by: currentUser ?? undefined,
       };
     },
   });

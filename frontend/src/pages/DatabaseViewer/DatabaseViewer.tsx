@@ -11,9 +11,8 @@ import {
 } from "../../components/fieldStyles";
 
 const { title, mockData } = databaseViewerConfig;
-
-const BUTTON =
-  "h-[30px] cursor-pointer rounded-md border border-rl-border-strong bg-white px-3 text-[0.8rem] font-[550] text-rl-navy transition-[background-color,border-color,color] duration-140 hover:border-rl-navy hover:bg-rl-navy-soft hover:text-rl-navy-dark focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-rl-cell-ring active:translate-y-px";
+// Fixed seed: the same mock records every time a size is chosen.
+const MOCK_SEED = 1;
 
 const numberFormat = new Intl.NumberFormat("en-US");
 
@@ -57,13 +56,13 @@ function groupByDrillhole(records: readonly LithologyRecord[]) {
  */
 function DatabaseViewer() {
   const [size, setSize] = useState(mockData.defaultSize);
-  const [seed, setSeed] = useState(1);
   const [drillhole, setDrillhole] = useState("");
 
-  // Generated and grouped only when the size or seed changes (Refresh).
+  // Generated and grouped only when the size changes, never per render.
   const groups = useMemo(
-    () => groupByDrillhole(generateMockLithologyRecords(size, seed, mockData)),
-    [size, seed],
+    () =>
+      groupByDrillhole(generateMockLithologyRecords(size, MOCK_SEED, mockData)),
+    [size],
   );
   const drillholes = useMemo(
     () => Array.from(groups.keys()).sort((a, b) => a.localeCompare(b)),
@@ -142,14 +141,6 @@ function DatabaseViewer() {
             ? `${numberFormat.format(records.length)} records`
             : "No drillhole selected"}
         </p>
-        <button
-          className={`${BUTTON} h-7`}
-          type="button"
-          onClick={() => setSeed((current) => current + 1)}
-          title="Generate a new set of mock records (no request is sent)"
-        >
-          Refresh
-        </button>
       </div>
 
       <DatabaseViewerTable

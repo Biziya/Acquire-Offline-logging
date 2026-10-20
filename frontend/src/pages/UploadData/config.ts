@@ -8,12 +8,15 @@ export function readUploadDataConfig(text: string) {
   const reader = createConfigReader(text, "UploadData/config.yaml");
   const table = reader.section(reader.root.table, "table");
   const search = reader.section(reader.root.search, "search");
+  const maxHeightVh = reader.integer(table.maxHeightVh, "table.maxHeightVh");
+  if (maxHeightVh > 100)
+    reader.fail("table.maxHeightVh", "must be at most 100 (percent).");
 
   return {
     title: reader.string(reader.root.title, "title"),
     rowHeight: reader.integer(table.rowHeight, "table.rowHeight"),
     overscan: reader.integer(table.overscan, "table.overscan", 0),
-    height: reader.integer(table.height, "table.height"),
+    maxHeightVh,
     minWidth: reader.integer(table.minWidth, "table.minWidth"),
     indexColumnWidth: reader.integer(
       table.indexColumnWidth,

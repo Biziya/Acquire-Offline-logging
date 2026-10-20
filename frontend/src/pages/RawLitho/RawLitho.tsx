@@ -10,6 +10,7 @@ import { useRawLithoLookups } from "./hooks/useRawLithoLookups";
 import { useRawLithoWorkspace } from "./hooks/useRawLithoWorkspace";
 import { useRemoveRowConfirmation } from "./hooks/useRemoveRowConfirmation";
 import { useToast } from "./hooks/useToast";
+import { useCurrentUser } from "../../hooks/useCurrentUser";
 import { buildImportConfirmationMessage } from "./rawLithoImportService";
 import {
   exportRawLithoSnapshot,
@@ -24,7 +25,9 @@ function RawLitho() {
   const { drillholes, isLoading, error, rememberDrillholeSelection } =
     useDrillholes(showToast);
   const { lookupData, lookupStatus } = useRawLithoLookups();
-  const workspace = useRawLithoWorkspace({ drillholes, showToast });
+  // Null until a trusted Windows identity source exists (services/currentUser.ts).
+  const currentUser = useCurrentUser();
+  const workspace = useRawLithoWorkspace({ drillholes, showToast, currentUser });
   const [isSaving, setIsSaving] = useState(false);
 
   const {
@@ -219,18 +222,17 @@ function RawLitho() {
         isBlocked={
           Boolean(importer.pendingImport) || removal.isConfirmOpen || isSaving
         }
+        footerEnd={
+          <button
+            className="h-8 cursor-pointer rounded-md border border-transparent bg-rl-navy px-5 font-semibold text-white transition-[background-color,box-shadow] duration-140 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-rl-cell-ring enabled:hover:bg-rl-navy-dark enabled:hover:shadow-[0_2px_6px_rgb(16_35_61/22%)] enabled:active:translate-y-px enabled:active:bg-rl-navy-darker enabled:active:shadow-none disabled:cursor-not-allowed disabled:opacity-55"
+            type="button"
+            onClick={handleSave}
+            disabled={!isPageEnabled || isSaving}
+          >
+            {isSaving ? "Saving…" : "Save"}
+          </button>
+        }
       />
-
-      <div className="flex justify-end pt-2.5">
-        <button
-          className="h-8 cursor-pointer rounded-md border border-transparent bg-rl-navy px-5 font-semibold text-white transition-[background-color,box-shadow] duration-140 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-rl-cell-ring enabled:hover:bg-rl-navy-dark enabled:hover:shadow-[0_2px_6px_rgb(16_35_61/22%)] enabled:active:translate-y-px enabled:active:bg-rl-navy-darker enabled:active:shadow-none disabled:cursor-not-allowed disabled:opacity-55"
-          type="button"
-          onClick={handleSave}
-          disabled={!isPageEnabled || isSaving}
-        >
-          {isSaving ? "Saving…" : "Save"}
-        </button>
-      </div>
     </section>
   );
 }
