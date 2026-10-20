@@ -18,7 +18,7 @@ function DatasetSummary({ summary }: DatasetSummaryProps) {
     ["Campaign", summary.campaign],
     ["Drillhole", summary.drillhole],
     ["Created By", summary.createdBy],
-    ["Uploaded By", summary.uploadedBy],
+    ["Imported By", summary.importedBy],
     ["Total Records", summary.totalRecords],
     ["File Size", summary.fileSize],
     ["Validation Status", summary.validationStatus],

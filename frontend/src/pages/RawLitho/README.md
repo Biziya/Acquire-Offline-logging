@@ -883,6 +883,12 @@ The document has an optional top-level `created_by`, the Windows domain user
 - It is stamped once, when selecting a drillhole creates a new, blank document
   (`buildFallback` → `createBlankDocument`), using the trusted user from
   `useCurrentUser()`.
+- The identity arrives asynchronously, so it can come after the blank document
+  was created. The persistence hook tells the workspace the document is new
+  (`onLoaded(…, isNew)`), and the workspace then adds the creator in
+  `commitDocument` at the document's first save. That is also when the document
+  is first written to IndexedDB or exported, so the stored and exported file
+  always has it. A document that existed before is never stamped this way.
 - Saves, edits, autosave, IndexedDB restore, import and export keep it
   unchanged. `normalizeRawLithoDocument` reads it only from the document
   itself, never from the fallback.
@@ -890,9 +896,10 @@ The document has an optional top-level `created_by`, the Windows domain user
 **When it is not set**
 - An existing or imported document without one (older files and drafts) keeps
   none; the current user is never filled in.
-- A document created while no identity is available has none. **That is every
-  document today**: there is no trusted identity source yet (see
-  `src/services/currentUser.ts`).
+- A document created and saved while no identity is available has none.
+  **That is every document today**: the backend has no Windows Authentication
+  or current-user endpoint yet, so `VITE_CURRENT_USER_PATH` is empty (see
+  `src/services/README.md`).
 
 **Compatibility**
 - Older JSON files and IndexedDB drafts without the field load as before.

@@ -131,7 +131,7 @@ function UploadData() {
   const [isImporting, setIsImporting] = useState(false);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [lookups, setLookups] = useState(createInitialLookups);
-  // Uploaded By: null until a trusted Windows identity source exists.
+  // Imported By: null until a trusted Windows identity source exists.
   const currentUser = useCurrentUser();
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
@@ -240,7 +240,7 @@ function UploadData() {
     createdBy: workingDocument
       ? displayValue(workingDocument.created_by, UNAVAILABLE)
       : "—",
-    uploadedBy: workingDocument ? (currentUser ?? UNAVAILABLE) : "—",
+    importedBy: workingDocument ? (currentUser ?? UNAVAILABLE) : "—",
     totalRecords: workingDocument ? numberFormat.format(rows.length) : "—",
     fileSize: selectedFile
       ? `${formatFileSize(selectedFile.size)}${isEdited ? " (original file)" : ""}`
@@ -420,6 +420,7 @@ function UploadData() {
           onFileReject={setFileError}
           fileError={fileError}
           selectedFileName={selectedFile?.name || ""}
+          recordCount={rows.length}
         />
         <DatasetSummary summary={summary} />
 

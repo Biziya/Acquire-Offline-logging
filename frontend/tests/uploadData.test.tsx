@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import UploadData from "../src/pages/UploadData/UploadData";
@@ -224,7 +224,7 @@ describe("Upload Data drag and drop", () => {
     fireEvent.drop(zone(), drag([file]));
     expect(zone()).not.toHaveClass("upload-drop-zone--active");
     expect(await screen.findByLabelText("Lithology Comments, record 1")).toBeInTheDocument();
-    expect(screen.getByText("Selected: upload.json")).toBeInTheDocument();
+    expect(within(zone()).getByText("upload.json")).toBeInTheDocument();
     expect(importUploadData).not.toHaveBeenCalled();
   });
 
@@ -243,7 +243,44 @@ describe("Upload Data drag and drop", () => {
       '"notes.txt" is not a JSON file.',
     );
     expect(screen.getByLabelText("Lithology Comments, record 1")).toBeInTheDocument();
-    expect(screen.getByText("Selected: upload.json")).toBeInTheDocument();
+    expect(within(zone()).getByText("upload.json")).toBeInTheDocument();
+  });
+
+  it("shows a loaded state with the file name and record count until Cancel", async () => {
+    const user = userEvent.setup();
+    render(<UploadData />);
+    expect(within(zone()).getByText("Drag and drop your JSON file")).toBeInTheDocument();
+    expect(within(zone()).getByRole("button", { name: "Browse Files" })).toBeInTheDocument();
+
+    fireEvent.drop(zone(), drag([jsonFile(uploadDocument())]));
+    expect(await within(zone()).findByText("JSON File Loaded")).toBeInTheDocument();
+    expect(zone()).toHaveClass("upload-drop-zone--loaded");
+    expect(within(zone()).getByText("upload.json")).toBeInTheDocument();
+    expect(within(zone()).getByText("2 records")).toBeInTheDocument();
+    expect(within(zone()).queryByRole("button", { name: "Browse Files" })).toBeNull();
+
+    // Change File opens the same picker; a dropped replacement still works.
+    const input = document.querySelector<HTMLInputElement>('input[type="file"]');
+    const pickerClick = vi.spyOn(input as HTMLInputElement, "click");
+    await user.click(within(zone()).getByRole("button", { name: "Change File" }));
+    expect(pickerClick).toHaveBeenCalled();
+
+    const bigger = { ...uploadDocument(), rows: [row(1, 0, 10), row(2, 10, 20), row(3, 20, 30)] };
+    fireEvent.drop(zone(), drag([new File([JSON.stringify(bigger)], "second.json", { type: "application/json" })]));
+    expect(await within(zone()).findByText("second.json")).toBeInTheDocument();
+    expect(within(zone()).getByText("3 records")).toBeInTheDocument();
+
+    // An unreadable replacement shows the error, not a success state.
+    fireEvent.drop(zone(), drag([new File(["{"], "broken.json", { type: "application/json" })]));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Unable to read this JSON dataset");
+    expect(within(zone()).queryByText("JSON File Loaded")).toBeNull();
+
+    fireEvent.drop(zone(), drag([jsonFile(uploadDocument())]));
+    await within(zone()).findByText("JSON File Loaded");
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(within(zone()).getByText("Drag and drop your JSON file")).toBeInTheDocument();
+    expect(zone()).not.toHaveClass("upload-drop-zone--loaded");
+    expect(importUploadData).not.toHaveBeenCalled();
   });
 
   it("stops the browser opening a file dropped beside the zone", () => {
@@ -255,7 +292,7 @@ describe("Upload Data drag and drop", () => {
   });
 });
 
-describe("Upload Data creator and uploader", () => {
+describe("Upload Data creator and importer", () => {
   const CREATOR = "CORP\\creator";
   const UPLOADER = "CORP\\uploader";
 
@@ -269,7 +306,7 @@ describe("Upload Data creator and uploader", () => {
     render(<UploadData />);
     await loadFile(jsonFile({ ...uploadDocument(), created_by: CREATOR }));
     expect(summary("Created By")).toBe(CREATOR);
-    expect(summary("Uploaded By")).toBe("Unavailable");
+    expect(summary("Imported By")).toBe("Unavailable");
   });
 
   it("shows Unavailable for a legacy file without created_by", async () => {
@@ -278,15 +315,15 @@ describe("Upload Data creator and uploader", () => {
     expect(summary("Created By")).toBe("Unavailable");
   });
 
-  it("shows the trusted uploader separately and never changes the creator", async () => {
+  it("shows the trusted importer separately and never changes the creator", async () => {
     vi.mocked(getCurrentWindowsUser).mockResolvedValueOnce(UPLOADER);
     const user = userEvent.setup();
     render(<UploadData />);
     await loadFile(jsonFile({ ...uploadDocument(), created_by: CREATOR }));
-    await waitFor(() => expect(summary("Uploaded By")).toBe(UPLOADER));
+    await waitFor(() => expect(summary("Imported By")).toBe(UPLOADER));
     expect(summary("Created By")).toBe(CREATOR);
 
-    // Edit, upload: the creator travels unchanged and no uploader is added.
+    // Edit, upload: the creator travels unchanged and no importer is added (the backend contract has no such field).
     fireEvent.change(screen.getByLabelText("Lithology Comments, record 1"), {
       target: { value: "edited" },
     });

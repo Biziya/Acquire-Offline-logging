@@ -11,8 +11,12 @@ interface UploadFileSectionProps {
   onFileSelect: (file: File) => void;
   onFileReject: (message: string) => void;
   fileError: string;
+  /* Name of the successfully loaded file; empty before one is loaded. */
   selectedFileName: string;
+  recordCount: number;
 }
+
+const recordFormat = new Intl.NumberFormat("en-US");
 
 function hasFiles(event: DragEvent | React.DragEvent) {
   return Array.from(event.dataTransfer?.types ?? []).includes("Files");
@@ -28,7 +32,10 @@ function UploadFileSection({
   onFileReject,
   fileError,
   selectedFileName,
+  recordCount,
 }: UploadFileSectionProps) {
+  // A file only reaches `selectedFileName` once it has parsed successfully.
+  const isLoaded = Boolean(selectedFileName);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
 
@@ -109,10 +116,12 @@ function UploadFileSection({
       </div>
 
       <div
-        className={`grid justify-items-center gap-2 rounded-[10px] border-2 border-dashed px-4 py-7 text-center transition-colors duration-140 ${
+        className={`grid justify-items-center gap-2 rounded-[10px] border-2 px-4 py-7 text-center transition-colors duration-140 ${
           isDragging
-            ? "upload-drop-zone--active border-[#2563eb] bg-[#eff6ff]"
-            : "border-[#c7d2e3] bg-[#f8fafc]"
+            ? "upload-drop-zone--active border-dashed border-[#2563eb] bg-[#eff6ff]"
+            : isLoaded
+              ? "upload-drop-zone--loaded border-solid border-[#86efac] bg-[#f0fdf4]"
+              : "border-dashed border-[#c7d2e3] bg-[#f8fafc]"
         }`}
         data-testid="upload-drop-zone"
         onDragEnter={handleDragOver}
@@ -127,30 +136,56 @@ function UploadFileSection({
           onChange={handleFileChange}
           hidden
         />
-        <span
-          className="grid size-[42px] place-items-center rounded-full bg-[#eaf1ff] text-[1.5rem] font-bold text-[#2563eb]"
-          aria-hidden="true"
-        >
-          ⇧
-        </span>
-        <strong>
-          {isDragging ? "Drop the JSON file here" : "Drag and drop your JSON file"}
-        </strong>
-        <span className="text-[0.86rem] text-[#738095]">or</span>
-        <button
-          className={BUTTON_SECONDARY}
-          type="button"
-          onClick={openFilePicker}
-        >
-          Browse Files
-        </button>
-        <span className="text-[0.86rem] text-[#738095]">
-          Supported format: .json
-        </span>
-        {selectedFileName && (
-          <span className="max-w-full font-semibold [overflow-wrap:anywhere] text-[#334155]">
-            Selected: {selectedFileName}
-          </span>
+        {isLoaded && !isDragging ? (
+          // Loaded: confirm the file. Dropping another file still replaces it.
+          <>
+            <span
+              className="grid size-[42px] place-items-center rounded-full bg-[#dcfce7] text-[1.4rem] font-bold text-[#15803d]"
+              aria-hidden="true"
+            >
+              ✓
+            </span>
+            <strong className="text-[#166534]" role="status">
+              JSON File Loaded
+            </strong>
+            <span className="max-w-full font-semibold [overflow-wrap:anywhere] text-[#334155]">
+              {selectedFileName}
+            </span>
+            <span className="text-[0.86rem] text-[#4b5563]">
+              {recordFormat.format(recordCount)}{" "}
+              {recordCount === 1 ? "record" : "records"}
+            </span>
+            <button
+              className={BUTTON_SECONDARY}
+              type="button"
+              onClick={openFilePicker}
+            >
+              Change File
+            </button>
+          </>
+        ) : (
+          <>
+            <span
+              className="grid size-[42px] place-items-center rounded-full bg-[#eaf1ff] text-[1.5rem] font-bold text-[#2563eb]"
+              aria-hidden="true"
+            >
+              ⇧
+            </span>
+            <strong>
+              {isDragging ? "Drop the JSON file here" : "Drag and drop your JSON file"}
+            </strong>
+            <span className="text-[0.86rem] text-[#738095]">or</span>
+            <button
+              className={BUTTON_SECONDARY}
+              type="button"
+              onClick={openFilePicker}
+            >
+              Browse Files
+            </button>
+            <span className="text-[0.86rem] text-[#738095]">
+              Supported format: .json
+            </span>
+          </>
         )}
         {fileError && (
           <p className="mt-1 mb-0 text-[0.86rem] text-[#b42318]" role="alert">

@@ -41,11 +41,19 @@ export function useRawLithoWorkspace({
   const [currentPage, setCurrentPage] = useState(1);
   // One working document; the ref provides its synchronous value between React commits.
   const documentRef = useRef(rawLithoDocument);
-  const applyDocument = useCallback((lithoDocument: RawLithoDocument, page = 1) => {
-    documentRef.current = lithoDocument;
-    setDocument(lithoDocument);
-    setCurrentPage(Math.min(Math.max(1, page), totalPagesFor(lithoDocument)));
-  }, []);
+  // Drillhole of a document created in this session that still lacks a
+  // creator, because the identity had not arrived when it was created.
+  const awaitingCreator = useRef<string | null>(null);
+  const applyDocument = useCallback(
+    (lithoDocument: RawLithoDocument, page = 1, isNew = false) => {
+      documentRef.current = lithoDocument;
+      awaitingCreator.current =
+        isNew && !lithoDocument.created_by ? lithoDocument.drillhole : null;
+      setDocument(lithoDocument);
+      setCurrentPage(Math.min(Math.max(1, page), totalPagesFor(lithoDocument)));
+    },
+    [],
+  );
   const persistence = useRawLithoDraftPersistence({
     selectedHoleId,
     currentPage,
@@ -77,9 +85,18 @@ export function useRawLithoWorkspace({
   const commitDocument = (lithoDocument: RawLithoDocument) => {
     if (!draftKey || !canEdit(draftKey) || lithoDocument === documentRef.current)
       return;
-    documentRef.current = lithoDocument;
-    setDocument(lithoDocument);
-    stageDocument(draftKey, lithoDocument);
+    // A new document created before the identity arrived gets its creator at
+    // its first save, which is also when it is first written and exported.
+    const next =
+      currentUser &&
+      !lithoDocument.created_by &&
+      awaitingCreator.current === lithoDocument.drillhole
+        ? { ...lithoDocument, created_by: currentUser }
+        : lithoDocument;
+    if (next.created_by) awaitingCreator.current = null;
+    documentRef.current = next;
+    setDocument(next);
+    stageDocument(draftKey, next);
   };
 
   const selectDrillhole = useCallback(

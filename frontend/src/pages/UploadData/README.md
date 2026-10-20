@@ -68,27 +68,73 @@ drop on zone ─┘
   discard the page.
 - **Choosing the same file again** still works: the file input is cleared after
   every pick.
+- **Loaded state:** once a file has parsed, the zone turns green and shows
+  "✓ JSON File Loaded", the file name, the record count and **Change File**.
+  Change File opens the same picker, and dropping a file onto the zone still
+  replaces it. An unreadable file returns the zone to its empty look with the
+  error. **Cancel** restores the empty "Drag and drop" look. The zone is in the
+  loaded state exactly when `selectedFile` is set, which happens only after a
+  successful parse.
 
-### Created By and Uploaded By
+### Created By and Imported By
 
 These are two different people, and neither is ever guessed:
 
 | Field | Source | When missing |
 | --- | --- | --- |
 | Created By | `created_by` in the selected JSON file (written by Raw Litho) | `Unavailable` — e.g. an older file |
-| Uploaded By | the signed-in Windows user from `useCurrentUser()` | `Unavailable` |
+| Imported By | the signed-in Windows user from `useCurrentUser()` | `Unavailable` |
 
-**Uploaded By always shows `Unavailable` today.** No trusted identity source
-exists yet: a browser cannot read the Windows login, and the API has no
-authentication or "current user" endpoint. See `src/services/currentUser.ts`
-for exactly what the backend needs; once it exists, this page shows the user
-with no further change.
+**Imported By shows `Unavailable` until the backend provides the identity.**
 
-Uploading never changes `created_by`, and the uploader is not written into the
-file. The backend contract (`POST /api/uploaddata`) has no uploader field. The
-server ignores unknown fields such as `created_by`, so it neither rejects nor
-stores it. Recording the uploader belongs on the server, from its
-authenticated request, once Windows Authentication is enabled.
+**How the name is obtained.** A browser cannot read the Windows login, so
+`getCurrentWindowsUser()` asks the backend. It calls the endpoint named by
+`VITE_CURRENT_USER_PATH` (for example `/api/currentuser`) with
+`credentials: "include"` and expects `{ "userName": "DOMAIN\\username" }`.
+
+The answer is fetched once per page load. An error status, a malformed body or
+a network failure gives `null`. The hostname, user agent or anything typed in
+are never used.
+
+**Today `VITE_CURRENT_USER_PATH` is empty.** The backend has no authentication
+(nothing in `Program.cs` or `web.config`) and no current-user endpoint, so no
+request is made and the result is `null`.
+
+To enable the name, the backend needs:
+1. Windows Authentication: IIS `windowsAuthentication`, or `AddNegotiate()`
+   plus `UseAuthentication()`.
+2. An authenticated endpoint returning `HttpContext.User.Identity.Name` as
+   `{ "userName": ... }`.
+
+Then set `VITE_CURRENT_USER_PATH` (see `.env.example`) and rebuild. No frontend
+code changes are needed.
+
+**No `imported_by` in the uploaded file.** Uploading never changes
+`created_by`, and `imported_by` is not added to the JSON. The backend contract
+(`UploadDataRequest`) has no such field: the server would silently drop it, so
+the file would look as if it recorded the importer when nothing was stored. The
+importer should be recorded by the server, from its authenticated request, once
+Windows Authentication is enabled. Unknown fields such as `created_by` are
+ignored by the server, so they never break an upload.
+
+## Scrolling
+
+The page has exactly two vertical scroll areas:
+
+1. **The page:** `main > section`, which takes the full height. It scrolls File
+   Selection, Dataset Information, the preview, the Validation Summary and the
+   actions.
+2. **The preview table:** its frame, as tall as its rows up to `maxHeightVh`.
+   It scrolls the records under a sticky header.
+
+The document itself never scrolls; `main` is `h-screen overflow-hidden`.
+
+There used to be a third scrollbar, on the whole document. The preview's
+status cells contain `sr-only` screen-reader text, which is
+`position: absolute`. With no positioned ancestor, its containing block was the
+page, so it escaped every `overflow` box and stretched the document below the
+content. The shared table frame (`TABLE_FRAME`) is now `relative`, so that
+text stays inside the frame's own scroll area. Nothing is hidden with CSS.
 
 ## The working document
 
@@ -193,7 +239,8 @@ in the error.
 
 ## Manual test checklist
 
-1. Pick a Raw Litho export with Browse Files, then drag another onto the zone → the zone highlights while dragging, and the dropped file replaces the first; nothing is uploaded.
+1. Pick a Raw Litho export with Browse Files → the zone turns green with "JSON File Loaded", the file name and record count; drag another onto the zone → it highlights, then shows the new file; nothing is uploaded. Change File opens the picker; Cancel restores the empty zone.
+1d. Scroll the page to the bottom → only the page and the preview table have scrollbars; there is no outer document scrollbar and no blank space below the actions.
 1a. Drop two files, or a `.txt` file → a clear error; the loaded dataset stays.
 1b. Drop a file beside the zone → the browser does not open it.
 1c. At ~1024 px window width → no horizontal scrollbar on the page or the preview.

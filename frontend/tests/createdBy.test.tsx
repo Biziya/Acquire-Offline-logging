@@ -103,6 +103,45 @@ describe("Raw Litho workspace creator", () => {
     expect(legacy.result.current.rawLithoDocument).not.toHaveProperty("created_by");
   });
 
+  it("stamps a new document whose identity arrives late, at its first save — never a legacy one", async () => {
+    const open = (holeId: string) =>
+      renderHook(
+        ({ currentUser }: { currentUser: string | null }) =>
+          useRawLithoWorkspace({
+            drillholes: [{ holeId, projectCode: "P", campaign: "C" }],
+            showToast: () => {},
+            currentUser,
+          }),
+        { initialProps: { currentUser: null as string | null } },
+      );
+
+    // New drillhole, created while the identity is still unknown.
+    const late = open("LATE-HOLE");
+    act(() => late.result.current.selectDrillhole("LATE-HOLE"));
+    await waitFor(() => expect(late.result.current.isPageEnabled).toBe(true));
+    expect(late.result.current.rawLithoDocument).not.toHaveProperty("created_by");
+
+    late.rerender({ currentUser: CURRENT });
+    act(() => late.result.current.updateRow(late.result.current.rows[0]?.id ?? 1, "lithoFrom", "1"));
+    expect(late.result.current.rawLithoDocument.created_by).toBe(CURRENT);
+    await act(() => late.result.current.flushPendingSaves());
+    expect(((await readRawLithoDraft("LATE-HOLE")) as RawLithoDocument | null)?.created_by).toBe(CURRENT);
+    late.unmount();
+
+    // A stored legacy draft stays without a creator after the identity arrives.
+    await writeRawLithoDraft(
+      "LEGACY-LATE",
+      createRawLithoDocument({ drillhole: "LEGACY-LATE", rows: [createEmptyRow(1)] }),
+    );
+    const legacy = open("LEGACY-LATE");
+    act(() => legacy.result.current.selectDrillhole("LEGACY-LATE"));
+    await waitFor(() => expect(legacy.result.current.isPageEnabled).toBe(true));
+    legacy.rerender({ currentUser: CURRENT });
+    act(() => legacy.result.current.updateRow(legacy.result.current.rows[0]?.id ?? 1, "lithoFrom", "1"));
+    await act(() => legacy.result.current.flushPendingSaves());
+    expect(await readRawLithoDraft("LEGACY-LATE")).not.toHaveProperty("created_by");
+  });
+
   it("leaves created_by unset when no identity is available", async () => {
     const { result } = await openDrillhole("ANON-HOLE", null);
     expect(result.current.rawLithoDocument).not.toHaveProperty("created_by");

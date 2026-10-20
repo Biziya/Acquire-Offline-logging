@@ -125,7 +125,7 @@ export interface DatasetInfo {
   campaign: string;
   drillhole: string;
   createdBy: string;
-  uploadedBy: string;
+  importedBy: string;
   totalRecords: string;
   fileSize: string;
   validationStatus: string;

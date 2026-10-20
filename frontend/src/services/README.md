@@ -146,23 +146,29 @@ validation all pick it up.
 
 `getCurrentWindowsUser()` is the one place the app asks who is signed in
 (`DOMAIN\username`). It feeds Raw Litho's `created_by` on new documents and
-Upload Data's "Uploaded By", through `hooks/useCurrentUser.ts`.
+Upload Data's "Imported By", through `hooks/useCurrentUser.ts`.
 
-**It resolves to `null` today: no trusted identity source exists.**
-- A browser cannot read the Windows login.
-- The API has no authentication: no Negotiate or Windows Authentication in
-  `Program.cs`, nothing in `web.config`.
-- There is no endpoint that returns the current user.
-- The hostname, user agent or a typed-in name are not used, because none of
-  them is a trusted identity.
+**How the name is obtained.** A browser cannot read the Windows login, so
+`getCurrentWindowsUser()` asks the backend. It calls the endpoint named by
+`VITE_CURRENT_USER_PATH` (for example `/api/currentuser`) with
+`credentials: "include"` and expects `{ "userName": "DOMAIN\\username" }`.
 
-What is missing is all on the backend:
-1. Enable Windows Authentication: IIS `windowsAuthentication`, or `AddNegotiate()`
+The answer is fetched once per page load. An error status, a malformed body or
+a network failure gives `null`. The hostname, user agent or anything typed in
+are never used.
+
+**Today `VITE_CURRENT_USER_PATH` is empty.** The backend has no authentication
+(nothing in `Program.cs` or `web.config`) and no current-user endpoint, so no
+request is made and the result is `null`.
+
+To enable the name, the backend needs:
+1. Windows Authentication: IIS `windowsAuthentication`, or `AddNegotiate()`
    plus `UseAuthentication()`.
-2. Add an endpoint returning `HttpContext.User.Identity.Name`.
+2. An authenticated endpoint returning `HttpContext.User.Identity.Name` as
+   `{ "userName": ... }`.
 
-Then implement the request in this function, with `credentials: "include"`;
-nothing else in the frontend needs to change.
+Then set `VITE_CURRENT_USER_PATH` (see `.env.example`) and rebuild. No frontend
+code changes are needed.
 
 ## Caching strategy
 

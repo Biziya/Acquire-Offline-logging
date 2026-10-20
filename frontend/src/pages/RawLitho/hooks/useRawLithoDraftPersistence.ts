@@ -25,7 +25,8 @@ interface Options {
   selectedHoleId: string;
   currentPage: number;
   buildFallback: (key: string) => DocumentFallback;
-  onLoaded: (lithoDocument: RawLithoDocument, page: number) => void;
+  /* `isNew`: no stored draft existed, so this is a freshly created document. */
+  onLoaded: (lithoDocument: RawLithoDocument, page: number, isNew: boolean) => void;
   onSessionRestored: (session: DraftSession) => void;
   notify: Notify;
 }
@@ -112,7 +113,7 @@ export function useRawLithoDraftPersistence(options: Options) {
     setLoadedKey(null);
     setLoadError(false);
     if (!draftKey) {
-      latest.current.onLoaded(createBlankDocument(), 1);
+      latest.current.onLoaded(createBlankDocument(), 1, false);
       return;
     }
     async function load(key: string) {
@@ -140,7 +141,7 @@ export function useRawLithoDraftPersistence(options: Options) {
         );
         if (lithoDocument.drillhole !== key)
           throw new Error("Stored draft does not match selected drillhole.");
-        latest.current.onLoaded(lithoDocument, restoredPage.current);
+        latest.current.onLoaded(lithoDocument, restoredPage.current, saved == null);
         restoredPage.current = 1;
         readyKey.current = key;
         reportedLoadError.current = null;
