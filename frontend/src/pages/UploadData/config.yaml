@@ -1,0 +1,44 @@
+# Upload Data page settings. Values only; validation rules and the upload
+# contract stay in TypeScript. Read once when the page module loads
+# (config.ts); a bad value stops start-up with the file and key in the error.
+
+title: "Upload Data to Database"
+
+table:
+  rowHeight: 28          # px; must stay fixed, the virtual scroller relies on it
+  overscan: 10           # rows rendered above and below the visible window
+  height: 420            # px, height of the scrollable preview
+  minWidth: 1090         # px; narrower windows scroll horizontally
+  indexColumnWidth: 56   # px, the record-number column
+  statusColumnWidth: 52  # px, the validation-status column
+
+  # Editable columns, left to right. Keys are Raw Litho row fields
+  # (types/rawLithoSchema.ts). A hidden column's values are still kept and
+  # uploaded unchanged.
+  #   label    header text (also the cell's accessible name)
+  #   width    px; omit to take the remaining width
+  #   visible  false hides the column
+  columns:
+    extractionType: { label: "Extraction Type", visible: false }
+    corePass: { label: "Core Pass #", visible: false }
+    recoveryStart: { label: "Recovery Start", visible: false }
+    recoveryEnd: { label: "Recovery End", visible: false }
+    coreEnd: { label: "Core End", visible: false }
+    lithoFrom: { label: "Litho From (m)", width: 72, visible: true }
+    lithoTo: { label: "Litho To (m)", width: 72, visible: true }
+    lithoCode: { label: "Litho Code", width: 79, visible: true }
+    colorCode: { label: "Color Code", width: 88, visible: true }
+    ca: { label: "CA", width: 44, visible: true }
+    om: { label: "OM", width: 44, visible: true }
+    omFacies: { label: "OM Facies", width: 70, visible: true }
+    py: { label: "PY", width: 44, visible: true }
+    ox: { label: "OX", width: 44, visible: true }
+    sedim: { label: "Sedim", width: 52, visible: true }
+    redoxCode: { label: "Redox Code", width: 80, visible: true }
+    lithologyComments: { label: "Lithology Comments", visible: true }
+    granulo: { label: "Granulo", width: 56, visible: true }
+    hardness: { label: "Hardness", width: 60, visible: true }
+    lithologicalDescription: { label: "Lithological Description", visible: false }
+
+search:
+  debounceMs: 200        # wait after the last keystroke before filtering

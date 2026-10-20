@@ -16,7 +16,8 @@ import {
   touchRawLithoDocument,
 } from "./rawLithoHelpers";
 import { hasInvalidLookupValues } from "./rawLithoValidation";
-import "./RawLitho.css";
+import { rawLithoConfig } from "./config";
+import { OUTLINE_BUTTON, OUTLINE_BUTTON_NAVY } from "./rawLithoStyles";
 
 function RawLitho() {
   const { toast, showToast, hideToast } = useToast();
@@ -128,7 +129,7 @@ function RawLitho() {
   const canImport = !selectedHoleId;
 
   return (
-    <section className="raw-litho-page">
+    <section className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden">
       {toast && (
         <Toast
           key={toast.id}
@@ -168,11 +169,13 @@ function RawLitho() {
         />
       )}
 
-      <div className="raw-litho-header">
-        <h1 className="raw-litho-title">Raw Litho</h1>
+      <div className="mb-1.5 flex items-center justify-between gap-3">
+        <h1 className="m-0 text-[1.3rem] font-[650] tracking-[-0.01em] text-rl-navy">
+          {rawLithoConfig.title}
+        </h1>
 
         <button
-          className="raw-litho-import-button"
+          className={`${OUTLINE_BUTTON} ${OUTLINE_BUTTON_NAVY} h-[30px] px-3 disabled:cursor-not-allowed disabled:opacity-55`}
           type="button"
           onClick={importer.openFilePicker}
           disabled={!canImport}
@@ -182,7 +185,7 @@ function RawLitho() {
 
         <input
           ref={importer.fileInputRef}
-          className="raw-litho-file-input"
+          className="hidden"
           type="file"
           accept=".json,application/json"
           onChange={importer.selectFile}
@@ -218,9 +221,9 @@ function RawLitho() {
         }
       />
 
-      <div className="raw-litho-save-section">
+      <div className="flex justify-end pt-2.5">
         <button
-          className="raw-litho-save-button"
+          className="h-8 cursor-pointer rounded-md border border-transparent bg-rl-navy px-5 font-semibold text-white transition-[background-color,box-shadow] duration-140 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-rl-cell-ring enabled:hover:bg-rl-navy-dark enabled:hover:shadow-[0_2px_6px_rgb(16_35_61/22%)] enabled:active:translate-y-px enabled:active:bg-rl-navy-darker enabled:active:shadow-none disabled:cursor-not-allowed disabled:opacity-55"
           type="button"
           onClick={handleSave}
           disabled={!isPageEnabled || isSaving}

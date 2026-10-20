@@ -111,11 +111,17 @@ export interface UploadResponse {
   [key: string]: unknown;
 }
 
+/* Display values for the Upload Data "Dataset Information" section. */
 export interface DatasetInfo {
   fileName: string;
   project: string;
   campaign: string;
   drillhole: string;
+  createdBy: string;
+  uploadedBy: string;
+  totalRecords: string;
+  fileSize: string;
+  validationStatus: string;
 }
 
 export type Clock = () => string;

@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
 import StatusIndicator from "./StatusIndicator";
-import "../css/Sidebar.css";
+
+const ICON = "size-[17px] shrink-0";
+const LABEL = "whitespace-nowrap";
 
 function HomeIcon() {
   return (
     <svg
-      className="sidebar-icon"
+      className={ICON}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -22,7 +24,7 @@ function HomeIcon() {
 function RawLithoIcon() {
   return (
     <svg
-      className="sidebar-icon"
+      className={ICON}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -39,7 +41,7 @@ function RawLithoIcon() {
 function UploadDataIcon() {
   return (
     <svg
-      className="sidebar-icon"
+      className={ICON}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -56,7 +58,7 @@ function UploadDataIcon() {
 function ToggleIcon({ collapsed }: { collapsed: boolean }) {
   return (
     <svg
-      className="sidebar-icon"
+      className={ICON}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -68,17 +70,51 @@ function ToggleIcon({ collapsed }: { collapsed: boolean }) {
   );
 }
 
+function DatabaseViewerIcon() {
+  return (
+    <svg
+      className={ICON}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      aria-hidden="true"
+    >
+      <ellipse cx="12" cy="5.5" rx="7" ry="2.5" />
+      <path d="M5 5.5v13c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-13" />
+      <path d="M5 12c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5" />
+    </svg>
+  );
+}
+
 function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const linkClassName = ({ isActive }: { isActive: boolean }) =>
-    `sidebar-link${isActive ? " sidebar-link-active" : ""}`;
+    [
+      "flex min-h-8 items-center gap-[9px] rounded-md border-0 py-[5px] text-[0.82rem] text-inherit no-underline hover:bg-[#1f2937] hover:text-white",
+      collapsed ? "w-[34px] justify-center px-0" : "px-2",
+      isActive ? "bg-[#1f2937] text-white" : "",
+    ].join(" ");
 
   return (
-    <aside className={`sidebar${collapsed ? " sidebar-collapsed" : ""}`}>
-      <div className="sidebar-header">
-        {!collapsed && <span className="sidebar-label">Navigation of WEB</span>}
+    <aside
+      className={`group/sidebar flex h-screen shrink-0 flex-col overflow-hidden bg-[#111827] text-[#e5e7eb] transition-[width] duration-200 ease-in-out ${
+        collapsed ? "w-[52px]" : "w-[178px]"
+      }`}
+      data-collapsed={collapsed}
+    >
+      <div
+        className={`flex h-10 items-center py-1.5 ${
+          collapsed ? "justify-center px-1.5" : "justify-between px-2"
+        }`}
+      >
+        {!collapsed && (
+          <span className="overflow-hidden text-[0.7rem] font-semibold tracking-[0.04em] text-ellipsis whitespace-nowrap text-[#9ca3af] uppercase">
+            Navigation of WEB
+          </span>
+        )}
         <button
-          className="sidebar-toggle"
+          className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent text-inherit hover:bg-[#1f2937]"
           type="button"
           onClick={() => setCollapsed((current) => !current)}
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
@@ -88,7 +124,12 @@ function Sidebar() {
         </button>
       </div>
 
-      <nav className="sidebar-menu" aria-label="Main navigation">
+      <nav
+        className={`grid min-h-0 flex-1 content-start gap-0.5 overflow-y-auto px-1.5 py-1 ${
+          collapsed ? "justify-items-center" : ""
+        }`}
+        aria-label="Main navigation"
+      >
         <NavLink
           to="/"
           end
@@ -96,7 +137,7 @@ function Sidebar() {
           aria-label={collapsed ? "Home" : undefined}
         >
           <HomeIcon />
-          {!collapsed && <span className="sidebar-label">Home</span>}
+          {!collapsed && <span className={LABEL}>Home</span>}
         </NavLink>
 
         <NavLink
@@ -105,7 +146,16 @@ function Sidebar() {
           aria-label={collapsed ? "Raw Litho" : undefined}
         >
           <RawLithoIcon />
-          {!collapsed && <span className="sidebar-label">Raw Litho</span>}
+          {!collapsed && <span className={LABEL}>Raw Litho</span>}
+        </NavLink>
+
+        <NavLink
+          to="/database-viewer"
+          className={linkClassName}
+          aria-label={collapsed ? "Database Viewer" : undefined}
+        >
+          <DatabaseViewerIcon />
+          {!collapsed && <span className={LABEL}>Database Viewer</span>}
         </NavLink>
 
         <NavLink
@@ -114,11 +164,16 @@ function Sidebar() {
           aria-label={collapsed ? "Upload Data" : undefined}
         >
           <UploadDataIcon />
-          {!collapsed && <span className="sidebar-label">Upload Data</span>}
+          {!collapsed && <span className={LABEL}>Upload Data</span>}
         </NavLink>
       </nav>
 
-      <div className="sidebar-footer">
+      {/* Backend status pinned to the bottom, aligned with the link icons. */}
+      <div
+        className={`shrink-0 border-t border-[#1f2937] py-2.5 ${
+          collapsed ? "px-0 text-center" : "px-3.5"
+        }`}
+      >
         <StatusIndicator />
       </div>
     </aside>

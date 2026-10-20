@@ -1,4 +1,11 @@
 import { useRef } from "react";
+import {
+  BUTTON_SECONDARY,
+  SECTION,
+  SECTION_HEADING,
+  SECTION_TITLE,
+  STEP_NUMBER,
+} from "./uploadDataStyles";
 
 interface UploadFileSectionProps {
   onFileSelect: (file: File) => void;
@@ -29,18 +36,17 @@ function UploadFileSection({
   };
 
   return (
-    <section
-      className="upload-data-section"
-      aria-labelledby="upload-file-title"
-    >
-      <div className="upload-data-section-heading">
-        <span className="upload-data-step-number">1</span>
+    <section className={SECTION} aria-labelledby="upload-file-title">
+      <div className={SECTION_HEADING}>
+        <span className={STEP_NUMBER}>1</span>
         <div>
-          <h2 id="upload-file-title">File Selection</h2>
+          <h2 id="upload-file-title" className={SECTION_TITLE}>
+            File Selection
+          </h2>
         </div>
       </div>
 
-      <div className="upload-data-file-area">
+      <div className="grid justify-items-center gap-2 rounded-[10px] border-2 border-dashed border-[#c7d2e3] bg-[#f8fafc] px-4 py-7 text-center">
         <input
           ref={fileInputRef}
           type="file"
@@ -48,25 +54,30 @@ function UploadFileSection({
           onChange={handleFileChange}
           hidden
         />
-        <span className="upload-data-upload-icon" aria-hidden="true">
+        <span
+          className="grid size-[42px] place-items-center rounded-full bg-[#eaf1ff] text-[1.5rem] font-bold text-[#2563eb]"
+          aria-hidden="true"
+        >
           ⇧
         </span>
         <strong>Choose a completed JSON dataset</strong>
-        <span>Supported format: JSON</span>
+        <span className="text-[0.86rem] text-[#738095]">
+          Supported format: JSON
+        </span>
         <button
-          className="upload-data-button upload-data-button-secondary"
+          className={BUTTON_SECONDARY}
           type="button"
           onClick={openFilePicker}
         >
           Upload JSON
         </button>
         {selectedFileName && (
-          <span className="upload-data-selected-file">
+          <span className="font-semibold [overflow-wrap:anywhere] text-[#334155]">
             Selected: {selectedFileName}
           </span>
         )}
         {fileError && (
-          <p className="upload-data-file-error" role="alert">
+          <p className="mt-1 mb-0 text-[0.86rem] text-[#b42318]" role="alert">
             {fileError}
           </p>
         )}

@@ -10,14 +10,18 @@ src/
 ├── assets/          images (badrakh-logo.png, hero.png, react.svg, vite.svg) — unreferenced
 ├── components/      shared UI
 │   ├── Sidebar.tsx
-│   ├── StatusIndicator.tsx
-│   └── StatusIndicator.css
+│   └── StatusIndicator.tsx
+├── config/
+│   └── yamlConfig.ts  strict reader for the pages' config.yaml files
 ├── contexts/        empty
-├── css/             global and legacy stylesheets
+├── css/
+│   ├── index.css    Tailwind entry, design tokens, base layer
+│   └── RawExtraction.css  legacy CSS of the unrouted RawExtraction page
 ├── other/           sample JSON documents, not imported by any code
 ├── pages/
 │   ├── RawLitho/    main feature (own README)
-│   ├── UploadData/  JSON upload (own README)
+│   ├── DatabaseViewer/  read-only mock-data viewer (own README)
+│   ├── UploadData/  JSON review, edit and upload (own README)
 │   ├── future_pages/  11 empty placeholder files
 │   ├── Home.tsx
 │   └── RawExtraction.tsx   earlier page, no route
@@ -35,7 +39,8 @@ src/
 | `assets` | Static images. Nothing imports them today. |
 | `components` | Components used by the app shell or more than one page. |
 | `contexts` | Empty. No React context is used anywhere. |
-| `css` | Global styles (`index.css`), app-shell layout (`App.css`), and stylesheets for pages that keep CSS outside their folder. |
+| `config` | `createConfigReader`, the shared, strict YAML reader. Each page owns its `config.yaml` + `config.ts`. |
+| `css` | `index.css` (Tailwind entry and design tokens) and the legacy stylesheet of the unrouted Raw Extraction page. |
 | `other` | Example exports and fixtures kept for reference. |
 | `pages` | One folder per substantial page, holding its components, hooks, CSS and README. Small pages are a single file. |
 | `services` | Everything non-React: `fetch` clients, IndexedDB access, lookup configuration. |
@@ -59,7 +64,7 @@ App
         └── /upload-data   UploadData
 ```
 
-The backend status (green "Online", amber "Offline") sits in `.sidebar-footer`
+The backend status (green "Online", amber "Offline") sits in the sidebar footer
 at the bottom-left of the sidebar. The sidebar is a flex column: the navigation
 takes the free height and scrolls if it ever runs out of room, and the footer
 never shrinks, so the indicator stays pinned without overlapping the links.
@@ -77,27 +82,62 @@ and the draft loader in `useRawLithoDraftPersistence` ignores stale load results
 | --- | --- | --- |
 | `/` | `pages/Home.tsx` | Placeholder heading. The file carries a TODO asking for requirements. |
 | `/raw-litho` | `pages/RawLitho/RawLitho.tsx` | The main feature. [README](pages/RawLitho/README.md) |
+| `/database-viewer` | `pages/DatabaseViewer/DatabaseViewer.tsx` | Read-only, **mock data only**. [README](pages/DatabaseViewer/README.md) |
 | `/upload-data` | `pages/UploadData/UploadData.tsx` | [README](pages/UploadData/README.md) |
 
 Not routed: `pages/RawExtraction.tsx` (complete but removed from `App.tsx`) and
 the 11 empty files in `pages/future_pages/`.
 
-## Stylesheets
+## Styling (Tailwind CSS)
 
-| File | Used by |
+Styling is Tailwind CSS v4 through the `@tailwindcss/vite` plugin
+(`vite.config.ts`). There is no `tailwind.config.js`: v4 is configured in CSS.
+
+| File | Role |
 | --- | --- |
-| `css/index.css` | global, imported by `main.tsx` |
-| `css/App.css` | app shell, imported by `App.tsx` |
-| `css/Home.css` | `Home.tsx` |
-| `css/Sidebar.css` | `Sidebar.tsx` |
-| `css/RawExtraction.css` | `RawExtraction.tsx` (unrouted) |
-| `css/RawLitho.css` | **nothing** — superseded by `pages/RawLitho/RawLitho.css` |
-| `components/StatusIndicator.css` | `StatusIndicator.tsx` |
-| `pages/RawLitho/RawLitho.css`, `Toast.css` | the Raw Litho page |
-| `pages/UploadData/UploadData.css` | the Upload Data page |
+| `css/index.css` | `@import "tailwindcss"`; the `@theme` design tokens; keyframes; a small base layer |
+| `pages/RawLitho/rawLithoStyles.ts` | Class lists shared by several Raw Litho components |
+| `pages/UploadData/uploadDataStyles.ts` | Class lists shared by the Upload Data sections |
+| `css/RawExtraction.css` | Legacy, for the unrouted `RawExtraction.tsx` only |
 
-Newer pages keep their CSS beside the component; `css/` holds global styles and
-the older page stylesheets.
+- **Tokens.** The Raw Litho palette is declared once in `@theme` as
+  `--color-rl-*`, which makes utilities such as `text-rl-navy`,
+  `border-rl-grid` and `bg-rl-navy-soft`. All three pages use them, so they
+  match. Change a colour there, not in components.
+- **Utilities first.** Components write utilities inline. A class list used in
+  more than one component goes in the page's `*Styles.ts` file as a plain
+  string. Class names are always written in full, never assembled from pieces,
+  so Tailwind can find them.
+- **What stays as CSS.** Only what utilities cannot express cleanly: keyframes
+  (dialog, backdrop, toast), number-input spinner removal, the
+  `prefers-reduced-motion` override, and the page background.
+- **Marker classes.** A few classes such as `raw-litho-cell--selected` and
+  `upload-cell--error` carry no styling. They name a state for tests and
+  debugging.
+- **Configurable sizes.** Values that come from YAML, such as column widths and
+  row heights, are applied as inline `style` values. Tailwind cannot generate
+  classes for numbers known only at runtime.
+
+## Configuration (YAML)
+
+Each page keeps its static UI settings in `config.yaml` beside it
+(`RawLitho/`, `UploadData/`, `DatabaseViewer/`). Vite bundles the file as text
+(`import text from "./config.yaml?raw"`), and the page's `config.ts` parses it
+once, when the module loads, using the `yaml` package. It copies each value into
+a typed object through `createConfigReader` (`config/yamlConfig.ts`).
+
+The reader is strict. It rejects:
+- invalid YAML;
+- a missing key;
+- a wrong type;
+- an out-of-range number;
+- an unknown column key;
+- for Raw Litho, a persisted field missing from the column list.
+
+The error names the file and key, so a broken config fails at start-up and in
+`npm test` (`tests/yamlConfig.test.ts`) instead of rendering a wrong page. YAML
+holds values only. Field definitions, required fields and validation rules stay
+in TypeScript.
 
 ## Conventions
 
@@ -105,8 +145,11 @@ the older page stylesheets.
 - Hooks: `useCamelCase`, one concern each, in the page's `hooks/` folder.
 - Services and utilities: `camelCase`. No React imports in `services/`.
 - Fixed values: `UPPER_SNAKE_CASE` (`RAW_LITHO_ROWS_PER_PAGE`).
-- CSS classes: `kebab-case` with a page prefix (`raw-litho-`, `upload-data-`),
-  and `--modifier` suffixes (`raw-litho-cell--missing`).
+- Styling: Tailwind utilities (see *Styling*). Unstyled marker classes keep the
+  `kebab-case` page prefix and `--modifier` form (`raw-litho-cell--missing`).
+- Static UI values (titles, column labels / widths / visibility, row heights,
+  overscan, page sizes, mock-data settings) live in the page's `config.yaml`;
+  rules and behaviour stay in TypeScript.
 - Guard clauses and early returns over nested conditionals; event handlers stay
   one or two levels deep by delegating to small helpers.
 - Pure logic (validation, normalisation) lives in its own module, separate from
@@ -117,7 +160,7 @@ the older page stylesheets.
 - Shared domain contracts belong in `src/types/domain.ts`. The persisted Raw Litho
   field union, `ColumnDefinition`, complete keyed schema and row defaults belong
   together in `src/types/rawLithoSchema.ts`. Add new fields there; every field needs
-  a matching definition and default. Keep visible ordering in `constants.ts` so
+  a matching definition and default. Keep visible ordering in `pages/RawLitho/config.yaml` so
   hiding a column does not remove an exported field.
 - Shared runtime guards belong in `src/types/validation.ts`. Feature-specific JSON
   normalization and import validation belong in `rawLithoHelpers.ts`; stored
@@ -148,7 +191,9 @@ npm run check     # all checks
 ## Adding a page
 
 1. Create `src/pages/YourPage/YourPage.tsx` (or a single file for a small page).
-2. Keep its CSS beside it as `YourPage.css` and import it from the component.
+2. Style it with Tailwind utilities and the `rl-*` tokens; put configurable
+   values in `YourPage/config.yaml` with a `config.ts` reader built on
+   `createConfigReader`.
 3. Add a `Route` in `App.tsx`.
 4. Add a `NavLink` and an icon in `components/Sidebar.tsx`.
 5. Put data access in `src/services/Api/` and any local persistence in

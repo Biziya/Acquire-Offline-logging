@@ -5,68 +5,16 @@ import type {
   ToastNotification,
 } from "../../types/domain";
 import { columnByKey, createSchemaRow } from "../../types/rawLithoSchema";
+import { rawLithoConfig } from "./config";
 export { columns } from "../../types/rawLithoSchema";
 
-// This list controls table presentation only. The complete `columns` list
-// above remains the source for state, JSON import/export, and IndexedDB data.
-export const tableColumns = [
-  /*
-   * CAUTION:
-   * This column is intentionally hidden for the current UI.
-   * Do NOT delete this code.
-   * It will be reused in a future implementation.
-   */
-  // columnByKey.extractionType,
-
-  /*
-   * CAUTION:
-   * This column is intentionally hidden for the current UI.
-   * Do NOT delete this code.
-   * It will be reused in a future implementation.
-   */
-  // columnByKey.corePass,
-
-  /*
-   * CAUTION:
-   * This column is intentionally hidden for the current UI.
-   * Do NOT delete this code.
-   * It will be reused in a future implementation.
-   */
-  // columnByKey.recoveryStart,
-
-  /*
-   * CAUTION:
-   * This column is intentionally hidden for the current UI.
-   * Do NOT delete this code.
-   * It will be reused in a future implementation.
-   */
-  // columnByKey.recoveryEnd,
-
-  // columnByKey.coreEnd,
-  columnByKey.lithoFrom,
-  columnByKey.lithoTo,
-  columnByKey.lithoCode,
-  columnByKey.colorCode,
-  columnByKey.ca,
-  columnByKey.om,
-  columnByKey.omFacies,
-  columnByKey.py,
-  columnByKey.ox,
-  columnByKey.sedim,
-  columnByKey.redoxCode,
-  columnByKey.lithologyComments,
-
-  columnByKey.granulo,
-  columnByKey.hardness,
-
-  /*
-   * CAUTION:
-   * This column is intentionally hidden for the current UI.
-   * Do NOT delete this code.
-   * It will be reused in a future implementation.
-   */
-  // columnByKey.lithologicalDescription,
-];
+// This list controls table presentation only: which columns are shown, in
+// which order, with which header and width (config.yaml). The complete
+// `columns` list above remains the source for state, JSON import/export, and
+// IndexedDB data. Hidden fields are kept in config.yaml with `visible: false`.
+export const tableColumns = rawLithoConfig.columns
+  .filter((column) => column.visible)
+  .map(({ key, label, width }) => ({ ...columnByKey[key], label, width }));
 
 // Ordered so validation can report the FIRST missing required cell and move
 // focus straight to it. `REQUIRED_COLUMN_KEYS` stays a Set for cheap lookups
@@ -97,15 +45,11 @@ export const COMMENT_FIELD_KEYS = new Set<RowField>([
   "lithologicalDescription",
 ]);
 
-export const COMPACT_COLUMN_KEYS = new Set<RowField>([
-  "ca",
-  "om",
-  "py",
-  "ox",
-  "sedim",
-  "granulo",
-  "hardness",
-]);
+export const COMPACT_COLUMN_KEYS = new Set<RowField>(
+  rawLithoConfig.columns
+    .filter((column) => column.compact)
+    .map((column) => column.key),
+);
 
 /*
  * Every user-facing notification in one place.
@@ -238,7 +182,7 @@ export const TOAST_NOTIFICATIONS = {
   },
 } satisfies Record<string, ToastNotification>;
 
-export const RAW_LITHO_ROWS_PER_PAGE = 50;
+export const RAW_LITHO_ROWS_PER_PAGE = rawLithoConfig.rowsPerPage;
 
 export function createEmptyRow(id: RowId): RawLithoRow {
   return createSchemaRow(id);

@@ -8,6 +8,7 @@ import {
   markKeyAsHandled,
   moveFocusHorizontally,
 } from "./tableNavigation";
+import { CELL_INPUT } from "./rawLithoStyles";
 
 interface LookupAutocompleteProps {
   rowIndex: number;
@@ -27,6 +28,12 @@ interface LookupAutocompleteProps {
 
 const MATCH_LIMIT = 5;
 const LOOKUP_OPEN_EVENT = "raw-litho-lookup-open";
+
+const MENU_ITEM =
+  "overflow-hidden rounded px-[9px] py-[7px] text-ellipsis whitespace-nowrap";
+const MENU_STATUS = "text-[0.8rem] text-rl-text-muted";
+const CELL_ERROR =
+  "absolute top-[calc(100%+2px)] left-1 z-10 rounded-[3px] bg-[#fdf0ef] px-[5px] py-0.5 text-[0.7rem] whitespace-nowrap text-rl-danger";
 
 function hasModifier(event: React.KeyboardEvent<HTMLInputElement>) {
   return event.altKey || event.ctrlKey || event.metaKey || event.shiftKey;
@@ -262,9 +269,10 @@ function LookupAutocomplete({
   }
 
   /*
-   * Fast accept. While the user is searching, ArrowRight / ArrowLeft take the
-   * highlighted closest match, close the list and move one cell right / left,
-   * so a partially typed code never has to be finished by hand.
+   * Fast accept. While the user is searching, ArrowRight / ArrowLeft / Tab /
+   * Shift + Tab take the highlighted closest match, close the list and move one
+   * cell right / left, so a partially typed code never has to be finished by
+   * hand.
    *
    * It only fires when there is something valid to accept, so a query with no
    * match can never write a wrong value into the cell. A cell the user has not
@@ -272,15 +280,33 @@ function LookupAutocomplete({
    * caret-edge behaviour for reading and editing an existing value.
    */
   function acceptClosestMatch(event: React.KeyboardEvent<HTMLInputElement>) {
-    if (hasModifier(event)) return false;
+    const isTab = event.key === "Tab";
+
+    if (isTab ? event.altKey || event.ctrlKey || event.metaKey : hasModifier(event))
+      return false;
     if (!isSearching.current || !showSuggestions) return false;
     if (!query.trim() || !highlightedSuggestion) return false;
 
+    selectSuggestion(highlightedSuggestion);
+    isAcceptingMatch.current = true;
+
+    /*
+     * Tab keeps its own route after accepting: the next / previous cell on this
+     * page, or — when there is none — the event bubbles on to the table, which
+     * crosses the page or appends a row (Tab only, never Shift + Tab). Either can
+     * move focus synchronously, before React re-renders with the accepted
+     * value, so blurs are ignored until this keydown has been dispatched.
+     */
+    if (isTab) {
+      queueMicrotask(() => {
+        isAcceptingMatch.current = false;
+      });
+      handleCellNavigation(event);
+      return true;
+    }
+
     event.preventDefault();
     markKeyAsHandled(event);
-    selectSuggestion(highlightedSuggestion);
-
-    isAcceptingMatch.current = true;
     const hasMoved = moveFocusHorizontally(
       event.currentTarget,
       event.key === "ArrowRight" ? 1 : -1,
@@ -307,9 +333,12 @@ function LookupAutocomplete({
       return;
     }
 
-    // Tab / Shift + Tab settle the value exactly as before, then move like
-    // ArrowRight / ArrowLeft through the shared table navigation.
+    // Tab / Shift + Tab accept the highlighted match like ArrowRight / ArrowLeft.
+    // With nothing to accept they settle the value exactly as before, then move
+    // through the shared table navigation.
     if (event.key === "Tab") {
+      if (acceptClosestMatch(event)) return;
+
       finishEditing();
       handleCellNavigation(event);
       return;
@@ -360,12 +389,12 @@ function LookupAutocomplete({
     ? createPortal(
         <ul
           id={suggestionListId}
-          className="raw-litho-lookup-suggestions"
+          className="fixed z-[1000] m-0 max-h-[220px] max-w-[320px] min-w-[150px] list-none overflow-y-auto rounded-lg border border-rl-border bg-white p-1 text-left shadow-[0_10px_24px_rgb(16_35_61/16%)]"
           role="listbox"
           style={menuStyle}
         >
           {isLoading && options.length === 0 && (
-            <li className="raw-litho-lookup-status" role="status">
+            <li className={`${MENU_ITEM} ${MENU_STATUS}`} role="status">
               Loading values…
             </li>
           )}
@@ -373,9 +402,9 @@ function LookupAutocomplete({
           {suggestions.map((suggestion, index) => (
             <li
               id={`${suggestionListId}-option-${index}`}
-              className={`raw-litho-lookup-suggestion${
+              className={`${MENU_ITEM} cursor-pointer hover:bg-rl-navy-soft hover:text-rl-navy-dark${
                 index === highlightedIndex
-                  ? " raw-litho-lookup-suggestion--active"
+                  ? " raw-litho-lookup-suggestion--active bg-rl-navy-soft text-rl-navy-dark"
                   : ""
               }`}
               key={suggestion.code}
@@ -392,7 +421,7 @@ function LookupAutocomplete({
 
           {!isLoading && suggestions.length === 0 && (
             <li
-              className="raw-litho-lookup-empty"
+              className={`${MENU_ITEM} text-rl-text-muted`}
               role="option"
               aria-disabled="true"
               aria-selected="false"
@@ -402,7 +431,7 @@ function LookupAutocomplete({
           )}
 
           {isLoading && options.length > 0 && (
-            <li className="raw-litho-lookup-status" role="status">
+            <li className={`${MENU_ITEM} ${MENU_STATUS}`} role="status">
               Refreshing values…
             </li>
           )}
@@ -412,16 +441,10 @@ function LookupAutocomplete({
     : null;
 
   return (
-    <div
-      className={`raw-litho-lookup-autocomplete${
-        isCompact ? " raw-litho-lookup-autocomplete--compact" : ""
-      }`}
-    >
+    <div className="relative h-full min-w-0">
       <input
         ref={inputRef}
-        className={`raw-litho-input raw-litho-lookup-input${
-          isCompact ? " raw-litho-input--compact" : ""
-        }`}
+        className={`peer ${CELL_INPUT} ${isCompact ? "px-[9px]" : "px-[13px]"}`}
         type="text"
         role="combobox"
         value={query}
@@ -457,11 +480,17 @@ function LookupAutocomplete({
 
       {!isDisabled && (
         <span
-          className="raw-litho-lookup-chevron"
+          className={`pointer-events-none absolute top-1/2 flex -translate-y-1/2 transition-transform duration-120 ${
+            isCompact ? "right-px w-[7px]" : "right-[3px] w-[9px]"
+          } ${
+            showSuggestions
+              ? "rotate-180 text-rl-navy"
+              : "text-[#8b9ab0] peer-hover:text-rl-navy"
+          }`}
           aria-hidden="true"
           data-open={showSuggestions ? "true" : "false"}
         >
-          <svg viewBox="0 0 10 6" focusable="false">
+          <svg className="h-auto w-full" viewBox="0 0 10 6" focusable="false">
             <path
               d="M1 1.5 5 5l4-3.5"
               fill="none"
@@ -477,13 +506,13 @@ function LookupAutocomplete({
       {dropdown}
 
       {showInvalidSelection && (
-        <span id={validationId} className="raw-litho-lookup-error">
+        <span id={validationId} className={CELL_ERROR}>
           Select a valid value
         </span>
       )}
 
       {error && options.length === 0 && (
-        <span id={loadErrorId} className="raw-litho-lookup-error" role="status">
+        <span id={loadErrorId} className={CELL_ERROR} role="status">
           {error}
         </span>
       )}

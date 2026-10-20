@@ -89,6 +89,46 @@ describe("autocomplete and focus", () => {
     expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
     expect(input).toHaveAttribute("aria-invalid", "false");
   });
+  it.each([
+    [false, "After"],
+    [true, "Before"],
+  ])(
+    "accepts a partial match with Tab (shift: %s) and focuses %s",
+    async (shift, label) => {
+      const user = userEvent.setup();
+      const change = vi.fn();
+      render(<AutocompleteHarness onChange={change} />);
+      const input = screen.getByRole("combobox");
+      await user.type(input, "Unk");
+      await user.tab({ shift });
+      expect(input).toHaveValue("Unknown");
+      expect(change).toHaveBeenLastCalledWith("Unknown");
+      expect(screen.getByLabelText(label)).toHaveFocus();
+      expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+      expect(input).toHaveAttribute("aria-invalid", "false");
+    },
+  );
+  it("Tab never commits an unmatched query and leaves an untouched value alone", async () => {
+    const user = userEvent.setup();
+    const change = vi.fn();
+    render(<AutocompleteHarness onChange={change} />);
+    const input = screen.getByRole("combobox");
+    await user.type(input, "ZZZ");
+    await user.tab();
+    expect(change).not.toHaveBeenCalled();
+    expect(input).toHaveAttribute("aria-invalid", "true");
+
+    await user.clear(input);
+    await user.type(input, "Other{Enter}");
+    change.mockClear();
+    await user.click(screen.getByLabelText("Before"));
+    await user.tab();
+    expect(input).toHaveFocus();
+    await user.tab();
+    expect(change).not.toHaveBeenCalled();
+    expect(input).toHaveValue("Other");
+    expect(screen.getByLabelText("After")).toHaveFocus();
+  });
   it("preserves Enter, Tab, and mouse selection", async () => {
     const user = userEvent.setup();
     const { unmount } = render(<AutocompleteHarness />);
@@ -304,6 +344,43 @@ describe("Tab navigation", () => {
     expect(toast).toHaveBeenCalledWith(
       TOAST_NOTIFICATIONS.missingRequiredFields,
     );
+  });
+
+  it("Tab and Shift + Tab accept a partial lookup match in the table and keep it", async () => {
+    const user = await table([
+      { ...validRow("r0", 0, 10), lithoCode: "", colorCode: "" },
+    ]);
+    await user.click(cell("Litho Code, row 1"));
+    await user.keyboard("Unk");
+    await user.tab();
+    expect(cell("Litho Code, row 1")).toHaveValue("Unknown");
+    expect(cell("Colour, row 1")).toHaveFocus();
+
+    await user.keyboard("unk");
+    await user.tab({ shift: true });
+    expect(cell("Colour, row 1")).toHaveValue("Unknown");
+    expect(cell("Litho Code, row 1")).toHaveFocus();
+    expect(screen.queryByLabelText("Litho From (m), row 2")).toBeNull();
+    await waitFor(async () =>
+      expect((await storedRows())?.[0]).toMatchObject({
+        lithoCode: "Unknown",
+        colorCode: "Unknown",
+      }),
+    );
+  });
+
+  it("Tab from the last lookup cell accepts the match before creating the next row", async () => {
+    const user = await table();
+    await user.click(cell("Hardness, row 1"));
+    await user.keyboard("7");
+    await user.tab();
+    await waitFor(() => expect(cell("Litho From (m), row 2")).toHaveFocus());
+    expect(cell("Hardness, row 1")).toHaveValue("7");
+
+    // Shift + Tab from the first cell of the first row never creates a row.
+    await user.click(cell("Litho From (m), row 1"));
+    await user.tab({ shift: true });
+    expect(screen.queryByLabelText("Litho From (m), row 3")).toBeNull();
   });
 
   it("crosses table pages in both directions", async () => {

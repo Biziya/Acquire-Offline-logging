@@ -1,0 +1,48 @@
+# Raw Litho page settings. Values only: field definitions, required fields and
+# validation rules stay in TypeScript (types/rawLithoSchema.ts, constants.ts).
+# Read once when the page module loads (config.ts); a bad value stops start-up
+# with the file and key in the error.
+
+title: "Raw Litho"
+
+table:
+  rowsPerPage: 50        # rows per table page (PageUp / PageDown)
+  rowHeight: 22          # px, every body row
+  minWidth: 971          # px; narrower windows scroll horizontally
+  indexColumnWidth: 34   # px, the "Ins" column
+
+  # Display order, left to right. Every persisted field is listed.
+  #   label    header text (also the cell's accessible name)
+  #   width    px; omit to take the remaining width
+  #   visible  false hides the column only - the field stays in state, JSON
+  #            import/export and IndexedDB
+  #   compact  narrow lookup cell with tighter padding
+  columns:
+    # CAUTION: intentionally hidden for the current UI. Do NOT delete; it will
+    # be reused in a future implementation.
+    extractionType: { label: "Extraction Type", visible: false }
+    # CAUTION: intentionally hidden for the current UI. Do NOT delete.
+    corePass: { label: "Core Pass #", visible: false }
+    # CAUTION: intentionally hidden for the current UI. Do NOT delete.
+    recoveryStart: { label: "Recovery Start", visible: false }
+    # CAUTION: intentionally hidden for the current UI. Do NOT delete.
+    recoveryEnd: { label: "Recovery End", visible: false }
+    coreEnd: { label: "Core End", visible: false }
+
+    lithoFrom: { label: "Litho From (m)", width: 67, visible: true }
+    lithoTo: { label: "Litho To (m)", width: 67, visible: true }
+    lithoCode: { label: "Litho Code", width: 79, visible: true }
+    colorCode: { label: "Color Code", width: 88, visible: true }
+    ca: { label: "CA", width: 40, visible: true, compact: true }
+    om: { label: "OM", width: 40, visible: true, compact: true }
+    omFacies: { label: "OM Facies", width: 70, visible: true }
+    py: { label: "PY", width: 40, visible: true, compact: true }
+    ox: { label: "OX", width: 40, visible: true, compact: true }
+    sedim: { label: "Sedim", width: 46, visible: true, compact: true }
+    redoxCode: { label: "Redox Code", width: 80, visible: true }
+    lithologyComments: { label: "Lithology Comments", visible: true }
+    granulo: { label: "Granulo", width: 52, visible: true, compact: true }
+    hardness: { label: "Hardness", width: 58, visible: true, compact: true }
+
+    # CAUTION: intentionally hidden for the current UI. Do NOT delete.
+    lithologicalDescription: { label: "Lithological Description", visible: false }

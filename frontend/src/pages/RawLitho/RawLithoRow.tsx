@@ -13,6 +13,8 @@ import {
   tableColumns,
 } from "./constants";
 import { handleCellNavigation, isClearCellRequest } from "./tableNavigation";
+import { rawLithoConfig } from "./config";
+import { CELL_INPUT } from "./rawLithoStyles";
 import { RAW_LITHO_LOOKUP_BY_FIELD } from "../../services/rawLithoLookupConfig";
 
 interface RawLithoRowProps {
@@ -38,32 +40,43 @@ function isEmptyValue(value: unknown) {
   return value === null || value === undefined || String(value).trim() === "";
 }
 
+const CELL = "border border-rl-grid p-0 text-center text-[0.78rem]";
+
+/*
+ * One look per cell state, strongest first: the Ctrl + click selection stays
+ * visible over the duplicate flag, which wins over the missing-value flag. The
+ * marker classes (`raw-litho-cell--*`) carry no styling; they name the state
+ * for tests and for the README.
+ */
+const CELL_STATES = {
+  selected:
+    "raw-litho-cell--selected bg-[#dbeafe] shadow-[inset_0_0_0_2px_#2563eb]",
+  duplicate:
+    "raw-litho-cell--duplicate bg-[#fff3e6] shadow-[inset_0_0_0_2px_#d97a1f] focus-within:bg-[#fffaf4] focus-within:shadow-[inset_0_0_0_2px_var(--color-rl-cell-ring),inset_0_0_0_4px_rgb(217_122_31/45%)]",
+  missing:
+    "raw-litho-cell--missing bg-[#fdf4f3] shadow-[inset_0_0_0_2px_var(--color-rl-required-soft)] focus-within:bg-[#fffafa] focus-within:shadow-[inset_0_0_0_2px_var(--color-rl-cell-ring),inset_0_0_0_4px_rgb(192_57_47/32%)] [&_input]:placeholder:text-rl-required/75",
+  normal:
+    "focus-within:bg-white focus-within:shadow-[inset_0_0_0_2px_var(--color-rl-cell-ring)]",
+};
+
 function buildCellClassName({
-  columnKey,
-  isCompact,
-  isRequired,
   isMissingValue,
   isDuplicateCell,
   isSelected,
 }: {
-  columnKey: RowField;
-  isCompact: boolean;
-  isRequired: boolean;
   isMissingValue: boolean;
   isDuplicateCell: boolean;
   isSelected: boolean;
 }) {
-  return [
-    "raw-litho-col",
-    `raw-litho-col--${columnKey}`,
-    isCompact ? "raw-litho-col--compact" : "",
-    isRequired ? "raw-litho-cell--required" : "",
-    isMissingValue ? "raw-litho-cell--missing" : "",
-    isDuplicateCell ? "raw-litho-cell--duplicate" : "",
-    isSelected ? "raw-litho-cell--selected" : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
+  const state = isSelected
+    ? CELL_STATES.selected
+    : isDuplicateCell
+      ? CELL_STATES.duplicate
+      : isMissingValue
+        ? CELL_STATES.missing
+        : CELL_STATES.normal;
+
+  return `${CELL} focus-within:relative focus-within:z-[1] ${state}`;
 }
 
 function RawLithoRow({
@@ -92,10 +105,11 @@ function RawLithoRow({
 
   return (
     <tr
-      className={isEvenRow ? "raw-litho-row--even" : "raw-litho-row--odd"}
+      className={`${isEvenRow ? "bg-[#f9fbfd]" : "bg-white"} hover:bg-rl-navy-soft`}
+      style={{ height: rawLithoConfig.rowHeight }}
       data-row-id={row.id}
     >
-      <td className="raw-litho-col raw-litho-col--index">{rowIndex + 1}</td>
+      <td className={CELL}>{rowIndex + 1}</td>
 
       {tableColumns.map((column) => {
         const lookup = RAW_LITHO_LOOKUP_BY_FIELD[column.key];
@@ -111,9 +125,6 @@ function RawLithoRow({
           hasDuplicateInterval && isEnabled && DEPTH_FIELDS.has(column.key);
 
         const cellClassName = buildCellClassName({
-          columnKey: column.key,
-          isCompact,
-          isRequired,
           isMissingValue,
           isDuplicateCell,
           isSelected: selectedColumns?.has(column.key) ?? false,
@@ -142,9 +153,7 @@ function RawLithoRow({
               />
             ) : (
               <input
-                className={`raw-litho-input${
-                  isCompact ? " raw-litho-input--compact" : ""
-                }`}
+                className={`${CELL_INPUT} ${isCompact ? "px-0.5" : "px-1"}`}
                 type={column.type}
                 disabled={!isEnabled}
                 step={column.type === "number" ? "any" : undefined}

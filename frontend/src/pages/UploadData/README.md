@@ -1,188 +1,153 @@
 # Upload Data page
 
-Route: `/upload-data` · Component: `UploadData.tsx`
+Route: `/upload-data`
 
 ## Purpose
 
-Selects one completed JSON dataset from the local disk, shows its identifying
-fields for review, and uploads the file to the backend. The page reads the file
-in the browser to build the summary, then sends the **original file** to
-`POST /api/uploaddata`.
-
-This page stores nothing locally: no IndexedDB, no Local Storage, no draft.
-Nothing survives a refresh.
+Loads a Raw Litho JSON export, lets the user review and correct every record in
+an editable, virtualized table, validates the result, and uploads it to
+`POST /api/uploaddata`. Nothing is stored: edits live in memory and are cleared
+by **Cancel**, choosing another file, or a page refresh. The page uses no
+IndexedDB and no Local Storage.
 
 ## Folder tree
 
 ```text
 UploadData/
-├── DatasetSummary.tsx      renders the four summary fields from props
-├── README.md               this file
-├── UploadData.css          page styling
-├── UploadData.tsx          page container: state, file reading, upload
-├── UploadFileSection.tsx   hidden file input + Upload JSON button
-└── ValidationSummary.tsx   NOT imported — see below
+├── config.yaml              title, table sizes, columns, search debounce
+├── config.ts                typed, validated copy of config.yaml
+├── DatasetSummary.tsx       2. Dataset Information
+├── README.md                this file
+├── UploadData.tsx           page container: file, working document, upload
+├── UploadDataTable.tsx      3. Editable JSON Preview (virtualized)
+├── uploadDataDocument.ts    the working document and its edit function
+├── uploadDataStyles.ts      Tailwind class lists shared by the sections
+├── uploadDataValidation.ts  pure validation of the working document
+├── UploadFileSection.tsx    1. File Selection
+└── ValidationSummary.tsx    4. Validation Summary
 ```
-
-`ValidationSummary.tsx` is not imported by anything. It is a near-duplicate of
-`DatasetSummary.tsx` with hard-coded placeholder values (and its component is
-also named `DatasetSummary`). Treat it as dead code.
 
 ## Page structure
 
-Two numbered sections, then the action buttons:
-
 ```text
-1  File Selection    UploadFileSection.tsx
-2  Dataset Summary   DatasetSummary.tsx
-   [Cancel]  [Import Data]
+Upload Data
+├── 1. File Selection         picker; parse errors shown inline
+├── 2. Dataset Information    file, project, campaign, drillhole, created by,
+│                             uploaded by, total records, file size, status
+├── 3. Editable JSON Preview  search, status filter, record count, table
+├── 4. Validation Summary     total / valid / warning / invalid + document issues
+└── Actions                   Cancel · Import Data (→ confirmation)
 ```
 
-## File responsibilities
+**Created By / Uploaded By** show "Not available": the Raw Litho JSON format
+records no creator and the application has no signed-in user. Nothing is
+invented.
 
-```text
-UploadData.tsx
-- owns all state: summary, selectedFile, parsedJson, errors, isImporting
-- handleFileSelect: reads and parses the file, builds the summary
-- handleImport: POSTs the file via importUploadData
-- handleCancel: aborts an in-flight request and resets every field
-- guards against stale results with fileSelectionIdRef and requestControllerRef
+## The working document
 
-UploadFileSection.tsx
-- owns the hidden <input type="file" accept=".json,application/json">
-- the "Upload JSON" button opens the picker
-- clears input.value after each pick so the same file can be chosen again
-- displays the selected filename and any file error
+`handleFileSelect` parses the file once; the parsed object is the single
+authoritative working document (`workingDocument`). The selected `File` is
+never modified.
 
-DatasetSummary.tsx
-- presentational only; receives the summary object through props
-- renders File Name, Project, Campaign, Drillhole as a <dl>
-```
+`applyCellEdits` (in `uploadDataDocument.ts`) returns the next document,
+copying only the rows that change. Untouched rows keep their identity, and every
+key of the document and of each row — known, hidden (`visible: false` columns)
+or extra — is kept exactly. A depth that was a JSON number stays a number when
+the new text is numeric. Comment text is stored exactly as typed, spaces
+included. Values that are JSON objects or lists are shown read-only and are
+never overwritten.
 
-## Local state
+Because the table reads every value from the working document on render, an
+edit survives its row scrolling out of the virtual window and back.
 
-| State | Purpose |
+## Editable preview
+
+- **Virtualized** with `@tanstack/react-virtual`: only the rows in view plus
+  `overscan` are in the DOM, so 100,000 records stay responsive. Row height,
+  overscan, table height and columns come from `config.yaml`.
+- **Search** across the visible columns (debounced) and a **status filter**
+  (all / invalid / warnings / valid). A record edited while a filter is active
+  stays listed until the filter changes, so it does not vanish under the caret.
+- **Keyboard**: `Tab` / `Shift`+`Tab` move to the next / previous cell and wrap
+  across records; `←` / `→` do the same once the caret is at the edge of the
+  text; `↑` / `↓` and `Enter` move within the column. A target outside the
+  rendered window is scrolled into view and focused after it renders.
+- **Selection**: `Ctrl` (or `⌘`) + click toggles a cell; a plain click on a cell
+  outside the selection clears it; `Escape` clears it.
+- **Copy**: `Ctrl`+`C` with a selection copies its bounding rectangle as
+  tab-separated text; unselected cells inside it are written empty.
+- **Paste**: one value with a selection fills every selected cell; a block
+  (tabs = columns, newlines = rows, e.g. from Excel) is pasted with its top-left
+  corner on the focused cell and is refused if it would run past the table.
+  Read-only cells are left unchanged and counted in the notice. Without a
+  selection, a single value is a normal input paste. A clipboard that cannot be
+  read changes nothing.
+- **Lookups**: lookup cells offer the codes loaded from the API as suggestions.
+  When a lookup cannot be loaded its codes are reported as "not checked" —
+  never guessed.
+
+## Validation
+
+`validateUploadDocument` is pure and runs on a deferred copy of the document,
+so typing stays responsive; **Import Data** re-validates the latest document.
+No new business rules are introduced:
+
+| Severity | Checks |
 | --- | --- |
-| `summary` | The four displayed values. Starts as `EMPTY_SUMMARY`. |
-| `selectedFile` | The `File` object, sent on import. |
-| `parsedJson` | The parsed object. Its presence enables **Import Data**. |
-| `fileError` | Inline error in section 1. |
-| `importError` | Upload failure message. |
-| `successMessage` | Server message, or "Data imported successfully." |
-| `isImporting` | Disables the button and shows "Importing…". |
-| `requestControllerRef` | `AbortController` for the in-flight upload. |
-| `fileSelectionIdRef` | Increments per selection so a slow read cannot overwrite a newer one. |
+| error (blocks upload) | missing project / drillhole; `rows` missing or empty; a row that is not an object; non-whole-number id; empty or non-numeric depth; non-text value in a text field; invalid timestamp; Litho From > Litho To; duplicate interval; unknown lookup code (when the lookup is loaded) |
+| warning | required field empty; campaign or timestamp missing; lookup data still loading or unavailable |
 
-No persisted state.
-
-## Reading a file
-
-```text
-Upload JSON → file picker → handleFileSelect(file)
-  abort any in-flight upload, clear all state
-  check the extension or MIME type is JSON
-  await file.text() → JSON.parse
-  check the root is an object (not an array, not null)
-  → fill the summary
-```
-
-Validation is deliberately shallow: **only** that the file looks like JSON and
-that its root is an object. `project`, `campaign`, `drillhole`, and `rows` are
-read if present but their types are never checked, and a missing field simply
-shows as `—`. Row contents are never inspected.
-
-`displayValue` renders `—` for anything that is not a non-blank string, so
-whitespace-only values show as `—` too.
-
-The import is rejected when the file is not JSON by extension or MIME type,
-cannot be read, contains invalid JSON syntax, or has an array or `null` root. In
-those cases the summary resets and an inline error appears in section 1.
-
-### Expected shape
-
-```json
-{
-  "project": "Project name",
-  "campaign": "Campaign name",
-  "drillhole": "Drillhole name",
-  "rows": []
-}
-```
-
-This matches the document exported by the Raw Litho page, so a Raw Litho export
-can be uploaded here directly. Extra top-level fields are ignored by the
-summary and still sent to the server.
+Invalid and warning cells are highlighted, the status column shows ✓ / ! / ✕
+with the messages as a tooltip, and the summary shows the counts.
 
 ## Uploading
 
 ```text
-Import Data → handleImport()
-  POST /api/uploaddata   multipart/form-data, field name "file"
-    ok    → successMessage (server message, or the default)
-    error → importError
-    abort → silently ignored
+Import Data → handleImportRequest()   re-validate; blocking errors → message, stop
+            → confirmation panel      "Import N records?"  Back / Confirm import
+Confirm     → handleImport()
+  unchanged → the original file
+  edited    → new File(JSON.stringify(workingDocument, null, 2), same name)
+  POST /api/uploaddata   multipart/form-data, field "file"
+    ok    → success message (only after the server confirms)
+    error → server message
+    abort → ignored
 ```
 
-The **original file** is uploaded, not the parsed object — the server receives
-exactly the bytes on disk. Requests carry an `AbortController` signal;
-**Cancel** aborts an in-flight upload and clears the page. `isImporting` is only
-reset when the finishing request is still the current one, so a superseded
-response cannot re-enable the button.
+The request carries an `AbortController` signal; a second click cannot submit
+twice, and **Cancel** aborts an in-flight upload and clears the page. File reads
+are guarded by `fileSelectionIdRef`, so a slow read of an older selection never
+replaces a newer one.
 
-Error text comes from `services/Api/uploadData.ts`, which reads `detail`,
-`message`, or `title` from a JSON body, uses a plain-text body as-is, and
-reports connection failures as
-"Unable to connect to the server. Please try again."
+## Configuration
 
-## Handlers
-
-```text
-handleFileSelect(file)
-- triggered by: choosing a file in the picker
-- aborts any in-flight upload and clears summary, file, errors, messages
-- validates the type, reads and parses, checks the root is an object
-- on success: stores the file and parsed object, fills the summary
-- on failure: sets fileError and leaves the placeholders in place
-- stale-guard: fileSelectionIdRef
-
-handleImport()
-- triggered by: Import Data
-- no-op without parsedJson, or while already importing
-- POSTs the file; sets successMessage or importError
-
-handleCancel()
-- triggered by: Cancel
-- aborts the in-flight request and resets every piece of state
-- also invalidates any in-progress file read
-```
+`config.yaml` holds the page title, `rowHeight`, `overscan`, preview `height`,
+`minWidth`, index/status column widths, the column list (label, width,
+visibility) and the search debounce. It is parsed and validated once when the
+module loads; a bad value fails start-up (and `npm test`) with the file and key
+in the error.
 
 ## Quick reference
 
 | Question | Answer |
 | --- | --- |
-| Which API does this page call? | `POST /api/uploaddata` only |
+| Which API does this page call? | `POST /api/uploaddata`, plus the lookup `GET`s for validation |
 | What is persisted? | Nothing |
-| What validation exists? | JSON type/extension, parseable JSON, object root. No field-level checks. |
-| Where do I add field validation? | `handleFileSelect` in `UploadData.tsx` |
-| Which button uploads? | **Import Data**; **Upload JSON** only opens the picker |
-
-## Current limitations
-
-- No field-level or row-level validation before upload.
-- No progress indication beyond the "Importing…" label.
-- No persistence: a refresh clears the selection.
-- Single file only; no `multiple` attribute and no drag-and-drop.
-- `ValidationSummary.tsx` is unused dead code.
+| Where are the rules? | `uploadDataValidation.ts` |
+| Where is an edit applied? | `applyCellEdits` in `uploadDataDocument.ts` |
+| Which file is uploaded? | The original when unchanged, otherwise the serialized working document |
+| Where do I change columns or row height? | `config.yaml` |
 
 ## Manual test checklist
 
-1. Pick a valid JSON dataset and confirm all four summary fields populate.
-2. Pick a file whose `project` is empty or whitespace → that field shows `—`.
-3. Pick malformed JSON → placeholders return and an inline error appears.
-4. Pick a JSON file with an array root → rejected the same way.
-5. Open the picker and cancel → the current summary is unchanged.
-6. Pick the same file twice → it is processed both times.
-7. Confirm **Import Data** is disabled until a valid file is loaded.
-8. Import with the backend stopped → a connection error appears, not a crash.
-9. Start an import and press **Cancel** → the request aborts and the page resets.
-10. Refresh → the summary returns to its placeholders.
+1. Pick a Raw Litho export → the summary, record count and table fill in.
+2. Pick malformed JSON or an array root → inline error, Import Data disabled.
+3. Scroll a 100,000-record file → scrolling stays smooth; edit a cell, scroll away and back → the edit is still there.
+4. Type `Fine  grained sandstone ` in a comment → every space stays.
+5. Tab / Shift + Tab through a record and across into the next one.
+6. Ctrl + click several cells, paste one value → all change; copy them and paste into Excel → positions are kept.
+7. Paste a block copied from Excel onto a cell → values land in the right columns.
+8. Enter `abc` in a depth or invert a range → the cell turns red, the record counts as invalid, Import Data refuses with a message.
+9. Search and filter by status → the count updates; a record being fixed stays visible.
+10. Import unchanged → the original file is sent; edit then import → the edited JSON is sent (check the request payload).
+11. Start an import and press Cancel → the request aborts and the page resets.

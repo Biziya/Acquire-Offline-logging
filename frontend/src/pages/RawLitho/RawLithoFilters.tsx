@@ -14,6 +14,20 @@ interface RawLithoFiltersProps {
 const SUGGESTION_LIMIT = 10;
 const SUGGESTION_LIST_ID = "drillhole-suggestion-list";
 
+const FIELD = "grid gap-[3px]";
+const LABEL = "text-[0.75rem] font-semibold text-rl-text-muted";
+const FIELD_ERROR = "max-w-[220px] text-[0.8rem] text-rl-danger";
+const READONLY_VALUE =
+  "flex h-[30px] min-w-[150px] items-center rounded-md border border-rl-border bg-rl-navy-softer px-2 text-rl-text";
+const CHEVRON = [
+  "after:pointer-events-none after:absolute after:right-[11px] after:bottom-[11px]",
+  "after:size-2 after:border-r-[1.6px] after:border-b-[1.6px] after:border-rl-text-muted",
+  "after:-translate-y-0.5 after:rotate-45 after:content-['']",
+  "after:transition-[border-color,translate,rotate] after:duration-140",
+  "hover:after:border-rl-navy",
+  "has-[input:focus]:after:translate-y-0.5 has-[input:focus]:after:rotate-[225deg] has-[input:focus]:after:border-rl-navy",
+].join(" ");
+
 function getMatchRank(holeId: string, normalizedQuery: string) {
   const normalizedHoleId = holeId.toLocaleLowerCase();
 
@@ -163,17 +177,24 @@ function RawLithoFilters({
     validationMessageId = "drillhole-selection-error";
   }
 
+  // The chevron is drawn with ::after and is hidden while the clear button
+  // takes its place, or while the field is disabled.
+  const showClearButton = Boolean(query) && !isDisabled;
+  const showChevron = !showClearButton && !isDisabled;
+
   return (
-    <div className="raw-litho-filters">
-      <div className="raw-litho-field">
-        <label className="raw-litho-label" htmlFor="drillhole-search">
+    <div className="mb-2 flex flex-wrap gap-3">
+      <div className={FIELD}>
+        <label className={LABEL} htmlFor="drillhole-search">
           Drillhole
         </label>
 
-        <div className="raw-litho-autocomplete">
+        <div
+          className={`relative min-w-[190px]${showChevron ? ` ${CHEVRON}` : ""}`}
+        >
           <input
             id="drillhole-search"
-            className="raw-litho-autocomplete-input"
+            className="h-[30px] w-full rounded-md border border-rl-border-strong bg-white pr-8 pl-2.5 text-[0.8333rem] text-rl-text transition-[background-color,border-color,box-shadow] duration-140 focus:border-rl-navy focus:shadow-[0_0_0_3px_var(--color-rl-ring-glow)] focus:outline-none enabled:hover:border-rl-navy enabled:hover:bg-rl-navy-softer enabled:active:bg-rl-navy-soft disabled:cursor-not-allowed disabled:opacity-55 aria-invalid:border-rl-required"
             type="text"
             role="combobox"
             value={query}
@@ -202,9 +223,9 @@ function RawLithoFilters({
             onKeyDown={handleKeyDown}
           />
 
-          {query && !isDisabled && (
+          {showClearButton && (
             <button
-              className="raw-litho-autocomplete-clear"
+              className="absolute top-1/2 right-2 size-6 -translate-y-1/2 cursor-pointer rounded border-0 bg-transparent p-0 text-[1.25rem] leading-none text-rl-text-muted transition-colors duration-140 hover:bg-rl-navy-soft hover:text-rl-navy focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-rl-cell-ring active:bg-[#dbe5f2]"
               type="button"
               aria-label="Clear Drillhole"
               onMouseDown={(event) => event.preventDefault()}
@@ -217,16 +238,16 @@ function RawLithoFilters({
           {showSuggestionList && (
             <ul
               id={SUGGESTION_LIST_ID}
-              className="raw-litho-suggestions"
+              className="absolute inset-x-0 top-[calc(100%+4px)] z-20 m-0 max-h-[260px] list-none overflow-y-auto rounded-lg border border-rl-border bg-white p-1 shadow-[0_10px_24px_rgb(16_35_61/16%)]"
               role="listbox"
             >
               {suggestions.length > 0 ? (
                 suggestions.map((drillhole, index) => (
                   <li
                     id={`drillhole-option-${index}`}
-                    className={`raw-litho-suggestion${
+                    className={`cursor-pointer rounded px-2.5 py-2 transition-colors duration-140 hover:bg-rl-navy-soft hover:text-rl-navy-dark${
                       index === activeSuggestionIndex
-                        ? " raw-litho-suggestion--active"
+                        ? " raw-litho-suggestion--active bg-rl-navy-soft text-rl-navy-dark"
                         : ""
                     }`}
                     key={drillhole.holeId}
@@ -242,7 +263,7 @@ function RawLithoFilters({
                 ))
               ) : (
                 <li
-                  className="raw-litho-no-suggestions"
+                  className="rounded px-2.5 py-2 text-rl-text-muted"
                   role="option"
                   aria-disabled="true"
                   aria-selected="false"
@@ -255,30 +276,27 @@ function RawLithoFilters({
         </div>
 
         {error && (
-          <span id="drillhole-load-error" className="raw-litho-field-error">
+          <span id="drillhole-load-error" className={FIELD_ERROR}>
             {error}
           </span>
         )}
         {!error && showInvalidSelection && (
-          <span
-            id="drillhole-selection-error"
-            className="raw-litho-field-error"
-          >
+          <span id="drillhole-selection-error" className={FIELD_ERROR}>
             Select a valid drillhole
           </span>
         )}
       </div>
 
-      <div className="raw-litho-field">
-        <span className="raw-litho-label">Project</span>
-        <output className="raw-litho-readonly-value">
+      <div className={FIELD}>
+        <span className={LABEL}>Project</span>
+        <output className={READONLY_VALUE}>
           {selectedDrillhole?.projectCode || "—"}
         </output>
       </div>
 
-      <div className="raw-litho-field">
-        <span className="raw-litho-label">Campaign</span>
-        <output className="raw-litho-readonly-value">
+      <div className={FIELD}>
+        <span className={LABEL}>Campaign</span>
+        <output className={READONLY_VALUE}>
           {selectedDrillhole?.campaign || "—"}
         </output>
       </div>

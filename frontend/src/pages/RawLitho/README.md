@@ -38,14 +38,14 @@ RawLitho/
 │   └── useToast.ts                 single-toast state
 ├── ConfirmDialog.tsx               shared modal: import + remove confirmations
 ├── LookupAutocomplete.tsx          one dropdown/autocomplete cell
-├── RawLitho.css                    all page styling
 ├── RawLitho.tsx                    page container
 ├── RawLithoFilters.tsx             drillhole search + Project/Campaign output
 ├── RawLithoRow.tsx                 one editable table row
 ├── RawLithoTable.tsx               table, pagination, row action buttons
 ├── README.md                       this file
-├── Toast.css
 ├── Toast.tsx                       top-centre notification
+├── config.yaml                     title, rows per page, row height, columns
+├── config.ts                       typed, validated copy of config.yaml
 ├── constants.ts                    columns, required keys, toasts, row factory
 ├── drillholeOrdering.ts            recent-first / newest-first drillhole order
 ├── rawLithoClipboard.ts            copy text + paste planning for selected cells
@@ -53,6 +53,7 @@ RawLitho/
 ├── rawLithoHelpers.ts             document normalisation, import read, export
 ├── rawLithoImportService.ts        validates an import before touching storage
 ├── rawLithoSorting.ts              row ordering by Litho From
+├── rawLithoStyles.ts               Tailwind class lists shared by components
 ├── rawLithoValidation.ts           pure validation rules
 └── tableNavigation.ts              DOM focus + key-detection utilities
 ```
@@ -83,7 +84,7 @@ RawLithoRow.tsx
 - applies required, missing-value and duplicate-interval cell classes
 - handles Delete-to-clear and arrow navigation for plain inputs
 
-Toast.tsx / Toast.css
+Toast.tsx
 - the single toast component; one notification at a time
 - renders the icon, accent colour and live-region role for its type
 - auto-dismisses after `duration`, fading out over the last 200ms
@@ -126,7 +127,7 @@ drillholeOrdering.ts
 - pure; no React, no DOM, no storage
 
 constants.ts
-- columns (all 20 fields) and tableColumns (the 14 currently shown)
+- columns (all 20 fields) and tableColumns (the visible ones, in config.yaml order)
 - REQUIRED_COLUMN_KEY_LIST / REQUIRED_COLUMN_KEYS
 - ROW_COPY_FIELD_KEYS, RAW_LITHO_ROWS_PER_PAGE, TOAST_NOTIFICATIONS
 - createEmptyRow(), createRowFromPrevious()
@@ -173,7 +174,8 @@ rawLithoImportService.ts
 
 `rawLithoSchema.ts` defines all 20 persisted fields, their keyed column definitions
 and defaults. `constants.ts` re-exports `columns`; `tableColumns` controls which are
-displayed. Six are intentionally commented out and marked "do not delete" for
+displayed; it is built from `config.yaml` (order, label, width, compact,
+`visible`). Six are intentionally `visible: false` and marked "do not delete" for
 future use (`extractionType`, `corePass`, `recoveryStart`, `recoveryEnd`,
 `coreEnd`, `lithologicalDescription`). They still exist in state, JSON, and
 IndexedDB.
@@ -454,7 +456,7 @@ action builds its own notification.
 
 | Piece | Location |
 | --- | --- |
-| Toast component | `Toast.tsx` + `Toast.css` |
+| Toast component | `Toast.tsx` (Tailwind; keyframes in `css/index.css`) |
 | Toast state | `hooks/useToast.ts` (`showToast` / `hideToast`) |
 | Message catalogue | `TOAST_NOTIFICATIONS` in `constants.ts` |
 | Confirmation modal | `ConfirmDialog.tsx` |
@@ -629,7 +631,7 @@ which stays swallowed.
 | --- | --- |
 | `←` / `→` | Move to the previous / next editable cell, but only when the caret is at the edge of the current value, so normal text editing still works. Disabled cells are skipped, the end of a row continues on the next row (and the start on the previous row), and the edge of a page continues on the adjacent page. |
 | `Tab` / `Shift`+`Tab` | Exactly like `→` / `←`, except that they always leave the cell regardless of the caret. In a lookup cell the value is settled by `finishEditing()` first, as before. `Shift`+`Tab` from the very first cell leaves the table normally. |
-| `←` / `→` while typing in a lookup cell | Accept the highlighted closest match, close the dropdown and move one cell left / right. See *Fast accept* below. |
+| `←` / `→` / `Tab` / `Shift`+`Tab` while typing in a lookup cell | Accept the highlighted closest match, close the dropdown and move one cell left / right. See *Fast accept* below. |
 | `↑` / `↓` | Move one cell vertically in the same column. On `number` inputs the default spinner behaviour is suppressed. Never moves the highlight inside a dropdown. |
 | `↓` on the last row | No cell below, so the table creates the next row and focuses it — from a lookup cell as well as a plain one. |
 | `Tab` from the last cell of the last row | Creates the next row and focuses its first cell. |
@@ -709,17 +711,25 @@ Accepted pastes keep row ids and whole row objects, are re-sorted by
 `sortRowsByLithoFrom()`, and are autosaved to IndexedDB through the normal
 `commitDocument` path.
 
-### Fast accept: `→` / `←` in a lookup cell
+### Fast accept: `→` / `←` / `Tab` / `Shift`+`Tab` in a lookup cell
 
 Typing filters the list and the closest match is highlighted automatically
-(ranked exact → prefix → substring, so an exact match always wins). `→` and `←`
-take that match:
+(ranked exact → prefix → substring, so an exact match always wins). `→`, `←`,
+`Tab` and `Shift`+`Tab` all take that match through the same
+`acceptClosestMatch` — there is no second matching algorithm:
 
 ```text
 type "Unk" → "Unknown" is highlighted
   →  commit "Unknown", close the dropdown, focus the NEXT cell
   ←  commit "Unknown", close the dropdown, focus the PREVIOUS cell
+  Tab        same as →
+  Shift+Tab  same as ←
 ```
+
+`Tab` keeps its own route after accepting: the next / previous cell on the
+page, otherwise the table crosses the page or — `Tab` only, never
+`Shift`+`Tab` — appends a row after the usual validation. The accepted value
+is committed before focus moves, so row creation sees it.
 
 Two guards keep it out of the way of everything else:
 
@@ -727,10 +737,11 @@ Two guards keep it out of the way of everything else:
   key falls through to ordinary cell navigation. A wrong value is never written.
 - **The user has not typed in this cell** (`isSearching` is false, e.g. focus
   just arrived on a cell that already holds a value) and `←` / `→` keep their
-  caret-edge behaviour, so an existing value can still be read and edited.
+  caret-edge behaviour, so an existing value can still be read and edited;
+  `Tab` / `Shift`+`Tab` simply move on without touching the value.
 
 The full-value routes are untouched: type the whole code and press `Enter` or
-`Tab`, or click an option.
+`Tab` (an exact match ranks first, so it is kept), or click an option.
 
 Accepting moves focus, which fires `blur` before React has re-rendered with the
 new value, so `finishEditing` would still see the partial text and flag it
@@ -752,9 +763,10 @@ cell:
 2. **Otherwise (last row)** → the event bubbles unhandled and the table creates
    a row, subject to the usual required-field and duplicate-interval checks.
 
-`Tab` in a lookup cell commits the value through `finishEditing()` before the
-table considers creating a row. Leaving a lookup cell with partially typed text
-still commits nothing — only an exact match commits on blur — so a required
+`Tab` in a lookup cell first accepts the highlighted match (fast accept) or, with
+nothing to accept, settles the value through `finishEditing()` before the table
+considers creating a row. Leaving a lookup cell with unmatched text still
+commits nothing — only an exact match commits on blur — so a required
 lookup cell left half-typed blocks row creation with the usual warning.
 
 Only the last page can create rows: `handleTableKeyDown` returns early unless
@@ -767,7 +779,7 @@ final row on the final page.
 
 | Setting | Value |
 | --- | --- |
-| Rows per page | `RAW_LITHO_ROWS_PER_PAGE = 50` |
+| Rows per page | `table.rowsPerPage: 50` in `config.yaml` (`RAW_LITHO_ROWS_PER_PAGE`) |
 | Total pages | `max(1, ceil(rowCount / 50))` |
 | Controls | Previous / Next buttons, `PageUp` / `PageDown` |
 
@@ -1080,7 +1092,8 @@ acceptClosestMatch  → / ← while typing: commit the highlighted match and mov
                     one cell; returns false when there is nothing valid to take
 ↑ / ↓               handed straight to handleCellNavigation — cell navigation,
                     or bubble up so the table can add a row
-Tab / Shift + Tab   finishEditing, then handleCellNavigation
+Tab / Shift + Tab   acceptClosestMatch when searching; otherwise
+                    finishEditing, then handleCellNavigation
 finishEditing       on blur/Tab: empty clears, an exact match commits, anything
                     else is flagged "Select a valid value"
 selectSuggestion    commits a clicked or Enter-selected option
@@ -1148,7 +1161,8 @@ handleSave   see "Save button" above
 | Where are the validation rules? | `rawLithoValidation.ts` (pure); toast text in `constants.ts` |
 | Where are the required fields listed? | `REQUIRED_COLUMN_KEY_LIST` in `constants.ts` |
 | Which fields are copied to a new row? | `ROW_COPY_FIELD_KEYS` in `constants.ts` |
-| Where do I change rows per page? | `RAW_LITHO_ROWS_PER_PAGE` in `constants.ts` |
+| Where do I change rows per page, columns or widths? | `config.yaml` |
+| Where is the styling? | Tailwind utilities in the components; shared lists in `rawLithoStyles.ts`; tokens in `src/css/index.css` |
 | Where are the shortcuts? | `hooks/useRawLithoShortcuts.ts` |
 | Where is horizontal navigation (arrows, Tab)? | `getHorizontalStep` / `handleCellNavigation` in `tableNavigation.ts`, page crossing in `RawLithoTable.tsx` |
 | Where is copy / paste? | `rawLithoClipboard.ts` (pure), handlers in `RawLithoTable.tsx`, `applyCellEdits` in `rawLithoDocumentOperations.ts` |

@@ -33,7 +33,7 @@ configuration, and merge any custom root configuration with the included default
 
 | File | Responsibility |
 | --- | --- |
-| `src/types/rawLithoSchema.ts` | Complete persisted field contract, keyed column definitions and generated defaults; visible ordering stays in `constants.ts` |
+| `src/types/rawLithoSchema.ts` | Complete persisted field contract, keyed column definitions and generated defaults; visible ordering, labels and widths live in `src/pages/RawLitho/config.yaml` |
 | `src/types/domain.ts` | Rows, documents, drillholes, lookups, props-related contracts, sessions, imports and operation results |
 | `src/types/validation.ts` | Runtime guards for external data and error handling |
 | `src/pages/RawLitho/hooks/useRawLithoWorkspace.ts` | Single working document, selected drillhole, pagination, operations and UI feedback |
@@ -41,7 +41,11 @@ configuration, and merge any custom root configuration with the included default
 | `src/pages/RawLitho/rawLithoDocumentOperations.ts` | Storage-free create/edit/add/delete/commit/sort transformations |
 | `src/services/IndexDB/rawLithoSaveQueue.ts` | Latest pending snapshot per drillhole and serialized writes |
 | `src/pages/RawLitho/rawLithoHelpers.ts` | Document normalization, JSON import validation and export |
-| `tests/` | Persistence, operations, storage/API and keyboard regression tests |
+| `src/pages/UploadData/` | JSON review: editable virtualized preview, validation, upload of the original or edited document |
+| `src/pages/DatabaseViewer/` | Read-only, virtualized lithology viewer — **mock data only**, no backend calls |
+| `src/pages/*/config.yaml` + `src/config/yamlConfig.ts` | Static UI settings per page, parsed and validated once at load |
+| `src/css/index.css` | Tailwind CSS v4 entry (`@tailwindcss/vite`) and the shared `rl-*` design tokens |
+| `tests/` | Persistence, operations, storage/API, keyboard, Upload Data, Database Viewer and YAML configuration tests |
 
 The workspace has one editable document. A synchronous ref points to the same
 working value so an edit and drillhole switch in one React batch cannot lose the

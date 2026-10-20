@@ -30,12 +30,17 @@ import {
 } from "./rawLithoClipboard";
 import { findDuplicateIntervalRowIds } from "./rawLithoValidation";
 import {
-  COMPACT_COLUMN_KEYS,
   RAW_LITHO_ROWS_PER_PAGE,
   REQUIRED_COLUMN_KEYS,
   TOAST_NOTIFICATIONS,
   tableColumns,
 } from "./constants";
+import { rawLithoConfig } from "./config";
+import {
+  OUTLINE_BUTTON,
+  OUTLINE_BUTTON_DISABLED,
+  OUTLINE_BUTTON_NAVY,
+} from "./rawLithoStyles";
 
 interface RawLithoTableProps {
   rows: RawLithoRowRecord[];
@@ -58,16 +63,17 @@ const FALLBACK_FOCUS_FIELD = "lithoTo";
 const FIRST_COLUMN_KEY = tableColumns[0]?.key ?? null;
 const LAST_COLUMN_KEY = tableColumns[tableColumns.length - 1]?.key ?? null;
 
-function buildHeaderClassName(columnKey: RowField, isRequired: boolean) {
-  return [
-    "raw-litho-col",
-    `raw-litho-col--${columnKey}`,
-    COMPACT_COLUMN_KEYS.has(columnKey) ? "raw-litho-col--compact" : "",
-    isRequired ? "raw-litho-header--required" : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
-}
+// Sticky header cell. The inset shadows redraw the grid lines, which
+// `border-collapse` would otherwise lose while the header floats over rows.
+const HEADER_CELL = [
+  "sticky top-0 z-[3] border border-rl-grid bg-rl-navy-softer p-[3px] text-center",
+  "text-[0.7rem] leading-[1.1] font-semibold tracking-[0.01em] whitespace-normal",
+  "text-rl-text [overflow-wrap:anywhere]",
+  "shadow-[inset_1px_0_0_var(--color-rl-grid),inset_-1px_0_0_var(--color-rl-grid),inset_0_1px_0_var(--color-rl-grid),inset_0_-1px_0_var(--color-rl-border-strong)]",
+].join(" ");
+
+const PAGINATION_BUTTON = `${OUTLINE_BUTTON} ${OUTLINE_BUTTON_NAVY} ${OUTLINE_BUTTON_DISABLED} h-7 min-w-[76px] px-2.5 text-[0.8rem] max-sm:min-w-0`;
+const ROW_ACTION_BUTTON = `${OUTLINE_BUTTON} ${OUTLINE_BUTTON_DISABLED} h-7 px-3 text-[0.8rem]`;
 
 function RawLithoTable({
   rows,
@@ -314,12 +320,23 @@ function RawLithoTable({
   }
 
   return (
-    <div className="raw-litho-table-section">
-      <div ref={tableWrapperRef} className="raw-litho-table-wrapper">
-        <table className="raw-litho-table">
+    <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col">
+      <div
+        ref={tableWrapperRef}
+        className="min-h-0 w-full max-w-full flex-1 overflow-auto scroll-smooth rounded-xl border border-rl-border bg-white shadow-[0_1px_2px_rgb(16_35_61/6%)]"
+      >
+        <table
+          className="w-full table-fixed border-collapse bg-white"
+          style={{ minWidth: rawLithoConfig.minWidth }}
+        >
           <thead>
             <tr>
-              <th className="raw-litho-col raw-litho-col--index">Ins</th>
+              <th
+                className={HEADER_CELL}
+                style={{ width: rawLithoConfig.indexColumnWidth }}
+              >
+                Ins
+              </th>
 
               {tableColumns.map((column) => {
                 const isRequired = REQUIRED_COLUMN_KEYS.has(column.key);
@@ -327,12 +344,13 @@ function RawLithoTable({
                 return (
                   <th
                     key={column.key}
-                    className={buildHeaderClassName(column.key, isRequired)}
+                    className={HEADER_CELL}
+                    style={{ width: column.width }}
                   >
                     {column.label}
                     {isRequired && (
                       <abbr
-                        className="raw-litho-required-marker"
+                        className="ml-px cursor-help text-[0.85em] font-bold text-rl-required no-underline"
                         title="Required field"
                       >
                         *
@@ -369,9 +387,12 @@ function RawLithoTable({
         </table>
       </div>
 
-      <nav className="raw-litho-pagination" aria-label="Raw Litho table pages">
+      <nav
+        className="flex items-center justify-center gap-3 pt-2 max-sm:gap-2"
+        aria-label="Raw Litho table pages"
+      >
         <button
-          className="raw-litho-pagination-button"
+          className={PAGINATION_BUTTON}
           type="button"
           onClick={() => onPageChange(currentPage - 1)}
           disabled={currentPage <= 1}
@@ -380,17 +401,20 @@ function RawLithoTable({
           Previous
         </button>
 
-        <div className="raw-litho-pagination-status" aria-live="polite">
+        <div
+          className="grid min-w-[140px] gap-px text-center text-[0.8rem] font-semibold text-rl-text"
+          aria-live="polite"
+        >
           <span>
             Page {currentPage} of {totalPages}
           </span>
-          <span className="raw-litho-pagination-range">
+          <span className="text-[0.75rem] font-normal text-rl-text-muted">
             Rows {firstVisibleRow}–{lastVisibleRow} of {rows.length}
           </span>
         </div>
 
         <button
-          className="raw-litho-pagination-button"
+          className={PAGINATION_BUTTON}
           type="button"
           onClick={() => onPageChange(currentPage + 1)}
           disabled={currentPage >= totalPages}
@@ -400,14 +424,14 @@ function RawLithoTable({
         </button>
       </nav>
 
-      <div className="raw-litho-row-actions">
+      <div className="mt-2 flex gap-2">
         {/*
           Stays clickable while the page is enabled: `requestAddRow` is what
           reports the missing fields or the duplicate interval, so disabling the
           button would hide the reason the row was rejected.
         */}
         <button
-          className="raw-litho-row-action-button"
+          className={`${ROW_ACTION_BUTTON} ${OUTLINE_BUTTON_NAVY}`}
           type="button"
           onClick={requestAddRow}
           disabled={!isEnabled}
@@ -417,7 +441,7 @@ function RawLithoTable({
         </button>
 
         <button
-          className="raw-litho-row-action-button raw-litho-remove-row-button"
+          className={`${ROW_ACTION_BUTTON} text-rl-danger enabled:hover:border-rl-danger enabled:hover:bg-rl-danger enabled:hover:text-white enabled:active:bg-rl-danger-dark`}
           type="button"
           onClick={onRemoveLastRow}
           disabled={!canRemoveLastRow}
