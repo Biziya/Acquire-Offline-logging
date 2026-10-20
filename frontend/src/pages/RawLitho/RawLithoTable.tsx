@@ -71,8 +71,8 @@ const FALLBACK_FOCUS_FIELD = "lithoTo";
 const FIRST_COLUMN_KEY = tableColumns[0]?.key ?? null;
 const LAST_COLUMN_KEY = tableColumns[tableColumns.length - 1]?.key ?? null;
 
-const PAGINATION_BUTTON = `${OUTLINE_BUTTON} ${OUTLINE_BUTTON_NAVY} ${OUTLINE_BUTTON_DISABLED} h-7 min-w-[76px] px-2.5 text-[0.8rem] max-sm:min-w-0`;
-const ROW_ACTION_BUTTON = `${OUTLINE_BUTTON} ${OUTLINE_BUTTON_DISABLED} h-7 px-3 text-[0.8rem]`;
+const PAGINATION_BUTTON = `${OUTLINE_BUTTON} ${OUTLINE_BUTTON_NAVY} ${OUTLINE_BUTTON_DISABLED} h-8 min-w-[76px] px-2.5 text-[0.8rem] max-sm:min-w-0`;
+const ROW_ACTION_BUTTON = `${OUTLINE_BUTTON} ${OUTLINE_BUTTON_DISABLED} h-8 px-3 text-[0.8rem]`;
 
 function RawLithoTable({
   rows,
@@ -379,11 +379,11 @@ function RawLithoTable({
       </div>
 
       {/*
-        One bar under the table: row actions, pagination, then the page's own
-        controls (Save). Three columns keep the pagination centred on wide
-        screens; on narrow ones the groups wrap.
+        One bar under the table: row actions on the left, then pagination and
+        the page's own controls (Save JSON) pushed to the right. On narrow
+        screens the groups wrap instead of overflowing.
       */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pt-2 lg:grid lg:grid-cols-[1fr_auto_1fr]">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pt-2">
         <div className="flex gap-2">
           {/*
             Stays clickable while the page is enabled: `requestAddRow` is what
@@ -412,7 +412,7 @@ function RawLithoTable({
         </div>
 
         <nav
-          className="flex items-center justify-center gap-3 max-sm:gap-2 lg:justify-self-center"
+          className="ml-auto flex items-center gap-3 max-sm:gap-2"
           aria-label="Raw Litho table pages"
         >
           <button
@@ -449,7 +449,7 @@ function RawLithoTable({
         </nav>
 
         {footerEnd && (
-          <div className="ml-auto flex items-center gap-2 lg:justify-self-end">
+          <div className="flex items-center gap-2">
             {footerEnd}
           </div>
         )}

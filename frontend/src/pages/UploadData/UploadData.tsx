@@ -32,6 +32,7 @@ import {
   type UploadValidation,
 } from "./uploadDataValidation";
 import { uploadDataConfig } from "./config";
+import { useUploadDataDraft, type DraftSource } from "./useUploadDataDraft";
 import { useCurrentUser } from "../../hooks/useCurrentUser";
 import {
   BUTTON_PRIMARY,
@@ -44,6 +45,11 @@ import {
 } from "./uploadDataStyles";
 
 type StatusFilter = "all" | RowStatus;
+
+interface FileInfo {
+  name: string;
+  size: number;
+}
 
 const UNAVAILABLE = "Unavailable";
 const numberFormat = new Intl.NumberFormat("en-US");
@@ -118,7 +124,13 @@ function describeValidation(validation: UploadValidation | null) {
 }
 
 function UploadData() {
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  // Name and size of the loaded file; kept in the draft, so they survive a refresh.
+  const [selectedFile, setSelectedFile] = useState<FileInfo | null>(null);
+  /*
+   * The File itself, only while it was picked in this visit. A restored draft
+   * has none, so its upload is built from the working document instead.
+   */
+  const originalFileRef = useRef<File | null>(null);
   // The one working copy of the parsed file; edits replace it.
   const [workingDocument, setWorkingDocument] = useState<UploadDocument | null>(
     null,
@@ -143,10 +155,37 @@ function UploadData() {
   const fileSelectionIdRef = useRef(0);
 
   /*
+   * The working document is kept in IndexedDB (its own database, separate from
+   * Raw Litho) so it survives navigation and refresh. A saved draft is only
+   * restored when no file was picked while it was being read.
+   */
+  const draftSource = useMemo<DraftSource | null>(
+    () =>
+      selectedFile && workingDocument
+        ? {
+            fileName: selectedFile.name,
+            fileSize: selectedFile.size,
+            isEdited,
+            document: workingDocument,
+          }
+        : null,
+    [isEdited, selectedFile, workingDocument],
+  );
+  const draft = useUploadDataDraft(draftSource, (saved) => {
+    if (fileSelectionIdRef.current !== 0) return false;
+
+    originalFileRef.current = null;
+    setSelectedFile({ name: saved.fileName, size: saved.fileSize });
+    setWorkingDocument(saved.document);
+    setIsEdited(saved.isEdited);
+    setDatasetVersion((version) => version + 1);
+    return true;
+  });
+
+  /*
    * Lookup codes for validation and the cell suggestion lists. Fetched straight
-   * from the API: this page keeps nothing in IndexedDB or Local Storage. A
-   * lookup that fails stays "unavailable" and its codes are reported as not
-   * checked — never guessed.
+   * from the API, never cached by this page. A lookup that fails stays
+   * "unavailable" and its codes are reported as not checked — never guessed.
    */
   useEffect(() => {
     let isActive = true;
@@ -250,6 +289,7 @@ function UploadData() {
 
   function resetDataset() {
     setSelectedFile(null);
+    originalFileRef.current = null;
     setWorkingDocument(null);
     setIsEdited(false);
     setIsConfirmOpen(false);
@@ -293,7 +333,8 @@ function UploadData() {
         throw new Error("The JSON root must be an object");
       }
 
-      setSelectedFile(file);
+      originalFileRef.current = file;
+      setSelectedFile({ name: file.name, size: file.size });
       setWorkingDocument(dataset);
     } catch (error) {
       if (selectionId !== fileSelectionIdRef.current) {
@@ -302,7 +343,7 @@ function UploadData() {
 
       console.error("Unable to read the selected JSON dataset.", error);
       setFileError(
-        "Unable to read this JSON dataset. Please choose a valid file.",
+        "Invalid JSON file",
       );
     }
   };
@@ -335,9 +376,9 @@ function UploadData() {
     if (current.hasBlockingErrors) {
       setSuccessMessage("");
       setImportError(
-        `Fix the blocking errors before importing (${numberFormat.format(
-          current.counts.error,
-        )} invalid records). See the Validation Summary.`,
+        current.counts.error > 0
+          ? `Fix blocking errors (${numberFormat.format(current.counts.error)} invalid records)`
+          : "Fix blocking errors",
       );
       return;
     }
@@ -357,12 +398,15 @@ function UploadData() {
       return;
     }
 
-    // Unchanged: the original file. Edited: a file built from the working copy.
-    const file = isEdited
-      ? new File([serializeDocument(workingDocument)], selectedFile.name, {
-          type: "application/json",
-        })
-      : selectedFile;
+    // Unchanged in this visit: the original file. Edited or restored from the
+    // draft: a file built from the working copy, under the original name.
+    const originalFile = originalFileRef.current;
+    const file =
+      isEdited || !originalFile
+        ? new File([serializeDocument(workingDocument)], selectedFile.name, {
+            type: "application/json",
+          })
+        : originalFile;
 
     const controller = new AbortController();
     requestControllerRef.current = controller;
@@ -373,12 +417,16 @@ function UploadData() {
 
     try {
       const response = await importUploadData(file, controller.signal);
-      if (requestControllerRef.current === controller)
-        setSuccessMessage(response.message || "Data imported successfully.");
+      if (requestControllerRef.current === controller) {
+        // Confirmed by the backend: the draft is done. Resetting the dataset
+        // also deletes it from IndexedDB.
+        resetDataset();
+        setSuccessMessage(response.message || "Upload complete");
+      }
     } catch (error) {
       if (requestControllerRef.current === controller && !isAbortError(error)) {
         setImportError(
-          errorMessage(error) || "Unable to import the selected data.",
+          errorMessage(error) || "Upload failed",
         );
       }
     } finally {
@@ -432,9 +480,14 @@ function UploadData() {
                 Editable JSON Preview
               </h2>
               <p className={SECTION_TEXT}>
-                Review and correct records before import. Changes stay on this
-                page only; Cancel or a refresh discards them.
+                Review and correct records before import. Changes are kept on
+                this device until the import succeeds or you Cancel.
               </p>
+              {draft.saveFailed && (
+                <p className="m-0 mt-1 text-[0.8rem] text-[#b42318]" role="status">
+                  Draft not saved
+                </p>
+              )}
             </div>
           </div>
 
@@ -493,7 +546,9 @@ function UploadData() {
             </>
           ) : (
             <p className="m-0 text-[0.9rem] text-[#738095]">
-              Select a JSON file to preview its records.
+              {draft.isRestoring
+                ? "Restoring saved data…"
+                : "Select a JSON file to preview its records."}
             </p>
           )}
         </section>

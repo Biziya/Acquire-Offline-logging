@@ -172,29 +172,9 @@ function RawLitho() {
         />
       )}
 
-      <div className="mb-1.5 flex items-center justify-between gap-3">
-        <h1 className="m-0 text-[1.3rem] font-[650] tracking-[-0.01em] text-rl-navy">
-          {rawLithoConfig.title}
-        </h1>
-
-        <button
-          className={`${OUTLINE_BUTTON} ${OUTLINE_BUTTON_NAVY} h-[30px] px-3 disabled:cursor-not-allowed disabled:opacity-55`}
-          type="button"
-          onClick={importer.openFilePicker}
-          disabled={!canImport}
-        >
-          Import JSON
-        </button>
-
-        <input
-          ref={importer.fileInputRef}
-          className="hidden"
-          type="file"
-          accept=".json,application/json"
-          onChange={importer.selectFile}
-          disabled={!canImport}
-        />
-      </div>
+      <h1 className="m-0 mb-1 text-[1.3rem] font-[650] tracking-[-0.01em] text-rl-navy">
+        {rawLithoConfig.title}
+      </h1>
 
       <RawLithoFilters
         drillholes={drillholes}
@@ -203,6 +183,27 @@ function RawLitho() {
         isLoading={isLoading}
         error={error}
         onDrillholeChange={handleDrillholeChange}
+        actions={
+          <>
+            <button
+              className={`${OUTLINE_BUTTON} ${OUTLINE_BUTTON_NAVY} h-[30px] px-3 disabled:cursor-not-allowed disabled:opacity-55`}
+              type="button"
+              onClick={importer.openFilePicker}
+              disabled={!canImport}
+            >
+              Import JSON
+            </button>
+
+            <input
+              ref={importer.fileInputRef}
+              className="hidden"
+              type="file"
+              accept=".json,application/json"
+              onChange={importer.selectFile}
+              disabled={!canImport}
+            />
+          </>
+        }
       />
 
       <RawLithoTable
@@ -229,7 +230,7 @@ function RawLitho() {
             onClick={handleSave}
             disabled={!isPageEnabled || isSaving}
           >
-            {isSaving ? "Saving…" : "Save"}
+            {isSaving ? "Saving…" : "Save JSON"}
           </button>
         }
       />

@@ -101,7 +101,7 @@ export function useRawLithoLookups() {
           isLoading: false,
           error: hasCachedRecords
             ? ""
-            : `${lookup.label} lookup data is unavailable offline`,
+            : `${lookup.label} unavailable`,
           source: hasCachedRecords ? "cache" : null,
         });
       }

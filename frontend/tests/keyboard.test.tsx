@@ -108,6 +108,58 @@ describe("autocomplete and focus", () => {
       expect(input).toHaveAttribute("aria-invalid", "false");
     },
   );
+  it.each([
+    ["{Tab}", "After"],
+    ["{Shift>}{Tab}{/Shift}", "Before"],
+    ["{ArrowRight}", "After"],
+    ["{ArrowLeft}", "Before"],
+  ])(
+    "accepts the highlighted suggestion of an empty cell with %s and focuses %s",
+    async (keys, label) => {
+      const user = userEvent.setup();
+      const change = vi.fn();
+      render(<AutocompleteHarness onChange={change} />);
+      const input = screen.getByRole("combobox");
+      await user.click(input);
+      expect(input).toHaveValue("");
+      expect(screen.getByRole("option", { name: "Unknown" })).toHaveClass(
+        "raw-litho-lookup-suggestion--active",
+      );
+
+      await user.keyboard(keys);
+      expect(input).toHaveValue("Unknown");
+      expect(change).toHaveBeenCalledTimes(1);
+      expect(change).toHaveBeenLastCalledWith("Unknown");
+      expect(screen.getByLabelText(label)).toHaveFocus();
+      expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+      expect(input).toHaveAttribute("aria-invalid", "false");
+    },
+  );
+  it("keeps an existing value and leaves a cleared cell empty", async () => {
+    const user = userEvent.setup();
+    const change = vi.fn();
+    render(<AutocompleteHarness onChange={change} />);
+    const input = screen.getByRole("combobox");
+    await user.type(input, "Other{Enter}");
+    change.mockClear();
+
+    // Clicked into a filled cell: the list is open, but the value stays.
+    await user.click(screen.getByLabelText("Before"));
+    await user.click(input);
+    expect(screen.getByRole("listbox")).toBeInTheDocument();
+    await user.keyboard("{End}{ArrowRight}");
+    expect(input).toHaveValue("Other");
+    expect(screen.getByLabelText("After")).toHaveFocus();
+    expect(change).not.toHaveBeenCalled();
+
+    // Delete empties the cell; leaving it must not refill it.
+    await user.click(input);
+    await user.keyboard("{End}{Delete}");
+    expect(change).toHaveBeenLastCalledWith("");
+    await user.tab();
+    expect(input).toHaveValue("");
+    expect(change).toHaveBeenLastCalledWith("");
+  });
   it("Tab never commits an unmatched query and leaves an untouched value alone", async () => {
     const user = userEvent.setup();
     const change = vi.fn();

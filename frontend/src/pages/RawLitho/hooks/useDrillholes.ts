@@ -22,7 +22,7 @@ import {
 } from "../drillholeOrdering";
 import { TOAST_NOTIFICATIONS } from "../constants";
 
-const OFFLINE_MESSAGE = "Drillhole data is unavailable offline.";
+const OFFLINE_MESSAGE = "Drillhole data unavailable";
 
 function cacheDrillholes(
   records: Drillhole[],

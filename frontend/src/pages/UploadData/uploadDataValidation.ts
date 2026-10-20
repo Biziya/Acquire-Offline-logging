@@ -254,9 +254,9 @@ export function validateUploadDocument(
     );
     documentIssues.push({
       severity: "warning",
-      message: `${loading ? "Still loading" : "Lookup data unavailable for"} ${unchecked
-        .map((lookup) => lookup.label)
-        .join(", ")}: these codes are not checked.`,
+      message: loading
+        ? "Lookup data loading; codes not checked."
+        : "Lookup data unavailable; codes not checked.",
     });
   }
 

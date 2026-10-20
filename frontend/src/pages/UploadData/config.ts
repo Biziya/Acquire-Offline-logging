@@ -8,6 +8,7 @@ export function readUploadDataConfig(text: string) {
   const reader = createConfigReader(text, "UploadData/config.yaml");
   const table = reader.section(reader.root.table, "table");
   const search = reader.section(reader.root.search, "search");
+  const draft = reader.section(reader.root.draft, "draft");
   const maxHeightVh = reader.integer(table.maxHeightVh, "table.maxHeightVh");
   if (maxHeightVh > 100)
     reader.fail("table.maxHeightVh", "must be at most 100 (percent).");
@@ -36,6 +37,11 @@ export function readUploadDataConfig(text: string) {
     searchDebounceMs: reader.integer(
       search.debounceMs,
       "search.debounceMs",
+      0,
+    ),
+    draftSaveDebounceMs: reader.integer(
+      draft.saveDebounceMs,
+      "draft.saveDebounceMs",
       0,
     ),
   };

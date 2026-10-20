@@ -18,7 +18,8 @@ services/
 │   ├── drillholeCacheDb.ts       drillholeCache store
 │   ├── recentDrillholesDb.ts     recently selected drillholes (session store)
 │   ├── rawLithoLookupCacheDb.ts  separate raw-litho-lookup-cache-db
-│   └── rawExtractionDraftDb.ts   raw-extraction-db (unrouted page)
+│   ├── rawExtractionDraftDb.ts   raw-extraction-db (unrouted page)
+│   └── uploadDataDraftDb.ts      separate upload-data-db (Upload Data draft)
 ├── rawLithoLookupConfig.ts       single source of truth for all 11 lookups
 └── README.md
 ```
@@ -65,9 +66,9 @@ Anything else throws, which the indicator treats as offline.
 
 `importUploadData(file, signal)` POSTs `multipart/form-data` with the file under
 the field name `file`. Network failures become
-"Unable to connect to the server. Please try again."; `AbortError` is re-thrown
+"Server unavailable"; `AbortError` is re-thrown
 untouched. Error text is read from `detail`, `message`, or `title`, or from a
-plain-text body.
+plain-text body, falling back to "Upload failed".
 
 ## IndexDB/
 
@@ -121,6 +122,16 @@ Note that `raw-litho-db` also declares an unused `rawLithoLookupCache` store.
 
 Serves the unrouted `RawExtraction.tsx`. Own database, single `"current"` key,
 and a promise chain that serialises writes.
+
+### `uploadDataDraftDb.ts`
+
+Upload Data's working document. Its own database (`upload-data-db`, store
+`drafts`, single `"current"` key) so it never touches the Raw Litho schema.
+The value is `{ fileName, fileSize, isEdited, document, savedAt }`; the parsed
+document is stored as-is (structured clone), never re-serialised to JSON.
+`writeUploadDataDraft` and `clearUploadDataDraft` share one promise chain, so a
+Cancel issued during a save always wins; `readUploadDataDraft` waits for that
+chain first.
 
 ## rawLithoLookupConfig.ts
 

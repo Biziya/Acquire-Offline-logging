@@ -27,7 +27,7 @@ function getErrorMessage(body: unknown): string {
       if (typeof value === "string" && value.trim()) return value;
     }
   }
-  return "Unable to import the selected data. Please try again.";
+  return "Upload failed";
 }
 
 export async function importUploadData(
@@ -49,7 +49,7 @@ export async function importUploadData(
       throw error;
     }
 
-    throw new Error("Unable to connect to the server. Please try again.", {
+    throw new Error("Server unavailable", {
       cause: error,
     });
   }
@@ -66,7 +66,7 @@ export async function importUploadData(
 
   if (!isRecord(body)) return {};
   if (body.message !== undefined && typeof body.message !== "string")
-    throw new Error("Invalid upload response message.");
+    throw new Error("Invalid upload response");
   return {
     ...body,
     message: typeof body.message === "string" ? body.message : undefined,

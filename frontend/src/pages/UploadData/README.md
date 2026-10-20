@@ -6,15 +6,43 @@ Route: `/upload-data`
 
 Loads a Raw Litho JSON export, lets the user review and correct every record in
 an editable, virtualized table, validates the result, and uploads it to
-`POST /api/uploaddata`. Nothing is stored: edits live in memory and are cleared
-by **Cancel**, choosing another file, or a page refresh. The page uses no
-IndexedDB and no Local Storage.
+`POST /api/uploaddata`. The loaded file and every edit are kept in IndexedDB,
+so they survive navigating to another page and a browser refresh; they are
+cleared by **Cancel**, choosing another file, or a confirmed successful upload.
+See *Draft persistence* below.
+
+## Draft persistence
+
+```text
+mount        → readUploadDataDraft()          nothing saved or deleted before this finishes
+  draft found, no file picked meanwhile → restore file name/size, document, Edited flag
+file loaded  → write at once
+cell edited  → write after draft.saveDebounceMs (config.yaml), not per keystroke
+leave page   → pending write flushed on unmount and on `pagehide` (refresh / close)
+Cancel       → abort request, reset page, delete draft
+upload ok    → reset page, delete draft, success message
+upload fails → draft and edits kept; retry with Import Data
+```
+
+- Storage: `services/IndexDB/uploadDataDraftDb.ts` — its own `upload-data-db`
+  database, independent of Raw Litho's `raw-litho-db`.
+- Logic: `useUploadDataDraft.ts`. The whole working document is one write; edits
+  only copy changed rows (`applyCellEdits`), and the document object is stored
+  without re-serialising it to JSON.
+- Restored: file name and size, Project / Campaign / Drillhole / Created By and
+  every other key (they live in the document), record order and ids, edits, and
+  the Edited flag. Validation is recalculated; Imported By comes from the
+  current trusted identity, never from the draft.
+- Upload of a restored draft: the original `File` object is gone, so the upload
+  is built from the latest working document under the original file name.
+- A failed save shows "Draft not saved" under the preview heading and is retried
+  with the next change; the working copy in memory is unaffected.
 
 ## Folder tree
 
 ```text
 UploadData/
-├── config.yaml              title, table sizes, columns, search debounce
+├── config.yaml              title, table sizes, columns, search and draft debounce
 ├── config.ts                typed, validated copy of config.yaml
 ├── DatasetSummary.tsx       2. Dataset Information
 ├── README.md                this file
@@ -23,6 +51,7 @@ UploadData/
 ├── uploadDataDocument.ts    the working document and its edit function
 ├── uploadDataStyles.ts      Tailwind class lists shared by the sections
 ├── uploadDataValidation.ts  pure validation of the working document
+├── useUploadDataDraft.ts    IndexedDB draft: restore, debounced save, clear
 ├── UploadFileSection.tsx    1. File Selection
 └── ValidationSummary.tsx    4. Validation Summary
 ```
@@ -202,16 +231,16 @@ with the messages as a tooltip, and the summary shows the counts.
 Import Data → handleImportRequest()   re-validate; blocking errors → message, stop
             → confirmation panel      "Import N records?"  Back / Confirm import
 Confirm     → handleImport()
-  unchanged → the original file
-  edited    → new File(JSON.stringify(workingDocument, null, 2), same name)
+  unchanged → the original file (picked in this visit)
+  edited or restored → new File(JSON.stringify(workingDocument, null, 2), same name)
   POST /api/uploaddata   multipart/form-data, field "file"
-    ok    → success message (only after the server confirms)
-    error → server message
+    ok    → reset the page, delete the draft, success message (only after the server confirms)
+    error → server message; the draft and edits are kept for a retry
     abort → ignored
 ```
 
 The request carries an `AbortController` signal; a second click cannot submit
-twice, and **Cancel** aborts an in-flight upload and clears the page. File reads
+twice, and **Cancel** aborts an in-flight upload, clears the page and deletes the draft. File reads
 are guarded by `fileSelectionIdRef`, so a slow read of an older selection never
 replaces a newer one.
 
@@ -231,7 +260,7 @@ in the error.
 | Question | Answer |
 | --- | --- |
 | Which API does this page call? | `POST /api/uploaddata`, plus the lookup `GET`s for validation |
-| What is persisted? | Nothing |
+| What is persisted? | The working document (IndexedDB `upload-data-db`) until Cancel or a successful upload |
 | Where are the rules? | `uploadDataValidation.ts` |
 | Where is an edit applied? | `applyCellEdits` in `uploadDataDocument.ts` |
 | Which file is uploaded? | The original when unchanged, otherwise the serialized working document |
@@ -254,3 +283,6 @@ in the error.
 9. Search and filter by status → the count updates; a record being fixed stays visible.
 10. Import unchanged → the original file is sent; edit then import → the edited JSON is sent (check the request payload).
 11. Start an import and press Cancel → the request aborts and the page resets.
+12. Load a file, edit a cell, open another page and come back → file name, record count, metadata and the edit are restored; refresh the browser → the same.
+13. Import a restored draft → the edited JSON is sent under the original file name; on success the page resets and the draft is gone (reload shows the empty zone).
+14. Stop the backend and import → the error shows; reload → the draft and edits are still there.

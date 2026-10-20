@@ -47,3 +47,8 @@ table:
 
 search:
   debounceMs: 200        # wait after the last keystroke before filtering
+
+draft:
+  # The loaded file and its edits are kept in IndexedDB (upload-data-db) so
+  # they survive navigation and refresh. Edits are written once typing pauses.
+  saveDebounceMs: 800    # wait after the last edit before saving the draft

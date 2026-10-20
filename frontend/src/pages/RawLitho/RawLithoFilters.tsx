@@ -1,5 +1,5 @@
 import type { Drillhole } from "../../types/domain";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   FIELD,
   FIELD_CONTROL,
@@ -14,6 +14,8 @@ interface RawLithoFiltersProps {
   isLoading: boolean;
   error: string;
   onDrillholeChange: (holeId: string) => void;
+  /* Rendered at the right end of the row (Import JSON). */
+  actions?: ReactNode;
 }
 
 
@@ -55,6 +57,7 @@ function RawLithoFilters({
   isLoading,
   error,
   onDrillholeChange,
+  actions,
 }: RawLithoFiltersProps) {
   const [query, setQuery] = useState("");
   const [isSuggestionListOpen, setIsSuggestionListOpen] = useState(false);
@@ -94,7 +97,7 @@ function RawLithoFilters({
   if (isLoading) {
     placeholder = "Loading drillholes...";
   } else if (error) {
-    placeholder = "Drillhole data is unavailable";
+    placeholder = "Drillholes unavailable";
   } else if (drillholes.length === 0) {
     placeholder = "No drillholes available";
   }
@@ -185,14 +188,14 @@ function RawLithoFilters({
   const showChevron = !showClearButton && !isDisabled;
 
   return (
-    <div className="mb-2 flex flex-wrap gap-3">
+    <div className="mb-2 flex flex-wrap items-start gap-x-3 gap-y-2">
       <div className={FIELD}>
         <label className={FIELD_LABEL} htmlFor="drillhole-search">
           Drillhole
         </label>
 
         <div
-          className={`relative min-w-[min(190px,100%)]${showChevron ? ` ${CHEVRON}` : ""}`}
+          className={`relative w-[min(260px,100%)]${showChevron ? ` ${CHEVRON}` : ""}`}
         >
           <input
             id="drillhole-search"
@@ -302,6 +305,13 @@ function RawLithoFilters({
           {selectedDrillhole?.campaign || "—"}
         </output>
       </div>
+
+      {actions && (
+        <div className={`${FIELD} ml-auto`}>
+          <span className={FIELD_LABEL}>Import</span>
+          <div className="flex items-center gap-2">{actions}</div>
+        </div>
+      )}
     </div>
   );
 }

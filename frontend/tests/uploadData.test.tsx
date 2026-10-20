@@ -10,6 +10,10 @@ import {
   validateUploadDocument,
   type UploadLookups,
 } from "../src/pages/UploadData/uploadDataValidation";
+import {
+  clearUploadDataDraft,
+  readUploadDataDraft,
+} from "../src/services/IndexDB/uploadDataDraftDb";
 
 vi.mock("../src/services/Api/uploadData", () => ({
   importUploadData: vi.fn(async () => ({ message: "Upload confirmed" })),
@@ -49,6 +53,9 @@ function uploadDocument() {
 }
 
 stubDesktopViewport();
+
+// Each test starts without a saved Upload Data draft.
+beforeEach(() => clearUploadDataDraft());
 
 const unavailable: UploadLookups = { records: {}, state: {} };
 
@@ -164,7 +171,7 @@ describe("Upload Data page", () => {
     });
     await user.click(screen.getByRole("button", { name: "Import Data" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Fix the blocking errors",
+      "Fix blocking errors",
     );
     expect(screen.queryByRole("button", { name: "Confirm import" })).toBeNull();
     expect(importUploadData).not.toHaveBeenCalled();
@@ -197,7 +204,7 @@ describe("Upload Data page", () => {
       target: { files: [new File(["{"], "bad.json", { type: "application/json" })] },
     });
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Unable to read this JSON dataset",
+      "Invalid JSON file",
     );
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Import Data" })).toBeDisabled(),
@@ -272,7 +279,7 @@ describe("Upload Data drag and drop", () => {
 
     // An unreadable replacement shows the error, not a success state.
     fireEvent.drop(zone(), drag([new File(["{"], "broken.json", { type: "application/json" })]));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Unable to read this JSON dataset");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Invalid JSON file");
     expect(within(zone()).queryByText("JSON File Loaded")).toBeNull();
 
     fireEvent.drop(zone(), drag([jsonFile(uploadDocument())]));
@@ -333,5 +340,82 @@ describe("Upload Data creator and importer", () => {
     const json = JSON.parse(await uploaded.text());
     expect(json.created_by).toBe(CREATOR);
     expect(JSON.stringify(json)).not.toContain("uploader");
+  });
+});
+
+describe("Upload Data draft persistence", () => {
+  const CREATOR = "CORP\\creator";
+  beforeEach(() => vi.mocked(importUploadData).mockClear());
+
+  const zone = () => screen.getByTestId("upload-drop-zone");
+  const comment = (record: number) =>
+    screen.getByLabelText(`Lithology Comments, record ${record}`);
+
+  async function loadAndEdit() {
+    const view = render(<UploadData />);
+    await loadFile(jsonFile({ ...uploadDocument(), created_by: CREATOR }));
+    fireEvent.change(comment(2), { target: { value: "kept edit" } });
+    return view;
+  }
+
+  it("restores the file, metadata and edits after leaving the page", async () => {
+    const first = await loadAndEdit();
+    // Navigating away unmounts the page and flushes the pending edit.
+    first.unmount();
+
+    render(<UploadData />);
+    expect(await screen.findByLabelText("Lithology Comments, record 2")).toHaveValue(
+      "kept edit",
+    );
+    expect(within(zone()).getByText("upload.json")).toBeInTheDocument();
+    expect(within(zone()).getByText("2 records")).toBeInTheDocument();
+    expect(
+      screen.getByText("Created By", { selector: "dt" }).nextElementSibling,
+    ).toHaveTextContent(CREATOR);
+    expect(screen.getByText("Edited")).toBeInTheDocument();
+  });
+
+  it("uploads the restored working document, then clears the draft", async () => {
+    const user = userEvent.setup();
+    (await loadAndEdit()).unmount();
+    render(<UploadData />);
+    await screen.findByLabelText("Lithology Comments, record 1");
+
+    await confirmImport(user);
+    const uploaded = vi.mocked(importUploadData).mock.calls[0]?.[0] as File;
+    expect(uploaded.name).toBe("upload.json");
+    const json = JSON.parse(await uploaded.text());
+    expect(json.rows[1].lithologyComments).toBe("kept edit");
+    expect(json.extraMetadata).toBe("kept");
+
+    expect(await screen.findByText("Upload confirmed")).toBeInTheDocument();
+    expect(within(zone()).getByText("Drag and drop your JSON file")).toBeInTheDocument();
+    await waitFor(async () => expect(await readUploadDataDraft()).toBeNull());
+  });
+
+  it("keeps the draft when the upload fails", async () => {
+    vi.mocked(importUploadData).mockRejectedValueOnce(new Error("Server unavailable"));
+    const user = userEvent.setup();
+    await loadAndEdit();
+
+    await confirmImport(user);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Server unavailable");
+    expect(comment(2)).toHaveValue("kept edit");
+    await waitFor(async () =>
+      expect((await readUploadDataDraft())?.document.rows).toEqual([
+        row(1, 0, 10),
+        { ...row(2, 10, 20), lithologyComments: "kept edit" },
+      ]),
+      { timeout: 3000 },
+    );
+  });
+
+  it("Cancel clears the saved draft", async () => {
+    const user = userEvent.setup();
+    await loadAndEdit();
+    await waitFor(async () => expect(await readUploadDataDraft()).not.toBeNull());
+
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(async () => expect(await readUploadDataDraft()).toBeNull());
   });
 });

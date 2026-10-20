@@ -15,7 +15,7 @@ responsible for:
 - keyboard-first navigation and shortcuts,
 - restoring the last drillhole and page after navigating away,
 - importing a JSON document (behind a confirmation dialog),
-- exporting the current document as a JSON file on Save.
+- exporting the current document as a JSON file on Save JSON.
 
 The page never writes rows to the backend. All ten backend endpoints it uses are
 read-only.
@@ -635,7 +635,7 @@ which stays swallowed.
 | --- | --- |
 | `←` / `→` | Move to the previous / next editable cell, but only when the caret is at the edge of the current value, so normal text editing still works. Disabled cells are skipped, the end of a row continues on the next row (and the start on the previous row), and the edge of a page continues on the adjacent page. |
 | `Tab` / `Shift`+`Tab` | Exactly like `→` / `←`, except that they always leave the cell regardless of the caret. In a lookup cell the value is settled by `finishEditing()` first, as before. `Shift`+`Tab` from the very first cell leaves the table normally. |
-| `←` / `→` / `Tab` / `Shift`+`Tab` while typing in a lookup cell | Accept the highlighted closest match, close the dropdown and move one cell left / right. See *Fast accept* below. |
+| `←` / `→` / `Tab` / `Shift`+`Tab` in a lookup cell with an open dropdown (typed or empty) | Accept the highlighted suggestion, close the dropdown and move one cell left / right. See *Fast accept* below. |
 | `↑` / `↓` | Move one cell vertically in the same column. On `number` inputs the default spinner behaviour is suppressed. Never moves the highlight inside a dropdown. |
 | `↓` on the last row | No cell below, so the table creates the next row and focuses it — from a lookup cell as well as a plain one. |
 | `Tab` from the last cell of the last row | Creates the next row and focuses its first cell. |
@@ -718,12 +718,15 @@ Accepted pastes keep row ids and whole row objects, are re-sorted by
 ### Fast accept: `→` / `←` / `Tab` / `Shift`+`Tab` in a lookup cell
 
 Typing filters the list and the closest match is highlighted automatically
-(ranked exact → prefix → substring, so an exact match always wins). `→`, `←`,
-`Tab` and `Shift`+`Tab` all take that match through the same
-`acceptClosestMatch` — there is no second matching algorithm:
+(ranked exact → prefix → substring, so an exact match always wins). An empty
+cell whose dropdown is open highlights the first value. `→`, `←`, `Tab` and
+`Shift`+`Tab` all take the highlighted suggestion through the same
+`acceptClosestMatch` — there is no second matching algorithm. **The highlight
+decides, not whether anything was typed:**
 
 ```text
-type "Unk" → "Unknown" is highlighted
+type "Unk" → "Unknown" is highlighted          (partly typed)
+click an empty cell → "Unknown" is highlighted (nothing typed)
   →  commit "Unknown", close the dropdown, focus the NEXT cell
   ←  commit "Unknown", close the dropdown, focus the PREVIOUS cell
   Tab        same as →
@@ -735,14 +738,22 @@ page, otherwise the table crosses the page or — `Tab` only, never
 `Shift`+`Tab` — appends a row after the usual validation. The accepted value
 is committed before focus moves, so row creation sees it.
 
-Two guards keep it out of the way of everything else:
+Three guards keep it out of the way of everything else:
 
-- **Nothing valid to accept** — no typed text, or no matching option — and the
-  key falls through to ordinary cell navigation. A wrong value is never written.
-- **The user has not typed in this cell** (`isSearching` is false, e.g. focus
-  just arrived on a cell that already holds a value) and `←` / `→` keep their
+- **Nothing valid to accept** — the dropdown is closed (e.g. focus arrived by
+  keyboard navigation), or no option matches — and the key falls through to
+  ordinary cell navigation. A wrong value is never written.
+- **The cell already holds a value the user has not typed into**
+  (`isSearching` is false and the text is not empty) and `←` / `→` keep their
   caret-edge behaviour, so an existing value can still be read and edited;
   `Tab` / `Shift`+`Tab` simply move on without touching the value.
+- **The cell was just emptied with `Delete`** (`wasCleared`). The dropdown
+  reopens on every value, but the user asked for an empty cell, so leaving it
+  does not refill it. Typing or refocusing ends this state.
+
+Before this fix the first guard also required typed text (`query.trim()`) and
+`isSearching`, so an empty cell with an open, highlighted list let focus move
+on and left the cell empty.
 
 The full-value routes are untouched: type the whole code and press `Enter` or
 `Tab` (an exact match ranks first, so it is kept), or click an option.
@@ -860,13 +871,22 @@ Clearing the selection removes the active session record.
 
 ### Layout
 
-The page is a full-height flex column: title and Import JSON, then the
-drillhole / Project / Campaign row, then the table, which takes all the
-remaining height (`flex-1`) and scrolls its rows inside its frame with the
-header sticky. Under it a single bar holds everything else: Add Row and Remove
-Last Row on the left, pagination centred, and Save on the right. On narrow
-screens the three groups wrap. No height is fixed, so the table grows and
-shrinks with the window.
+The page is a full-height flex column: the title, then one row with Drillhole
+(the widest control), the read-only Project and Campaign, and Import JSON
+right-aligned (passed to `RawLithoFilters` as `actions`), then the table, which
+takes all the remaining height (`flex-1`) and scrolls its rows inside its frame
+with the header sticky. Under it a single bar holds everything else: Add Row
+and Remove Last Row on the left; Previous, the page counter, Next and Save JSON
+pushed to the right. All header controls are 30 px high and all bar buttons
+32 px. On narrow screens the groups wrap instead of scrolling sideways. No
+height is fixed, so the table grows and shrinks with the window.
+
+```text
+Drillhole               Project     Campaign                    Import
+[ Select Drillhole ▼ ]  [ P ]       [ C ]                [ Import JSON ]
+
+[ Add Row (F4) ] [ Remove Last Row (F5) ]   [ Previous ] Page 1 of 5 [ Next ] [ Save JSON ]
+```
 
 ### Created by (`created_by`)
 
@@ -906,7 +926,7 @@ The document has an optional top-level `created_by`, the Windows domain user
 - An imported `created_by` that is not text is rejected.
 - The backend ignores the field on upload.
 
-The Save button validates lookup codes, stamps `modified_at`, stages the snapshot,
+The Save JSON button validates lookup codes, stamps `modified_at`, stages the snapshot,
 flushes pending saves and downloads `<drillhole>.json`. Export is still attempted
 if IndexedDB saving fails, and the pending document is retained for retry.
 
@@ -1021,7 +1041,7 @@ for each lookup:
   fetch the endpoint
     success → replace records, isLoading false, source "backend", refresh the cache
     failure → keep cached records and clear the error,
-              or show "<label> lookup data is unavailable offline"
+              or show "<label> unavailable"
 ```
 
 Granulo and Hardness are local (`source: "local"`, digits 0–9) and skip both the
@@ -1266,7 +1286,7 @@ handleSave   see "Save button" above
 28. Navigate away and back → the same drillhole, rows, order and page are restored.
 29. Reload after a successful save → the last change and row order are intact. Pagehide flushing of pending edits is best effort.
 30. Clear the drillhole, import a JSON file whose rows are out of order, cancel the dialog → nothing changes; import again and confirm → the rows appear sorted.
-31. Press Save → `<drillhole>.json` downloads with rows in Litho From order and "Changes saved" appears.
+31. Press Save JSON → `<drillhole>.json` downloads with rows in Litho From order and "Changes saved" appears.
 32. Press `Tab` / `Shift`+`Tab` across a row → focus moves exactly like `→` / `←`, skips disabled lookups, wraps to the next / previous row, and crosses from row 50 to row 51 on the next page and back.
 33. Type `Fine grained  sandstone ` (double space, trailing space) in Lithology Comments → every space stays; reload, then Save and re-import the JSON → still identical.
 34. `Ctrl`+click three cells in different rows → all highlighted; `Ctrl`+click one again → deselected; click any other cell → selection cleared.

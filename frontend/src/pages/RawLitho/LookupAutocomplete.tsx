@@ -80,8 +80,8 @@ function LookupAutocomplete({
   /*
    * True from the first keystroke until the value settles. It is what separates
    * "searching the list" from "sitting in a cell that already has a value":
-   * only while searching do ArrowLeft / ArrowRight accept the highlighted match
-   * instead of moving the caret.
+   * a filled cell only accepts the highlighted match on ArrowLeft / ArrowRight
+   * while searching; otherwise those keys move the caret.
    */
   const isSearching = useRef(false);
   /*
@@ -90,6 +90,12 @@ function LookupAutocomplete({
    * so `finishEditing` would still see the partial query and flag it invalid.
    */
   const isAcceptingMatch = useRef(false);
+  /*
+   * Set when Delete empties the cell. The list reopens on every value, but the
+   * user asked for an empty cell, so leaving it must not refill it with the
+   * first suggestion. Typing or refocusing ends it.
+   */
+  const wasCleared = useRef(false);
   const [query, setQuery] = useState(() => toInputValue(value));
   const [isOpen, setIsOpen] = useState(false);
   const [showInvalidSelection, setShowInvalidSelection] = useState(false);
@@ -228,6 +234,7 @@ function LookupAutocomplete({
     }
 
     isSearching.current = true;
+    wasCleared.current = false;
     setQuery(nextQuery);
     openDropdown();
     setShowInvalidSelection(false);
@@ -240,6 +247,7 @@ function LookupAutocomplete({
 
   function clearCellValue() {
     isSearching.current = false;
+    wasCleared.current = true;
     setQuery("");
     setShowInvalidSelection(false);
     openDropdown();
@@ -269,23 +277,27 @@ function LookupAutocomplete({
   }
 
   /*
-   * Fast accept. While the user is searching, ArrowRight / ArrowLeft / Tab /
-   * Shift + Tab take the highlighted closest match, close the list and move one
-   * cell right / left, so a partially typed code never has to be finished by
-   * hand.
+   * Fast accept. While the open list highlights a suggestion, ArrowRight /
+   * ArrowLeft / Tab / Shift + Tab take it, close the list and move one cell
+   * right / left, so a code never has to be finished by hand.
+   *
+   * The highlight decides, not whether anything was typed: an empty cell whose
+   * open list highlights "Unknown" accepts "Unknown". The one exception is a
+   * cell that already holds a value and has not been typed into — it is left
+   * to `handleCellNavigation`, which keeps the ordinary caret-edge behaviour
+   * for reading and editing an existing value.
    *
    * It only fires when there is something valid to accept, so a query with no
-   * match can never write a wrong value into the cell. A cell the user has not
-   * typed into is left to `handleCellNavigation`, which keeps the ordinary
-   * caret-edge behaviour for reading and editing an existing value.
+   * match can never write a wrong value into the cell.
    */
   function acceptClosestMatch(event: React.KeyboardEvent<HTMLInputElement>) {
     const isTab = event.key === "Tab";
 
     if (isTab ? event.altKey || event.ctrlKey || event.metaKey : hasModifier(event))
       return false;
-    if (!isSearching.current || !showSuggestions) return false;
-    if (!query.trim() || !highlightedSuggestion) return false;
+    if (!showSuggestions || !highlightedSuggestion) return false;
+    if (!isSearching.current && (query.trim() || wasCleared.current))
+      return false;
 
     selectSuggestion(highlightedSuggestion);
     isAcceptingMatch.current = true;
@@ -378,6 +390,7 @@ function LookupAutocomplete({
 
   function handleFocus() {
     isSearching.current = false;
+    wasCleared.current = false;
     isAcceptingMatch.current = false;
 
     if (isNavigationFocus()) return;
