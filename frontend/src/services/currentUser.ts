@@ -47,8 +47,24 @@ async function requestCurrentUser(): Promise<string | null> {
   }
 }
 
-/* Asked once per page load; every caller shares the same answer. */
+/* False when no identity endpoint is configured, so there is nothing to retry. */
+export function isCurrentUserLookupEnabled() {
+  return CURRENT_USER_PATH !== "";
+}
+
+/*
+ * Callers share one request. A verified name is kept for the rest of the page
+ * load; a failed lookup (backend not started yet, 401, network error) is
+ * forgotten, so the next call asks again instead of staying empty until a
+ * refresh.
+ */
 export function getCurrentWindowsUser(): Promise<string | null> {
-  request ??= requestCurrentUser();
+  if (!request) {
+    const pending = requestCurrentUser();
+    request = pending;
+    pending.then((name) => {
+      if (name === null && request === pending) request = null;
+    });
+  }
   return request;
 }

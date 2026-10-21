@@ -25,6 +25,7 @@ vi.mock("../src/services/Api/rawLithoApi", () => ({
 // No trusted identity by default, as in the real application today.
 vi.mock("../src/services/currentUser", () => ({
   getCurrentWindowsUser: vi.fn(async () => null),
+  isCurrentUserLookupEnabled: () => false,
 }));
 
 function row(id: number, from: number, to: number) {

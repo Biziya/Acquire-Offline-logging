@@ -1,28 +1,45 @@
 import { useEffect, useState } from "react";
-import { getCurrentWindowsUser } from "../services/currentUser";
+import {
+  getCurrentWindowsUser,
+  isCurrentUserLookupEnabled,
+} from "../services/currentUser";
+
+// How often to ask again while the backend cannot verify the user yet.
+const RETRY_MS = 10_000;
 
 /*
- * The signed-in Windows domain user ("DOMAIN\username"), or null when no
- * trusted identity is available — which is always the case today; see
- * services/currentUser.ts. A failed lookup also gives null, never a guess.
+ * The signed-in Windows user ("Bek" for a local account, "COMPANY\bek" for a
+ * domain account), or null while the backend cannot verify one; see
+ * services/currentUser.ts. A failed lookup gives null, never a guess.
+ *
+ * While the answer is null it asks again every RETRY_MS, so the name appears
+ * on its own once the backend starts — no page refresh needed. It stops as
+ * soon as a name arrives, or never starts when no endpoint is configured.
  */
 export function useCurrentUser() {
   const [userName, setUserName] = useState<string | null>(null);
 
   useEffect(() => {
     let isActive = true;
+    let retryTimer: number | undefined;
 
-    getCurrentWindowsUser().then(
-      (name) => {
-        if (isActive) setUserName(name?.trim() || null);
-      },
-      () => {
-        if (isActive) setUserName(null);
-      },
-    );
+    function lookUp() {
+      getCurrentWindowsUser()
+        .catch(() => null)
+        .then((name) => {
+          if (!isActive) return;
+          const verified = name?.trim() || null;
+          setUserName(verified);
+          if (!verified && isCurrentUserLookupEnabled())
+            retryTimer = window.setTimeout(lookUp, RETRY_MS);
+        });
+    }
+
+    lookUp();
 
     return () => {
       isActive = false;
+      window.clearTimeout(retryTimer);
     };
   }, []);
 

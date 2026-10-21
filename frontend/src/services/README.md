@@ -173,9 +173,11 @@ backend answers `{ "userName": ... }`:
 | Local account | `DESKTOP-OD9CS4B\Bek` | `Bek` (the computer prefix is dropped) |
 | Domain account | `COMPANY\bek` | `COMPANY\bek` |
 
-The answer is fetched once per page load. An error status (401 when the
-browser sent no Windows credentials), a malformed body or a network failure
-gives `null`, shown as a neutral placeholder. The hostname, user agent, a
+A verified name is kept for the rest of the page load. An error status (401
+when the browser sent no Windows credentials), a malformed body or a network
+failure gives `null`, shown as a neutral placeholder, and is not kept:
+`useCurrentUser()` asks again every 10 seconds until a name arrives, so
+starting the backend after the page fills in the name without a refresh. The hostname, user agent, a
 build-time user name or anything typed in are never used.
 
 **Browser and deployment notes**

@@ -1,3 +1,4 @@
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 // The endpoint is read when the module loads, so each case loads a fresh copy.
@@ -34,6 +35,39 @@ describe("current Windows user", () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     expect(fetchSpy.mock.calls[0]?.[0]).toBe("/api/currentuser");
     expect(fetchSpy.mock.calls[0]?.[1]).toMatchObject({ credentials: "include" });
+  });
+
+  it("asks again after a failed lookup, then keeps the verified name", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockRejectedValueOnce(new Error("backend not started"))
+      .mockResolvedValue(new Response(JSON.stringify({ userName: "Bek" })));
+    const getUser = await loadWithEndpoint("/api/currentuser");
+
+    await expect(getUser()).resolves.toBeNull();
+    await expect(getUser()).resolves.toBe("Bek");
+    await expect(getUser()).resolves.toBe("Bek");
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it("useCurrentUser shows the name once the backend starts, without a refresh", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockRejectedValueOnce(new Error("backend not started"))
+      .mockResolvedValue(new Response(JSON.stringify({ userName: "Bek" })));
+    vi.resetModules();
+    vi.stubEnv("VITE_CURRENT_USER_PATH", "/api/currentuser");
+    const { useCurrentUser } = await import("../src/hooks/useCurrentUser");
+
+    const { result } = renderHook(() => useCurrentUser());
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+    expect(result.current).toBeNull();
+
+    await act(() => vi.advanceTimersByTimeAsync(10_000));
+    await waitFor(() => expect(result.current).toBe("Bek"));
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
   });
 
   it.each([
