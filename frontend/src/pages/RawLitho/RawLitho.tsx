@@ -2,14 +2,14 @@ import { useCallback, useMemo, useState } from "react";
 import ConfirmDialog from "./ConfirmDialog";
 import RawLithoFilters from "./RawLithoFilters";
 import RawLithoTable from "./RawLithoTable";
-import Toast from "./Toast";
+import Toast from "../../components/Toast";
 import { TOAST_NOTIFICATIONS } from "./constants";
 import { useDrillholes } from "./hooks/useDrillholes";
 import { useRawLithoImport } from "./hooks/useRawLithoImport";
 import { useRawLithoLookups } from "./hooks/useRawLithoLookups";
 import { useRawLithoWorkspace } from "./hooks/useRawLithoWorkspace";
 import { useRemoveRowConfirmation } from "./hooks/useRemoveRowConfirmation";
-import { useToast } from "./hooks/useToast";
+import { useToast } from "../../hooks/useToast";
 import { useCurrentUser } from "../../hooks/useCurrentUser";
 import { buildImportConfirmationMessage } from "./rawLithoImportService";
 import {
@@ -139,7 +139,6 @@ function RawLitho() {
           message={toast.message}
           type={toast.type}
           isVisible
-          duration={toast.duration}
           onClose={() => hideToast(toast.id)}
         />
       )}

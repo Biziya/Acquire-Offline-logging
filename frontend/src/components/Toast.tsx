@@ -1,16 +1,21 @@
-import type { ToastNotification } from "../../types/domain";
+import type { ToastNotification } from "../types/domain";
 import { useEffect, useRef, useState } from "react";
+import { uiConfig } from "../config/uiConfig";
 
 interface ToastProps {
   message: string;
   type: ToastNotification["type"];
   isVisible: boolean;
-  duration: number;
   onClose: () => void;
 }
 
-
-
+/*
+ * The one toast used by every page. One at a time: a new notification
+ * replaces the visible one, and the caller renders it with `key={toast.id}`,
+ * so showing the same message again remounts it and restarts its timer.
+ * Durations come from config/ui.yaml by type (error 5 s, warning and
+ * success 3 s).
+ */
 const FADE_DURATION = 200;
 
 const TOAST_ICONS = {
@@ -30,10 +35,10 @@ const ASSERTIVE_TYPES = new Set(["error", "warning"]);
  * keyframes animate `transform` and keep the -50% offset.
  */
 const TOAST_CLASS = [
-  "pointer-events-none fixed top-4 left-1/2 z-[3000] flex items-center gap-2.5",
-  "max-w-[min(320px,calc(100vw-32px))] overflow-hidden py-[9px] pr-3.5 pl-3",
+  "pointer-events-none fixed top-4 left-1/2 z-[3000] flex w-max items-center gap-2.5",
+  "max-w-[min(360px,calc(100vw-32px))] overflow-hidden py-[9px] pr-3.5 pl-3",
   "rounded-[10px] border border-rl-border bg-white text-[0.82rem] leading-[1.3]",
-  "font-[550] whitespace-nowrap text-rl-text [transform:translateX(-50%)]",
+  "font-[550] [overflow-wrap:anywhere] text-rl-text [transform:translateX(-50%)]",
   "shadow-[0_1px_2px_rgb(16_35_61/8%),0_10px_28px_rgb(16_35_61/16%)]",
   "before:absolute before:inset-y-0 before:left-0 before:w-[3px]",
   "before:bg-(--toast-accent) before:content-['']",
@@ -46,7 +51,8 @@ const TOAST_ACCENTS = {
   info: "[--toast-accent:var(--color-rl-cell-ring)]",
 };
 
-function Toast({ message, type, isVisible, duration, onClose }: ToastProps) {
+function Toast({ message, type, isVisible, onClose }: ToastProps) {
+  const duration = uiConfig.toastDuration[type] ?? uiConfig.toastDuration.info;
   const [isFadingOut, setIsFadingOut] = useState(false);
   const onCloseRef = useRef(onClose);
 
@@ -94,7 +100,7 @@ function Toast({ message, type, isVisible, duration, onClose }: ToastProps) {
       >
         {TOAST_ICONS[type] ?? TOAST_ICONS.info}
       </span>
-      <span className="overflow-hidden text-ellipsis">{message}</span>
+      <span>{message}</span>
     </div>
   );
 }

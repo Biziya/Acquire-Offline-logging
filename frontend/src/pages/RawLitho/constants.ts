@@ -79,117 +79,94 @@ export const TOAST_NOTIFICATIONS = {
   rowAdded: {
     message: "Row added",
     type: "success",
-    duration: 1800,
   },
   rowRemoved: {
     message: "Row removed",
     type: "success",
-    duration: 1800,
   },
   saveSuccess: {
     message: "Changes saved",
     type: "success",
-    duration: 2500,
   },
   saveFailed: {
     message: "Save failed",
     type: "error",
-    duration: 3000,
   },
   actionFailed: {
     message: "Action failed",
     type: "error",
-    duration: 3000,
   },
   importSuccess: {
     message: "Import complete",
     type: "success",
-    duration: 2500,
   },
   importFailed: {
     message: "Import failed",
     type: "error",
-    duration: 3000,
   },
   importCancelled: {
     message: "Import cancelled",
     type: "info",
-    duration: 2000,
   },
   importNeedsLookupCorrection: {
     message: "Fix lookup codes",
     type: "warning",
-    duration: 3000,
   },
   cachedDrillholesLoaded: {
     message: "Using offline data",
     type: "info",
-    duration: 2500,
   },
   drillholeCacheFailed: {
     message: "Offline cache failed",
     type: "warning",
-    duration: 2500,
   },
   draftSaveFailed: {
     message: "Changes not saved",
     type: "error",
-    duration: 3500,
   },
   draftLoadFailed: {
     message: "Could not load data",
     type: "error",
-    duration: 3500,
   },
   missingRequiredFields: {
     message: "Complete required fields",
     type: "warning",
-    duration: 2500,
   },
   duplicateInterval: {
     message: "Duplicate interval",
     type: "warning",
-    duration: 2500,
   },
   invalidDepthRange: {
     message: "Invalid depth range",
     type: "warning",
-    duration: 2500,
   },
   invalidLookupValue: {
     message: "Invalid lookup codes",
     type: "warning",
-    duration: 2500,
   },
   cellsCopied: {
     message: "Cells copied",
     type: "info",
-    duration: 1500,
   },
   invalidPasteValue: {
     message: "Invalid pasted value",
     type: "warning",
-    duration: 2500,
   },
   pasteShapeMismatch: {
     message: "Selection does not match clipboard",
     type: "warning",
-    duration: 3000,
   },
   pasteOutOfRange: {
     message: "Paste exceeds table",
     type: "warning",
-    duration: 2500,
   },
   pasteNotEditable: {
     message: "Cells not editable",
     type: "warning",
-    duration: 2500,
   },
   clipboardUnavailable: {
     message: "Clipboard unavailable",
     type: "error",
-    duration: 3000,
   },
 } satisfies Record<string, ToastNotification>;
 

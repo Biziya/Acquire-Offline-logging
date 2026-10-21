@@ -119,8 +119,8 @@ const jsonFile = (value: unknown) =>
   new File([JSON.stringify(value)], "upload.json", { type: "application/json" });
 
 async function confirmImport(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(screen.getByRole("button", { name: "Import Data" }));
-  await user.click(screen.getByRole("button", { name: "Confirm import" }));
+  await user.click(screen.getByRole("button", { name: "Upload to Database" }));
+  await user.click(screen.getByRole("button", { name: "Confirm upload" }));
 }
 
 describe("Upload Data page", () => {
@@ -169,11 +169,11 @@ describe("Upload Data page", () => {
     fireEvent.change(screen.getByLabelText("Litho To (m), record 1"), {
       target: { value: "abc" },
     });
-    await user.click(screen.getByRole("button", { name: "Import Data" }));
+    await user.click(screen.getByRole("button", { name: "Upload to Database" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Fix blocking errors",
     );
-    expect(screen.queryByRole("button", { name: "Confirm import" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Confirm upload" })).toBeNull();
     expect(importUploadData).not.toHaveBeenCalled();
   });
 
@@ -207,7 +207,7 @@ describe("Upload Data page", () => {
       "Invalid JSON file",
     );
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Import Data" })).toBeDisabled(),
+      expect(screen.getByRole("button", { name: "Upload to Database" })).toBeDisabled(),
     );
   });
 });
@@ -242,12 +242,12 @@ describe("Upload Data drag and drop", () => {
 
     fireEvent.drop(zone(), drag([jsonFile({}), jsonFile({})]));
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Drop one JSON file at a time.",
+      "Drop one file at a time",
     );
 
     fireEvent.drop(zone(), drag([new File(["x"], "notes.txt", { type: "text/plain" })]));
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      '"notes.txt" is not a JSON file.',
+      "Unsupported file type",
     );
     expect(screen.getByLabelText("Lithology Comments, record 1")).toBeInTheDocument();
     expect(within(zone()).getByText("upload.json")).toBeInTheDocument();
@@ -302,6 +302,7 @@ describe("Upload Data drag and drop", () => {
 describe("Upload Data creator and importer", () => {
   const CREATOR = "CORP\\creator";
   const UPLOADER = "CORP\\uploader";
+  const EDITOR = "CORP\\editor";
 
   beforeEach(() => vi.mocked(importUploadData).mockClear());
 
@@ -309,37 +310,45 @@ describe("Upload Data creator and importer", () => {
   const summary = (label: string) =>
     screen.getByText(label, { selector: "dt" }).nextElementSibling?.textContent;
 
-  it("shows the file's creator and marks a missing identity Unavailable", async () => {
+  it("shows the file's creator and a dash for a missing identity", async () => {
     render(<UploadData />);
     await loadFile(jsonFile({ ...uploadDocument(), created_by: CREATOR }));
     expect(summary("Created By")).toBe(CREATOR);
-    expect(summary("Imported By")).toBe("Unavailable");
+    expect(summary("Imported By")).toBe("—");
   });
 
-  it("shows Unavailable for a legacy file without created_by", async () => {
+  it("shows a dash for a legacy file without created_by or edited_by", async () => {
     render(<UploadData />);
     await loadFile(jsonFile(uploadDocument()));
-    expect(summary("Created By")).toBe("Unavailable");
+    expect(summary("Created By")).toBe("—");
+    expect(summary("Edited By")).toBe("—");
   });
 
   it("shows the trusted importer separately and never changes the creator", async () => {
     vi.mocked(getCurrentWindowsUser).mockResolvedValueOnce(UPLOADER);
     const user = userEvent.setup();
     render(<UploadData />);
-    await loadFile(jsonFile({ ...uploadDocument(), created_by: CREATOR }));
+    await loadFile(
+      jsonFile({ ...uploadDocument(), created_by: CREATOR, edited_by: EDITOR }),
+    );
     await waitFor(() => expect(summary("Imported By")).toBe(UPLOADER));
     expect(summary("Created By")).toBe(CREATOR);
+    expect(summary("Edited By")).toBe(EDITOR);
 
-    // Edit, upload: the creator travels unchanged and no importer is added (the backend contract has no such field).
+    // Edit, upload: the creator travels unchanged, the edit records the current
+    // user as the last editor, and no importer is added (the backend contract
+    // has no such field).
     fireEvent.change(screen.getByLabelText("Lithology Comments, record 1"), {
       target: { value: "edited" },
     });
-    await user.click(screen.getByRole("button", { name: "Import Data" }));
-    await user.click(screen.getByRole("button", { name: "Confirm import" }));
+    expect(summary("Edited By")).toBe(UPLOADER);
+    await user.click(screen.getByRole("button", { name: "Upload to Database" }));
+    await user.click(screen.getByRole("button", { name: "Confirm upload" }));
     const uploaded = vi.mocked(importUploadData).mock.calls[0]?.[0] as File;
     const json = JSON.parse(await uploaded.text());
     expect(json.created_by).toBe(CREATOR);
-    expect(JSON.stringify(json)).not.toContain("uploader");
+    expect(json.edited_by).toBe(UPLOADER);
+    expect(json).not.toHaveProperty("imported_by");
   });
 });
 

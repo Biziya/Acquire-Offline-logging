@@ -33,7 +33,10 @@ export function useRawLithoWorkspace({
 }: {
   drillholes: Drillhole[];
   showToast: Notify;
-  /* Trusted Windows user, stamped as `created_by` on a new document. */
+  /*
+   * Trusted Windows user, stamped as `created_by` on a new document and as
+   * `edited_by` on every committed edit.
+   */
   currentUser?: string | null;
 }) {
   const [selectedHoleId, setSelectedHoleId] = useState("");
@@ -87,12 +90,16 @@ export function useRawLithoWorkspace({
       return;
     // A new document created before the identity arrived gets its creator at
     // its first save, which is also when it is first written and exported.
+    // Every committed change is an edit, so it also records the editor; with
+    // no trusted identity the previous `edited_by` is left as it was.
     const next =
       currentUser &&
       !lithoDocument.created_by &&
       awaitingCreator.current === lithoDocument.drillhole
-        ? { ...lithoDocument, created_by: currentUser }
-        : lithoDocument;
+        ? { ...lithoDocument, created_by: currentUser, edited_by: currentUser }
+        : currentUser
+          ? { ...lithoDocument, edited_by: currentUser }
+          : lithoDocument;
     if (next.created_by) awaitingCreator.current = null;
     documentRef.current = next;
     setDocument(next);

@@ -10,7 +10,6 @@ import {
 interface UploadFileSectionProps {
   onFileSelect: (file: File) => void;
   onFileReject: (message: string) => void;
-  fileError: string;
   /* Name of the successfully loaded file; empty before one is loaded. */
   selectedFileName: string;
   recordCount: number;
@@ -30,7 +29,6 @@ function hasFiles(event: DragEvent | React.DragEvent) {
 function UploadFileSection({
   onFileSelect,
   onFileReject,
-  fileError,
   selectedFileName,
   recordCount,
 }: UploadFileSectionProps) {
@@ -97,7 +95,7 @@ function UploadFileSection({
 
     if (!file) return;
     if (files.length > 1) {
-      onFileReject("Drop one JSON file at a time.");
+      onFileReject("Drop one file at a time");
       return;
     }
 
@@ -186,11 +184,6 @@ function UploadFileSection({
               Supported format: .json
             </span>
           </>
-        )}
-        {fileError && (
-          <p className="mt-1 mb-0 text-[0.86rem] text-[#b42318]" role="alert">
-            {fileError}
-          </p>
         )}
       </div>
     </section>

@@ -34,8 +34,7 @@ RawLitho/
 │   ├── useRawLithoShortcuts.ts     F4 / F5 / PageUp / PageDown
 │   ├── useRawLithoDraftPersistence.ts  restore, autosave and recovery
 │   ├── useRawLithoWorkspace.ts     the editable document + tryAddRow
-│   ├── useRemoveRowConfirmation.ts remove-last-row confirmation flow
-│   └── useToast.ts                 single-toast state
+│   └── useRemoveRowConfirmation.ts remove-last-row confirmation flow
 ├── ConfirmDialog.tsx               shared modal: import + remove confirmations
 ├── LookupAutocomplete.tsx          one dropdown/autocomplete cell
 ├── RawLitho.tsx                    page container
@@ -43,7 +42,6 @@ RawLitho/
 ├── RawLithoRow.tsx                 one editable table row
 ├── RawLithoTable.tsx               table + bottom bar (row actions, pagination, Save slot)
 ├── README.md                       this file
-├── Toast.tsx                       top-centre notification
 ├── config.yaml                     title, rows per page, row height, columns
 ├── config.ts                       typed, validated copy of config.yaml
 ├── constants.ts                    columns, required keys, toasts, row factory
@@ -85,10 +83,11 @@ RawLithoRow.tsx
 - applies required, missing-value and duplicate-interval cell classes
 - handles Delete-to-clear and arrow navigation for plain inputs
 
-Toast.tsx
+components/Toast.tsx (shared by every page)
 - the single toast component; one notification at a time
 - renders the icon, accent colour and live-region role for its type
-- auto-dismisses after `duration`, fading out over the last 200ms
+- auto-dismisses after the duration for its type in `config/ui.yaml`,
+  fading out over the last 200ms
 
 ConfirmDialog.tsx
 - the shared confirmation modal, used by JSON import and Remove Last Row
@@ -96,7 +95,7 @@ ConfirmDialog.tsx
 - Escape cancels; focus starts on Cancel unless initialFocus="confirm"
 - returns focus to whatever opened it when it closes
 
-hooks/useToast.ts
+hooks/useToast.ts (src/hooks, shared by every page)
 - holds the one active notification: showToast(notification) / hideToast(id)
 - each toast gets an incrementing id, used as the React key so a repeated
   message restarts the timer instead of being swallowed
@@ -460,8 +459,9 @@ action builds its own notification.
 
 | Piece | Location |
 | --- | --- |
-| Toast component | `Toast.tsx` (Tailwind; keyframes in `css/index.css`) |
-| Toast state | `hooks/useToast.ts` (`showToast` / `hideToast`) |
+| Toast component | `src/components/Toast.tsx` (Tailwind; keyframes in `css/index.css`) |
+| Toast state | `src/hooks/useToast.ts` (`showToast` / `hideToast`) |
+| Toast durations | `src/config/ui.yaml` → `uiConfig.toastDuration` |
 | Message catalogue | `TOAST_NOTIFICATIONS` in `constants.ts` |
 | Confirmation modal | `ConfirmDialog.tsx` |
 | Remove confirmation flow | `hooks/useRemoveRowConfirmation.ts` |
@@ -470,7 +470,9 @@ action builds its own notification.
 ### Showing a toast
 
 `showToast` takes an entry from the catalogue rather than a loose string, so
-the message, type and duration always travel together:
+the message and type always travel together. How long it stays is never set
+by the caller: it comes from `config/ui.yaml` by type (error 5000 ms, warning
+3000 ms, success 3000 ms, info 3000 ms), the same on every page:
 
 ```js
 showToast(TOAST_NOTIFICATIONS.rowAdded);
@@ -499,7 +501,7 @@ Colour is never the only signal: each type has its own glyph. `error` and
 `info` as `role="status"` / `polite`.
 
 The toast is a white card with navy text, a coloured accent bar and a matching
-icon badge — pinned top-centre, capped at 320px, and it slides down and fades
+icon badge — pinned top-centre, capped at 360px (longer text wraps), and it slides down and fades
 in over 180ms. It sets `pointer-events: none` so it can never intercept a click
 on the table beneath it, and animations collapse to 1ms under
 `prefers-reduced-motion`.
@@ -873,19 +875,23 @@ Clearing the selection removes the active session record.
 
 The page is a full-height flex column: the title, then one row with Drillhole
 (the widest control), the read-only Project and Campaign, and Import JSON
-right-aligned (passed to `RawLithoFilters` as `actions`), then the table, which
-takes all the remaining height (`flex-1`) and scrolls its rows inside its frame
-with the header sticky. Under it a single bar holds everything else: Add Row
-and Remove Last Row on the left; Previous, the page counter, Next and Save JSON
-pushed to the right. All header controls are 30 px high and all bar buttons
-32 px. On narrow screens the groups wrap instead of scrolling sideways. No
-height is fixed, so the table grows and shrinks with the window.
+right-aligned with no label of its own (passed to `RawLithoFilters` as
+`actions`), then the table, which takes all the remaining height (`flex-1`)
+and scrolls its rows inside its frame with the header sticky. Under it a single
+bar holds everything else: Add Row and Remove Last Row on the left, the
+pagination group centred (Previous, "Page N of M" with the row range beneath
+it, Next), and Save JSON on the right. From the `lg` breakpoint the bar is a
+`1fr auto 1fr` grid, so the pagination stays centred; below it the pagination
+takes its own centred line under the buttons. All header controls are 30 px
+high and all bar buttons 32 px. No height is fixed, so the table grows and
+shrinks with the window.
 
 ```text
-Drillhole               Project     Campaign                    Import
+Drillhole               Project     Campaign
 [ Select Drillhole ▼ ]  [ P ]       [ C ]                [ Import JSON ]
 
-[ Add Row (F4) ] [ Remove Last Row (F5) ]   [ Previous ] Page 1 of 5 [ Next ] [ Save JSON ]
+[ Add Row (F4) ] [ Remove Last Row (F5) ]   [ Previous ]  Page 1 of 5  [ Next ]   [ Save JSON ]
+                                                         Rows 1–50 of 230
 ```
 
 ### Created by (`created_by`)
@@ -925,6 +931,29 @@ The document has an optional top-level `created_by`, the Windows domain user
 - Older JSON files and IndexedDB drafts without the field load as before.
 - An imported `created_by` that is not text is rejected.
 - The backend ignores the field on upload.
+
+### Edited by (`edited_by`)
+
+An optional top-level `edited_by` records the Windows domain user who made the
+last committed edit. Raw Litho JSON carries only `created_by` and `edited_by`
+— never `imported_by`; the importer is shown on Upload Data only.
+
+```json
+{ "project": "…", "campaign": "…", "drillhole": "…",
+  "created_by": "DOMAIN\creator", "edited_by": "DOMAIN\editor",
+  "created_at": "…", "modified_at": "…", "rows": [] }
+```
+
+- Stamped in `commitDocument` (`useRawLithoWorkspace.ts`) with the trusted
+  current user on every committed change — cell edits, pastes, added or removed
+  rows, sorting and Save JSON — the same path that moves `modified_at`.
+- Selecting a drillhole, restoring a draft, scrolling and paging go through
+  `applyDocument`, not `commitDocument`, so they never change it.
+- With no trusted identity (every case today) an edit leaves the previous
+  `edited_by` as it was; nothing is guessed.
+- `normalizeRawLithoDocument` keeps it, so IndexedDB autosave and restore, JSON
+  export and JSON import all carry it. An imported `edited_by` that is not text
+  is rejected; files without it load as before.
 
 The Save JSON button validates lookup codes, stamps `modified_at`, stages the snapshot,
 flushes pending saves and downloads `<drillhole>.json`. Export is still attempted
@@ -1041,15 +1070,18 @@ for each lookup:
   fetch the endpoint
     success → replace records, isLoading false, source "backend", refresh the cache
     failure → keep cached records and clear the error,
-              or show "<label> unavailable"
+              or set error "<label> unavailable" (screen readers only)
 ```
 
 Granulo and Hardness are local (`source: "local"`, digits 0–9) and skip both the
 network and the cache; the row passes `isLoading: false` and no error for them.
 
 A lookup cell renders disabled when the page is disabled, or when it has no
-options and is not loading. Its placeholder reflects the state: `Loading...`,
-`Unavailable`, or `No values`.
+options and is not loading. Its placeholder reflects the state: `Loading...`
+or `No values`; a lookup that failed to load shows no placeholder and no
+visible "unavailable" label in every row — the reason is kept in a visually
+hidden element linked by `aria-describedby`. The drillhole search does the same
+when drillholes cannot be loaded.
 
 `useDrillholes` follows the same shape for `/api/drillholes`: fetch, cache on
 success, and fall back to `drillholeCache` on failure with a

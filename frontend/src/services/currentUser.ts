@@ -5,8 +5,9 @@ import { isRecord } from "../types/validation";
  * The signed-in Windows domain user, as "DOMAIN\username".
  *
  * Used for two pieces of metadata:
- *   - `created_by` stamped on a NEW Raw Litho document;
- *   - "Imported By" shown on the Upload Data page.
+ *   - `created_by` stamped on a NEW Raw Litho document, and `edited_by` on
+ *     each committed edit (Raw Litho and Upload Data);
+ *   - "Imported By" on Upload Data and the user name in the sidebar.
  *
  * A browser cannot read the Windows login, so the name must come from the
  * backend, which learns it from Windows Integrated Authentication. The
@@ -15,7 +16,7 @@ import { isRecord } from "../types/validation";
  *
  * TODAY THE BACKEND HAS NO SUCH ENDPOINT AND NO AUTHENTICATION, so the
  * variable is empty, no request is made and this resolves to null: every
- * caller shows "Unavailable" and leaves `created_by` unset. A failed or
+ * caller shows a neutral placeholder and leaves `created_by` / `edited_by` unset. A failed or
  * malformed response is also null. Nothing is ever guessed — not the
  * hostname, the user agent or anything the user types.
  *

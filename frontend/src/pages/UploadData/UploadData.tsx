@@ -34,6 +34,8 @@ import {
 import { uploadDataConfig } from "./config";
 import { useUploadDataDraft, type DraftSource } from "./useUploadDataDraft";
 import { useCurrentUser } from "../../hooks/useCurrentUser";
+import { useToast } from "../../hooks/useToast";
+import Toast from "../../components/Toast";
 import {
   BUTTON_PRIMARY,
   BUTTON_SECONDARY,
@@ -51,7 +53,6 @@ interface FileInfo {
   size: number;
 }
 
-const UNAVAILABLE = "Unavailable";
 const numberFormat = new Intl.NumberFormat("en-US");
 const CONTROL =
   "h-9 rounded-md border border-[#cbd5e1] bg-white px-2.5 text-[0.9rem] focus:border-[#2563eb] focus:shadow-[0_0_0_3px_rgb(37_99_235/18%)] focus:outline-none";
@@ -137,9 +138,8 @@ function UploadData() {
   );
   const [isEdited, setIsEdited] = useState(false);
   const [datasetVersion, setDatasetVersion] = useState(0);
-  const [fileError, setFileError] = useState("");
-  const [importError, setImportError] = useState("");
-  const [successMessage, setSuccessMessage] = useState("");
+  // Status messages use the shared toast (durations from config/ui.yaml).
+  const { toast, showToast, hideToast } = useToast();
   const [isImporting, setIsImporting] = useState(false);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [lookups, setLookups] = useState(createInitialLookups);
@@ -274,12 +274,12 @@ function UploadData() {
     project: displayValue(workingDocument?.project),
     campaign: displayValue(workingDocument?.campaign),
     drillhole: displayValue(workingDocument?.drillhole),
-    // Two different people: the creator recorded in the file, and whoever is
-    // signed in now. Neither is ever guessed.
-    createdBy: workingDocument
-      ? displayValue(workingDocument.created_by, UNAVAILABLE)
-      : "—",
-    importedBy: workingDocument ? (currentUser ?? UNAVAILABLE) : "—",
+    // Three possibly different people: the creator and the last editor
+    // recorded in the file, and whoever is signed in now (the intended
+    // importer). None is ever guessed; a missing one shows "—".
+    createdBy: displayValue(workingDocument?.created_by),
+    editedBy: displayValue(workingDocument?.edited_by),
+    importedBy: workingDocument ? (currentUser ?? "—") : "—",
     totalRecords: workingDocument ? numberFormat.format(rows.length) : "—",
     fileSize: selectedFile
       ? `${formatFileSize(selectedFile.size)}${isEdited ? " (original file)" : ""}`
@@ -309,7 +309,7 @@ function UploadData() {
     // Refused before anything is reset, so the loaded dataset (and its edits)
     // survives a wrong file.
     if (!isJsonFile) {
-      setFileError(`"${file.name}" is not a JSON file. Choose a .json file.`);
+      showToast({ type: "warning", message: "Unsupported file type" });
       return;
     }
 
@@ -317,9 +317,6 @@ function UploadData() {
     requestControllerRef.current?.abort();
     requestControllerRef.current = null;
     setIsImporting(false);
-    setFileError("");
-    setImportError("");
-    setSuccessMessage("");
     resetDataset();
 
     try {
@@ -342,22 +339,24 @@ function UploadData() {
       }
 
       console.error("Unable to read the selected JSON dataset.", error);
-      setFileError(
-        "Invalid JSON file",
-      );
+      showToast({ type: "error", message: "Invalid JSON file" });
     }
   };
 
   const handleEdit = (edits: CellEdit[]) => {
     if (!workingDocument || isImporting) return;
 
-    const next = applyCellEdits(workingDocument, edits);
-    if (next === workingDocument) return;
+    const edited = applyCellEdits(workingDocument, edits);
+    if (edited === workingDocument) return;
 
+    // A real edit records the trusted current user as the last editor; with
+    // no identity the file's own edited_by is kept, never guessed.
+    const next =
+      currentUser && edited.edited_by !== currentUser
+        ? { ...edited, edited_by: currentUser }
+        : edited;
     setWorkingDocument(next);
     setIsEdited(true);
-    setImportError("");
-    setSuccessMessage("");
 
     if (search || statusFilter !== "all") {
       setPinnedRows((current) => {
@@ -368,22 +367,22 @@ function UploadData() {
     }
   };
 
-  // Import Data: validate the latest document, then ask for confirmation.
+  // Upload to Database: validate the latest document, then ask for confirmation.
   const handleImportRequest = () => {
     if (!workingDocument || isImporting) return;
 
     const current = validateUploadDocument(workingDocument, lookups);
     if (current.hasBlockingErrors) {
-      setSuccessMessage("");
-      setImportError(
-        current.counts.error > 0
-          ? `Fix blocking errors (${numberFormat.format(current.counts.error)} invalid records)`
-          : "Fix blocking errors",
-      );
+      showToast({
+        type: "warning",
+        message:
+          current.counts.error > 0
+            ? `Fix blocking errors (${numberFormat.format(current.counts.error)} invalid records)`
+            : "Fix blocking errors",
+      });
       return;
     }
 
-    setImportError("");
     setIsConfirmOpen(true);
   };
 
@@ -412,8 +411,6 @@ function UploadData() {
     requestControllerRef.current = controller;
     setIsConfirmOpen(false);
     setIsImporting(true);
-    setImportError("");
-    setSuccessMessage("");
 
     try {
       const response = await importUploadData(file, controller.signal);
@@ -421,13 +418,15 @@ function UploadData() {
         // Confirmed by the backend: the draft is done. Resetting the dataset
         // also deletes it from IndexedDB.
         resetDataset();
-        setSuccessMessage(response.message || "Upload complete");
+        showToast({
+          type: "success",
+          message: response.message || "Upload complete",
+        });
       }
     } catch (error) {
       if (requestControllerRef.current === controller && !isAbortError(error)) {
-        setImportError(
-          errorMessage(error) || "Upload failed",
-        );
+        // The draft and its edits stay, so Upload to Database can be retried.
+        showToast({ type: "error", message: errorMessage(error) || "Upload failed" });
       }
     } finally {
       if (requestControllerRef.current === controller) {
@@ -442,9 +441,6 @@ function UploadData() {
     requestControllerRef.current?.abort();
     requestControllerRef.current = null;
     resetDataset();
-    setFileError("");
-    setImportError("");
-    setSuccessMessage("");
     setIsImporting(false);
   };
 
@@ -465,8 +461,7 @@ function UploadData() {
       <div className="grid grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] xl:[&>*:nth-child(n+3)]:col-span-2">
         <UploadFileSection
           onFileSelect={handleFileSelect}
-          onFileReject={setFileError}
-          fileError={fileError}
+          onFileReject={(message) => showToast({ type: "warning", message })}
           selectedFileName={selectedFile?.name || ""}
           recordCount={rows.length}
         />
@@ -556,21 +551,14 @@ function UploadData() {
         <ValidationSummary validation={validation} />
       </div>
 
-      {successMessage && (
-        <p
-          className="mt-4 mb-0 rounded-lg border border-[#86efac] bg-[#f0fdf4] px-3.5 py-[11px] text-[0.9rem] text-[#166534]"
-          role="status"
-        >
-          {successMessage}
-        </p>
-      )}
-      {importError && (
-        <p
-          className="mt-4 mb-0 rounded-lg border border-[#fca5a5] bg-[#fef2f2] px-3.5 py-[11px] text-[0.9rem] text-[#b42318]"
-          role="alert"
-        >
-          {importError}
-        </p>
+      {toast && (
+        <Toast
+          key={toast.id}
+          message={toast.message}
+          type={toast.type}
+          isVisible
+          onClose={() => hideToast(toast.id)}
+        />
       )}
 
       {isConfirmOpen && workingDocument && (
@@ -584,7 +572,7 @@ function UploadData() {
           }}
         >
           <h2 id="upload-confirm-title" className="m-0 mb-1 text-[1.05rem] font-bold">
-            Import {numberFormat.format(rows.length)} records?
+            Upload {numberFormat.format(rows.length)} records to the database?
           </h2>
           <p id="upload-confirm-message" className="m-0 text-[0.9rem] text-[#334155]">
             Project {displayValue(workingDocument.project)}, drillhole{" "}
@@ -607,7 +595,7 @@ function UploadData() {
               onClick={handleImport}
               autoFocus
             >
-              Confirm import
+              Confirm upload
             </button>
           </div>
         </div>
@@ -627,7 +615,7 @@ function UploadData() {
           onClick={handleImportRequest}
           disabled={!workingDocument || isImporting || isConfirmOpen}
         >
-          {isImporting ? "Importing…" : "Import Data"}
+          {isImporting ? "Uploading…" : "Upload to Database"}
         </button>
       </div>
     </section>

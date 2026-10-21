@@ -1,4 +1,4 @@
-import type { ToastNotification, ToastState } from "../../../types/domain";
+import type { ToastNotification, ToastState } from "../types/domain";
 import { useCallback, useRef, useState } from "react";
 
 export function useToast() {

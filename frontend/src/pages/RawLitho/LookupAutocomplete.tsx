@@ -385,7 +385,9 @@ function LookupAutocomplete({
 
   let placeholder = "";
   if (isLoading && options.length === 0) placeholder = "Loading...";
-  else if (error && options.length === 0) placeholder = "Unavailable";
+  // A failed lookup shows no "Unavailable" label in every row; the reason is
+  // kept for screen readers through aria-describedby.
+  else if (error && options.length === 0) placeholder = "";
   else if (options.length === 0) placeholder = "No values";
 
   function handleFocus() {
@@ -439,7 +441,7 @@ function LookupAutocomplete({
               aria-disabled="true"
               aria-selected="false"
             >
-              {error || "No matching values"}
+              No matching values
             </li>
           )}
 
@@ -525,7 +527,7 @@ function LookupAutocomplete({
       )}
 
       {error && options.length === 0 && (
-        <span id={loadErrorId} className={CELL_ERROR} role="status">
+        <span id={loadErrorId} className="sr-only">
           {error}
         </span>
       )}

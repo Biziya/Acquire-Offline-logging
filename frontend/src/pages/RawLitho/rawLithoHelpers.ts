@@ -148,6 +148,7 @@ export function normalizeRawLithoDocument(
   // Only the document's own creator: the fallback describes the drillhole, not
   // who created an existing document, so a legacy draft never gains one.
   const createdBy = normalizeText(source.created_by);
+  const editedBy = normalizeText(source.edited_by);
   const createdAt = toIsoTimestamp(
     source.created_at ??
       source.createdAt ??
@@ -168,6 +169,7 @@ export function normalizeRawLithoDocument(
     campaign,
     drillhole,
     ...(createdBy ? { created_by: createdBy } : {}),
+    ...(editedBy ? { edited_by: editedBy } : {}),
     created_at: createdAt,
     modified_at: modifiedAt,
     rows: normalizeRawLithoRows(source.rows),
@@ -233,14 +235,14 @@ export function isStandardRawLithoDocument(
     return false;
   }
 
-  if (
-    hasOwn(value, "created_by") &&
-    (typeof value.created_by !== "string" ||
-      value.created_by.trim() === "" ||
-      value.created_by !== value.created_by.trim())
-  ) {
-    return false;
-  }
+  const hasInvalidUser = (["created_by", "edited_by"] as const).some((key) => {
+    const user = value[key];
+    return (
+      hasOwn(value, key) &&
+      (typeof user !== "string" || user.trim() === "" || user !== user.trim())
+    );
+  });
+  if (hasInvalidUser) return false;
 
   const createdAt = toIsoTimestamp(value.created_at, "");
   const modifiedAt = toIsoTimestamp(value.modified_at, "");
@@ -309,13 +311,15 @@ function validateImportDocument(value: unknown) {
     throw new ImportError("The imported drillhole value is required.");
   }
 
-  // Optional (older files have none); when present it must be text.
-  if (
-    value.created_by !== undefined &&
-    value.created_by !== null &&
-    typeof value.created_by !== "string"
-  ) {
-    throw new ImportError("The imported created_by value must be text.");
+  // Optional (older files have none); when present they must be text.
+  for (const key of ["created_by", "edited_by"] as const) {
+    if (
+      value[key] !== undefined &&
+      value[key] !== null &&
+      typeof value[key] !== "string"
+    ) {
+      throw new ImportError(`The imported ${key} value must be text.`);
+    }
   }
 
   if (value.rows.some((row) => !isObject(row))) {

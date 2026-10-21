@@ -379,11 +379,12 @@ function RawLithoTable({
       </div>
 
       {/*
-        One bar under the table: row actions on the left, then pagination and
-        the page's own controls (Save JSON) pushed to the right. On narrow
-        screens the groups wrap instead of overflowing.
+        One bar under the table: row actions on the left, pagination centred,
+        and the page's own controls (Save JSON) on the right. Three columns
+        keep the pagination centred; on narrow screens it takes its own
+        centred line below the buttons instead of overflowing.
       */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pt-2">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pt-2 lg:grid lg:grid-cols-[1fr_auto_1fr]">
         <div className="flex gap-2">
           {/*
             Stays clickable while the page is enabled: `requestAddRow` is what
@@ -412,7 +413,7 @@ function RawLithoTable({
         </div>
 
         <nav
-          className="ml-auto flex items-center gap-3 max-sm:gap-2"
+          className="flex items-center justify-center gap-3 max-lg:order-last max-lg:w-full max-sm:gap-2 lg:justify-self-center"
           aria-label="Raw Litho table pages"
         >
           <button
@@ -449,7 +450,7 @@ function RawLithoTable({
         </nav>
 
         {footerEnd && (
-          <div className="flex items-center gap-2">
+          <div className="ml-auto flex items-center gap-2 lg:justify-self-end">
             {footerEnd}
           </div>
         )}

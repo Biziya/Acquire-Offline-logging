@@ -20,8 +20,8 @@ file loaded  → write at once
 cell edited  → write after draft.saveDebounceMs (config.yaml), not per keystroke
 leave page   → pending write flushed on unmount and on `pagehide` (refresh / close)
 Cancel       → abort request, reset page, delete draft
-upload ok    → reset page, delete draft, success message
-upload fails → draft and edits kept; retry with Import Data
+upload ok    → reset page, delete draft, success toast
+upload fails → draft and edits kept, error toast; retry with Upload to Database
 ```
 
 - Storage: `services/IndexDB/uploadDataDraftDb.ts` — its own `upload-data-db`
@@ -29,7 +29,7 @@ upload fails → draft and edits kept; retry with Import Data
 - Logic: `useUploadDataDraft.ts`. The whole working document is one write; edits
   only copy changed rows (`applyCellEdits`), and the document object is stored
   without re-serialising it to JSON.
-- Restored: file name and size, Project / Campaign / Drillhole / Created By and
+- Restored: file name and size, Project / Campaign / Drillhole / Created By / Edited By and
   every other key (they live in the document), record order and ids, edits, and
   the Edited flag. Validation is recalculated; Imported By comes from the
   current trusted identity, never from the draft.
@@ -60,12 +60,13 @@ UploadData/
 
 ```text
 Upload Data
-├── 1. File Selection         drop zone + Browse Files; errors shown inline
+├── 1. File Selection         drop zone + Browse Files; problems shown as toasts
 ├── 2. Dataset Information    file, project, campaign, drillhole, created by,
-│                             uploaded by, total records, file size, status
+│                             edited by, imported by, total records, file
+│                             size, validation status
 ├── 3. Editable JSON Preview  search, status filter, record count, table
 ├── 4. Validation Summary     total / valid / warning / invalid + document issues
-└── Actions                   Cancel · Import Data (→ confirmation)
+└── Actions                   Cancel · Upload to Database (→ confirmation)
 ```
 
 The sections sit in a one-column grid (`grid-cols-[minmax(0,1fr)]`), so no
@@ -85,12 +86,13 @@ drop on zone ─┘
 - **Drag feedback:** while a file is dragged over the zone it turns blue and
   reads "Drop the JSON file here". Leaving the zone, or moving over its child
   elements, is handled correctly.
-- **Rejected files:** one file at a time. Dropping several shows "Drop one JSON
-  file at a time." A file that is not `.json` / `application/json` shows
-  "`<name>` is not a JSON file." In both cases the dataset already loaded, with
-  its edits, is kept.
+- **Rejected files:** one file at a time. Dropping several shows a "Drop one
+  file at a time" warning toast; a file that is not `.json` /
+  `application/json` shows "Unsupported file type". In both cases the dataset
+  already loaded, with its edits, is kept. Malformed JSON shows an
+  "Invalid JSON file" error toast.
 - **Valid files:** a valid file replaces the current dataset, just as choosing
-  one with Browse Files does. Nothing is uploaded until **Import Data** is
+  one with Browse Files does. Nothing is uploaded until **Upload to Database** is
   confirmed.
 - **Drops beside the zone:** while the page is open, a window-level listener
   stops the browser from opening a file dropped next to the zone, which would
@@ -100,21 +102,30 @@ drop on zone ─┘
 - **Loaded state:** once a file has parsed, the zone turns green and shows
   "✓ JSON File Loaded", the file name, the record count and **Change File**.
   Change File opens the same picker, and dropping a file onto the zone still
-  replaces it. An unreadable file returns the zone to its empty look with the
-  error. **Cancel** restores the empty "Drag and drop" look. The zone is in the
+  replaces it. An unreadable file returns the zone to its empty look and
+  shows the error toast. **Cancel** restores the empty "Drag and drop" look. The zone is in the
   loaded state exactly when `selectedFile` is set, which happens only after a
   successful parse.
 
-### Created By and Imported By
+### Created By, Edited By and Imported By
 
-These are two different people, and neither is ever guessed:
+These can be three different people, and none is ever guessed:
 
 | Field | Source | When missing |
 | --- | --- | --- |
-| Created By | `created_by` in the selected JSON file (written by Raw Litho) | `Unavailable` — e.g. an older file |
-| Imported By | the signed-in Windows user from `useCurrentUser()` | `Unavailable` |
+| Created By | `created_by` in the selected JSON file (written by Raw Litho) | `—` — e.g. an older file |
+| Edited By | `edited_by` in the selected JSON file; replaced by the current user when a record is edited here | `—` |
+| Imported By | the signed-in Windows user from `useCurrentUser()` — the person about to upload | `—` |
 
-**Imported By shows `Unavailable` until the backend provides the identity.**
+- Created By is never changed by this page.
+- An actual record edit (`handleEdit`) sets `edited_by` to the trusted current
+  user; with no identity the file's own value is kept. The upload carries it.
+- Imported By is display only: it is not written into the JSON (the backend
+  contract has no such field) and does not mean the upload has happened.
+- Both JSON fields live in the working document, so the IndexedDB draft
+  restores them; Imported By is resolved again from the current user.
+
+**Imported By shows `—` until the backend provides the identity.**
 
 **How the name is obtained.** A browser cannot read the Windows login, so
 `getCurrentWindowsUser()` asks the backend. It calls the endpoint named by
@@ -214,7 +225,7 @@ edit survives its row scrolling out of the virtual window and back.
 ## Validation
 
 `validateUploadDocument` is pure and runs on a deferred copy of the document,
-so typing stays responsive; **Import Data** re-validates the latest document.
+so typing stays responsive; **Upload to Database** re-validates the latest document.
 No new business rules are introduced:
 
 | Severity | Checks |
@@ -228,14 +239,15 @@ with the messages as a tooltip, and the summary shows the counts.
 ## Uploading
 
 ```text
-Import Data → handleImportRequest()   re-validate; blocking errors → message, stop
-            → confirmation panel      "Import N records?"  Back / Confirm import
+Upload to Database → handleImportRequest()   re-validate; blocking errors → warning toast, stop
+                   → confirmation panel      "Upload N records to the database?"  Back / Confirm upload
+                   (the button reads "Uploading…" while the request runs)
 Confirm     → handleImport()
   unchanged → the original file (picked in this visit)
   edited or restored → new File(JSON.stringify(workingDocument, null, 2), same name)
   POST /api/uploaddata   multipart/form-data, field "file"
-    ok    → reset the page, delete the draft, success message (only after the server confirms)
-    error → server message; the draft and edits are kept for a retry
+    ok    → reset the page, delete the draft, success toast (only after the server confirms)
+    error → error toast with the server message; the draft and edits are kept for a retry
     abort → ignored
 ```
 
@@ -273,13 +285,13 @@ in the error.
 1a. Drop two files, or a `.txt` file → a clear error; the loaded dataset stays.
 1b. Drop a file beside the zone → the browser does not open it.
 1c. At ~1024 px window width → no horizontal scrollbar on the page or the preview.
-2. Pick malformed JSON or an array root → inline error, Import Data disabled.
+2. Pick malformed JSON or an array root → "Invalid JSON file" toast, Upload to Database disabled.
 3. Scroll a 100,000-record file → scrolling stays smooth; edit a cell, scroll away and back → the edit is still there.
 4. Type `Fine  grained sandstone ` in a comment → every space stays.
 5. Tab / Shift + Tab through a record and across into the next one.
 6. Ctrl + click several cells, paste one value → all change; copy them and paste into Excel → positions are kept.
 7. Paste a block copied from Excel onto a cell → values land in the right columns.
-8. Enter `abc` in a depth or invert a range → the cell turns red, the record counts as invalid, Import Data refuses with a message.
+8. Enter `abc` in a depth or invert a range → the cell turns red, the record counts as invalid, Upload to Database refuses with a warning toast.
 9. Search and filter by status → the count updates; a record being fixed stays visible.
 10. Import unchanged → the original file is sent; edit then import → the edited JSON is sent (check the request payload).
 11. Start an import and press Cancel → the request aborts and the page resets.

@@ -9,12 +9,15 @@ React + Vite single-page application. This file maps the `src/` tree; the
 src/
 ├── assets/          images (badrakh-logo.png, hero.png, react.svg, vite.svg) — unreferenced
 ├── components/      shared UI
-│   ├── Sidebar.tsx
+│   ├── Sidebar.tsx         navigation; footer: domain user, divider, status
 │   ├── StatusIndicator.tsx
+│   ├── Toast.tsx           the one toast used by every page
 │   ├── dataTableStyles.ts  table look + proportional widths, shared by all tables
 │   └── fieldStyles.ts      labelled field / select / read-only value look
 ├── config/
-│   └── yamlConfig.ts  strict reader for the pages' config.yaml files
+│   ├── yamlConfig.ts  strict reader for the pages' config.yaml files
+│   ├── ui.yaml        app-wide UI settings: toast durations per type
+│   └── uiConfig.ts    typed, validated copy of ui.yaml
 ├── contexts/        empty
 ├── css/
 │   ├── index.css    Tailwind entry, design tokens, base layer
@@ -29,7 +32,8 @@ src/
 │   └── RawExtraction.tsx   earlier page, no route
 ├── types/           shared domain types and runtime guards
 ├── hooks/
-│   └── useCurrentUser.ts  signed-in Windows user, or null (see services/currentUser.ts)
+│   ├── useCurrentUser.ts  signed-in Windows user, or null (see services/currentUser.ts)
+│   └── useToast.ts        one notification at a time (showToast / hideToast)
 ├── services/        API clients, IndexedDB, lookup config, current user (own README)
 ├── App.tsx          layout + routes
 ├── main.tsx         entry point
@@ -60,6 +64,7 @@ sidebar stays mounted while the route changes.
 ```text
 App
 ├── Sidebar                collapsible, NavLink-based, owns its collapsed state
+│   ├── user name          footer; DOMAIN\username from useCurrentUser(), then a divider
 │   └── StatusIndicator    footer; polls GET /api/status every 5s (900ms timeout)
 └── main.page-content
     └── Routes
@@ -68,8 +73,11 @@ App
         └── /upload-data   UploadData
 ```
 
-The backend status (green "Online", amber "Offline") sits in the sidebar footer
-at the bottom-left of the sidebar. The sidebar is a flex column: the navigation
+The sidebar footer shows, left-aligned, the signed-in Windows user
+(`DOMAIN\username`, truncated with a tooltip when long), a thin divider, then
+the backend status (green "Online", amber "Offline"). The user comes from
+`useCurrentUser()`; with no trusted identity (today) it reads
+"User not identified" — never a hostname or a guess. The sidebar is a flex column: the navigation
 takes the free height and scrolls if it ever runs out of room, and the footer
 never shrinks, so the indicator stays pinned without overlapping the links.
 When the sidebar is collapsed only the coloured light is shown; its `title`
@@ -147,7 +155,10 @@ must fit that width:
 ## Configuration (YAML)
 
 Each page keeps its static UI settings in `config.yaml` beside it
-(`RawLitho/`, `UploadData/`, `DatabaseViewer/`). Vite bundles the file as text
+(`RawLitho/`, `UploadData/`, `DatabaseViewer/`). Settings shared by every page
+live in `config/ui.yaml` (read by `config/uiConfig.ts`): today the toast
+durations — error 5000 ms, warning 3000 ms, success 3000 ms, info 3000 ms. No
+component sets its own duration. Vite bundles the file as text
 (`import text from "./config.yaml?raw"`), and the page's `config.ts` parses it
 once, when the module loads, using the `yaml` package. It copies each value into
 a typed object through `createConfigReader` (`config/yamlConfig.ts`).

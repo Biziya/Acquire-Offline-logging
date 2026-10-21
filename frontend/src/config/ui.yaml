@@ -1,0 +1,12 @@
+# Application-wide UI settings shared by every page. Values only; behaviour
+# stays in TypeScript. Read once when the module loads (uiConfig.ts); a bad
+# value stops start-up with the file and key in the error.
+
+toast:
+  # How long each notification type stays on screen, in milliseconds. Every
+  # page's toasts use these values; no page sets its own duration.
+  duration:
+    error: 5000
+    warning: 3000
+    success: 3000
+    info: 3000         # neutral status (e.g. "Using offline data")

@@ -1,8 +1,11 @@
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
 import StatusIndicator from "./StatusIndicator";
+import { useCurrentUser } from "../hooks/useCurrentUser";
 
 const ICON = "size-[17px] shrink-0";
+// Neutral text while no trusted identity source exists (services/currentUser.ts).
+const NO_USER_LABEL = "User not identified";
 const LABEL = "whitespace-nowrap";
 
 function HomeIcon() {
@@ -89,6 +92,9 @@ function DatabaseViewerIcon() {
 
 function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
+  // "DOMAIN\username" from the trusted identity source, or null — never guessed.
+  const currentUser = useCurrentUser();
+  const userLabel = currentUser ?? NO_USER_LABEL;
   const linkClassName = ({ isActive }: { isActive: boolean }) =>
     [
       "flex min-h-8 items-center gap-[9px] rounded-md border-0 py-[5px] text-[0.82rem] text-inherit no-underline hover:bg-[#1f2937] hover:text-white",
@@ -168,12 +174,30 @@ function Sidebar() {
         </NavLink>
       </nav>
 
-      {/* Backend status pinned to the bottom, aligned with the link icons. */}
+      {/*
+        Signed-in user, a thin divider, then backend status — pinned to the
+        bottom and aligned with the link icons. Collapsed, only the status
+        light remains (the name is in its tooltip).
+      */}
       <div
         className={`shrink-0 border-t border-[#1f2937] py-2.5 ${
           collapsed ? "px-0 text-center" : "px-3.5"
         }`}
+        title={collapsed ? userLabel : undefined}
       >
+        {!collapsed && (
+          <>
+            <p
+              className={`m-0 truncate text-xs font-medium ${
+                currentUser ? "text-[#e5e7eb]" : "text-[#9ca3af] italic"
+              }`}
+              title={userLabel}
+            >
+              {userLabel}
+            </p>
+            <hr className="my-2 border-0 border-t border-[#374151]" />
+          </>
+        )}
         <StatusIndicator />
       </div>
     </aside>

@@ -97,7 +97,8 @@ function RawLithoFilters({
   if (isLoading) {
     placeholder = "Loading drillholes...";
   } else if (error) {
-    placeholder = "Drillholes unavailable";
+    // No visible "unavailable" label; the reason stays for screen readers.
+    placeholder = "";
   } else if (drillholes.length === 0) {
     placeholder = "No drillholes available";
   }
@@ -281,7 +282,7 @@ function RawLithoFilters({
         </div>
 
         {error && (
-          <span id="drillhole-load-error" className={FIELD_ERROR}>
+          <span id="drillhole-load-error" className="sr-only">
             {error}
           </span>
         )}
@@ -308,7 +309,11 @@ function RawLithoFilters({
 
       {actions && (
         <div className={`${FIELD} ml-auto`}>
-          <span className={FIELD_LABEL}>Import</span>
+          {/* No visible label: the empty line only keeps the button level
+              with the labelled fields. */}
+          <span className={`${FIELD_LABEL} invisible`} aria-hidden="true">
+            &nbsp;
+          </span>
           <div className="flex items-center gap-2">{actions}</div>
         </div>
       )}
