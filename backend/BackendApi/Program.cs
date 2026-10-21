@@ -9,6 +9,7 @@ using BackendApi.Repositories.RawLithoPage.PyCode;
 using BackendApi.Repositories.RawLithoPage.RedoxCode;
 using BackendApi.Repositories.RawLithoPage.SedimCode;
 using BackendApi.Repositories.UploadData;
+using Microsoft.AspNetCore.Authentication.Negotiate;
 
 const string CorsPolicy = "FrontendCors";
 
@@ -33,6 +34,14 @@ builder.Services.AddScoped<IRedoxCodeRepository, RedoxCodeRepository>();
 // Upload page repositories.
 builder.Services.AddScoped<IUploadDataRepository, UploadDataRepository>();
 
+// Windows Integrated Authentication, used only by GET /api/currentuser (which
+// carries [Authorize]). No fallback policy is set, so every other endpoint
+// stays anonymous exactly as before.
+builder.Services
+    .AddAuthentication(NegotiateDefaults.AuthenticationScheme)
+    .AddNegotiate();
+builder.Services.AddAuthorization();
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy(CorsPolicy, policy =>
@@ -55,6 +64,9 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 app.UseCors(CorsPolicy);
+
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapControllers();
 

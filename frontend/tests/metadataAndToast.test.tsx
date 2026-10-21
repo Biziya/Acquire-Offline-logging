@@ -172,6 +172,12 @@ describe("sidebar user", () => {
     await waitFor(() => expect(status).toHaveTextContent("Online"));
   });
 
+  it("shows a local account name without a domain", async () => {
+    vi.mocked(getCurrentWindowsUser).mockResolvedValueOnce("Bek");
+    renderSidebar();
+    expect(await screen.findByText("Bek")).toHaveAttribute("title", "Bek");
+  });
+
   it("shows a neutral label, never a guessed name, without an identity", async () => {
     renderSidebar();
     expect(await screen.findByText("User not identified")).toBeInTheDocument();

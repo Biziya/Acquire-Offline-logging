@@ -125,36 +125,16 @@ These can be three different people, and none is ever guessed:
 - Both JSON fields live in the working document, so the IndexedDB draft
   restores them; Imported By is resolved again from the current user.
 
-**Imported By shows `—` until the backend provides the identity.**
-
-**How the name is obtained.** A browser cannot read the Windows login, so
-`getCurrentWindowsUser()` asks the backend. It calls the endpoint named by
-`VITE_CURRENT_USER_PATH` (for example `/api/currentuser`) with
-`credentials: "include"` and expects `{ "userName": "DOMAIN\\username" }`.
-
-The answer is fetched once per page load. An error status, a malformed body or
-a network failure gives `null`. The hostname, user agent or anything typed in
-are never used.
-
-**Today `VITE_CURRENT_USER_PATH` is empty.** The backend has no authentication
-(nothing in `Program.cs` or `web.config`) and no current-user endpoint, so no
-request is made and the result is `null`.
-
-To enable the name, the backend needs:
-1. Windows Authentication: IIS `windowsAuthentication`, or `AddNegotiate()`
-   plus `UseAuthentication()`.
-2. An authenticated endpoint returning `HttpContext.User.Identity.Name` as
-   `{ "userName": ... }`.
-
-Then set `VITE_CURRENT_USER_PATH` (see `.env.example`) and rebuild. No frontend
-code changes are needed.
+**Imported By shows `—` when the backend cannot verify the user.** The
+identity comes from the backend's `GET /api/currentuser` (Windows Integrated
+Authentication); see *currentUser.ts* in `src/services/README.md`.
 
 **No `imported_by` in the uploaded file.** Uploading never changes
 `created_by`, and `imported_by` is not added to the JSON. The backend contract
 (`UploadDataRequest`) has no such field: the server would silently drop it, so
 the file would look as if it recorded the importer when nothing was stored. The
-importer should be recorded by the server, from its authenticated request, once
-Windows Authentication is enabled. Unknown fields such as `created_by` are
+importer should be recorded by the server from its own authenticated request;
+today Windows Authentication protects only `/api/currentuser`, not the upload. Unknown fields such as `created_by` are
 ignored by the server, so they never break an upload.
 
 ## Scrolling

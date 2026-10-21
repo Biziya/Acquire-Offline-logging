@@ -896,8 +896,9 @@ Drillhole               Project     Campaign
 
 ### Created by (`created_by`)
 
-The document has an optional top-level `created_by`, the Windows domain user
-(`DOMAIN\username`) who created the dataset:
+The document has an optional top-level `created_by`, the Windows user
+(`Bek` for a local account, `COMPANY\bek` for a domain account) who created
+the dataset:
 
 ```json
 { "project": "…", "campaign": "…", "drillhole": "…",
@@ -922,10 +923,9 @@ The document has an optional top-level `created_by`, the Windows domain user
 **When it is not set**
 - An existing or imported document without one (older files and drafts) keeps
   none; the current user is never filled in.
-- A document created and saved while no identity is available has none.
-  **That is every document today**: the backend has no Windows Authentication
-  or current-user endpoint yet, so `VITE_CURRENT_USER_PATH` is empty (see
-  `src/services/README.md`).
+- A document created and saved while no identity is available has none —
+  for example when the browser did not send Windows credentials to
+  `/api/currentuser` (see `src/services/README.md`).
 
 **Compatibility**
 - Older JSON files and IndexedDB drafts without the field load as before.
@@ -934,7 +934,7 @@ The document has an optional top-level `created_by`, the Windows domain user
 
 ### Edited by (`edited_by`)
 
-An optional top-level `edited_by` records the Windows domain user who made the
+An optional top-level `edited_by` records the Windows user who made the
 last committed edit. Raw Litho JSON carries only `created_by` and `edited_by`
 — never `imported_by`; the importer is shown on Upload Data only.
 
@@ -949,7 +949,7 @@ last committed edit. Raw Litho JSON carries only `created_by` and `edited_by`
   rows, sorting and Save JSON — the same path that moves `modified_at`.
 - Selecting a drillhole, restoring a draft, scrolling and paging go through
   `applyDocument`, not `commitDocument`, so they never change it.
-- With no trusted identity (every case today) an edit leaves the previous
+- With no trusted identity an edit leaves the previous
   `edited_by` as it was; nothing is guessed.
 - `normalizeRawLithoDocument` keeps it, so IndexedDB autosave and restore, JSON
   export and JSON import all carry it. An imported `edited_by` that is not text

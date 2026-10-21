@@ -2,31 +2,23 @@ import { buildApiUrl } from "./Api/apiConfig";
 import { isRecord } from "../types/validation";
 
 /*
- * The signed-in Windows domain user, as "DOMAIN\username".
- *
- * Used for two pieces of metadata:
+ * The signed-in Windows user: "BEK" for a local account, "COMPANY\bek" for a
+ * domain account. This is the one identity source for the whole app:
  *   - `created_by` stamped on a NEW Raw Litho document, and `edited_by` on
  *     each committed edit (Raw Litho and Upload Data);
  *   - "Imported By" on Upload Data and the user name in the sidebar.
  *
- * A browser cannot read the Windows login, so the name must come from the
- * backend, which learns it from Windows Integrated Authentication. The
- * frontend calls the endpoint named by VITE_CURRENT_USER_PATH (for example
- * `/api/currentuser`) and expects `{ "userName": "DOMAIN\\username" }`.
+ * A browser cannot read the Windows login, so the name comes from the
+ * backend's GET /api/currentuser (CurrentUserController), which is protected
+ * by Windows Integrated Authentication (Negotiate: Kerberos or NTLM). The
+ * browser proves the signed-in user to the backend; the backend returns
+ * `{ "userName": ... }`. The path is VITE_CURRENT_USER_PATH (frontend/.env).
  *
- * TODAY THE BACKEND HAS NO SUCH ENDPOINT AND NO AUTHENTICATION, so the
- * variable is empty, no request is made and this resolves to null: every
- * caller shows a neutral placeholder and leaves `created_by` / `edited_by` unset. A failed or
- * malformed response is also null. Nothing is ever guessed — not the
- * hostname, the user agent or anything the user types.
- *
- * Backend work needed (not part of the frontend):
- *   1. Windows Authentication on the API: IIS `windowsAuthentication`, or
- *      `AddAuthentication(NegotiateDefaults.AuthenticationScheme).AddNegotiate()`
- *      with `UseAuthentication()` in Program.cs;
- *   2. an authenticated endpoint returning `HttpContext.User.Identity.Name`
- *      as `{ "userName": ... }`.
- * Then set VITE_CURRENT_USER_PATH and rebuild.
+ * An empty path makes no request. An error status (e.g. 401 when the browser
+ * did not send Windows credentials), a malformed body or a network failure
+ * gives null, and callers show a neutral placeholder and leave `created_by` /
+ * `edited_by` unset. Nothing is ever guessed — not the hostname, the user
+ * agent, a build-time user name or anything the user types.
  */
 const CURRENT_USER_PATH = (import.meta.env.VITE_CURRENT_USER_PATH ?? "").trim();
 const MAX_USER_NAME_LENGTH = 256;

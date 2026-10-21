@@ -156,30 +156,39 @@ validation all pick it up.
 ## currentUser.ts
 
 `getCurrentWindowsUser()` is the one place the app asks who is signed in
-(`DOMAIN\username`). It feeds Raw Litho's `created_by` on new documents and
-Upload Data's "Imported By", through `hooks/useCurrentUser.ts`.
+(`Bek` for a local account, `COMPANY\bek` for a domain account). Through
+`hooks/useCurrentUser.ts` it feeds the sidebar user name, Raw Litho's
+`created_by` / `edited_by`, and Upload Data's "Edited By" stamp and
+"Imported By".
 
 **How the name is obtained.** A browser cannot read the Windows login, so
-`getCurrentWindowsUser()` asks the backend. It calls the endpoint named by
-`VITE_CURRENT_USER_PATH` (for example `/api/currentuser`) with
-`credentials: "include"` and expects `{ "userName": "DOMAIN\\username" }`.
+`getCurrentWindowsUser()` asks the backend: `GET /api/currentuser`
+(`VITE_CURRENT_USER_PATH` in `frontend/.env`) with `credentials: "include"`.
+That endpoint is protected by Windows Integrated Authentication (Negotiate:
+Kerberos or NTLM), so the browser proves the signed-in Windows user and the
+backend answers `{ "userName": ... }`:
 
-The answer is fetched once per page load. An error status, a malformed body or
-a network failure gives `null`. The hostname, user agent or anything typed in
-are never used.
+| Account | Windows reports | Shown |
+| --- | --- | --- |
+| Local account | `DESKTOP-OD9CS4B\Bek` | `Bek` (the computer prefix is dropped) |
+| Domain account | `COMPANY\bek` | `COMPANY\bek` |
 
-**Today `VITE_CURRENT_USER_PATH` is empty.** The backend has no authentication
-(nothing in `Program.cs` or `web.config`) and no current-user endpoint, so no
-request is made and the result is `null`.
+The answer is fetched once per page load. An error status (401 when the
+browser sent no Windows credentials), a malformed body or a network failure
+gives `null`, shown as a neutral placeholder. The hostname, user agent, a
+build-time user name or anything typed in are never used.
 
-To enable the name, the backend needs:
-1. Windows Authentication: IIS `windowsAuthentication`, or `AddNegotiate()`
-   plus `UseAuthentication()`.
-2. An authenticated endpoint returning `HttpContext.User.Identity.Name` as
-   `{ "userName": ... }`.
-
-Then set `VITE_CURRENT_USER_PATH` (see `.env.example`) and rebuild. No frontend
-code changes are needed.
+**Browser and deployment notes**
+- Edge and Chrome send Windows credentials to `localhost` automatically. A
+  backend on another host name must be in the browser's Local intranet zone
+  (or an `AuthServerAllowlist` policy), otherwise the browser asks for a login.
+- `npm run dev`: Vite proxies `/api/currentuser` over a single kept-alive
+  connection (`vite.config.ts`), because NTLM authenticates a connection, not
+  a request. This is dev-only: anything that reaches the dev server shares
+  that authenticated connection, which is fine on a single-user PC.
+- Production should serve the frontend and `/api` from one origin (as today,
+  `VITE_API_BASE_URL` empty). A cross-origin API would need its CORS policy
+  changed from `AllowAnyOrigin` to named origins with `AllowCredentials`.
 
 ## Caching strategy
 

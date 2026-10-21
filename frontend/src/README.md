@@ -64,7 +64,7 @@ sidebar stays mounted while the route changes.
 ```text
 App
 ├── Sidebar                collapsible, NavLink-based, owns its collapsed state
-│   ├── user name          footer; DOMAIN\username from useCurrentUser(), then a divider
+│   ├── user name          footer; Windows user from useCurrentUser(), then a divider
 │   └── StatusIndicator    footer; polls GET /api/status every 5s (900ms timeout)
 └── main.page-content
     └── Routes
@@ -74,10 +74,11 @@ App
 ```
 
 The sidebar footer shows, left-aligned, the signed-in Windows user
-(`DOMAIN\username`, truncated with a tooltip when long), a thin divider, then
-the backend status (green "Online", amber "Offline"). The user comes from
-`useCurrentUser()`; with no trusted identity (today) it reads
-"User not identified" — never a hostname or a guess. The sidebar is a flex column: the navigation
+(`Bek` for a local account, `COMPANY\bek` for a domain account; truncated
+with a tooltip when long), a thin divider, then the backend status (green
+"Online", amber "Offline"). The user comes from `useCurrentUser()`, i.e. the
+backend's Windows-authenticated `GET /api/currentuser`; when it cannot be
+verified it reads "User not identified" — never a hostname or a guess. The sidebar is a flex column: the navigation
 takes the free height and scrolls if it ever runs out of room, and the footer
 never shrinks, so the indicator stays pinned without overlapping the links.
 When the sidebar is collapsed only the coloured light is shown; its `title`

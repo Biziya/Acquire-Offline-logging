@@ -33,6 +33,7 @@ BackendApi/
 ├── Controllers/
 │   ├── RawLithoPage/          # CaCode, ColourCode, Drillhole, LithoCode, OmCode,
 │   │                          # OmFaciesCode, OxCode, PyCode, RedoxCode, SedimCode
+│   ├── CurrentUser/           # GET /api/currentuser (Windows Authentication)
 │   ├── Status/
 │   └── UploadData/
 │
@@ -41,6 +42,7 @@ BackendApi/
 │   └── UploadData/
 │
 ├── Models/
+│   ├── CurrentUser/
 │   ├── RawLithoPage/          # DTOs / responses for the Raw Litho endpoints
 │   ├── Status/
 │   └── UploadData/
@@ -55,6 +57,28 @@ namespace BackendApi.Controllers.RawLithoPage;
 namespace BackendApi.Repositories.RawLithoPage.CaCode;
 namespace BackendApi.Models.RawLithoPage;
 ```
+
+## Current user endpoint
+
+`GET /api/currentuser` returns the Windows user calling the API, proven by
+Windows Integrated Authentication (`Microsoft.AspNetCore.Authentication.Negotiate`:
+Kerberos or NTLM). The frontend shows it in the sidebar and uses it for
+`created_by`, `edited_by` and Upload Data's "Imported By".
+
+```json
+{ "userName": "Bek" }            // local account (computer prefix dropped)
+{ "userName": "COMPANY\\bek" }   // domain account
+```
+
+- Only this endpoint has `[Authorize]`. No fallback policy is set, so every
+  other endpoint stays anonymous, exactly as before.
+- Without Windows credentials the response is `401` with
+  `WWW-Authenticate: Negotiate`; browsers then authenticate automatically for
+  `localhost` / Local intranet sites.
+- Test from PowerShell on the same PC:
+  `Invoke-RestMethod http://localhost:7047/api/currentuser -UseDefaultCredentials`.
+- Hosted in IIS instead of Kestrel: enable Windows Authentication for the site
+  (and keep Anonymous Authentication on for the other endpoints).
 
 ## Drillholes endpoint
 

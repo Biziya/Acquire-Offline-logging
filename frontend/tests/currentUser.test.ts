@@ -37,6 +37,15 @@ describe("current Windows user", () => {
   });
 
   it.each([
+    ["a local account", "Bek"],
+    ["a domain account", "COMPANY\\bek"],
+  ])("keeps %s exactly as the backend verified it", async (_, userName) => {
+    respond(200, { userName });
+    const getUser = await loadWithEndpoint("/api/currentuser");
+    await expect(getUser()).resolves.toBe(userName);
+  });
+
+  it.each([
     ["an error status", () => respond(401, { userName: "CORP\\jdoe" })],
     ["a malformed body", () => respond(200, { name: "CORP\\jdoe" })],
     ["an empty name", () => respond(200, { userName: "  " })],
