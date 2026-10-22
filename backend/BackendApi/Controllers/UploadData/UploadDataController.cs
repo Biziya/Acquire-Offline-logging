@@ -3,6 +3,7 @@ using System.Text.Json;
 using BackendApi.Models.UploadData;
 using BackendApi.Repositories.UploadData;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.SqlClient;
 
 namespace BackendApi.Controllers.UploadData;
 
@@ -110,6 +111,20 @@ public sealed class UploadDataController : ControllerBase
                 },
                 cancellationToken);
         }
+        catch (SqlException exception) when (IsPermissionDenied(exception))
+        {
+            // A database security setting, not a problem with the file: the
+            // details (object, database, login) go to the log only.
+            _logger.LogError(
+                exception,
+                "Upload of {FileName} for drillhole {Drillhole} failed: SQL Server denied a permission to the API login.",
+                fileName,
+                result.Drillhole);
+
+            return Failure(
+                StatusCodes.Status500InternalServerError,
+                "Database upload failed due to insufficient permissions.");
+        }
         catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
         {
             _logger.LogError(
@@ -141,6 +156,11 @@ public sealed class UploadDataController : ControllerBase
         }
             ? name
             : null;
+
+    // 229: "The <permission> permission was denied on the object …";
+    // 230: the same, on a column.
+    private static bool IsPermissionDenied(SqlException exception) =>
+        exception.Errors.Cast<SqlError>().Any(error => error.Number is 229 or 230);
 
     private ObjectResult Failure(int statusCode, string message) =>
         StatusCode(statusCode, new UploadDataResponse { Success = false, Message = message });

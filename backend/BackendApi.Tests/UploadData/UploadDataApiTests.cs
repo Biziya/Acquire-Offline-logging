@@ -178,6 +178,41 @@ public sealed class UploadDataApiTests : IClassFixture<WebApplicationFactory<Pro
     }
 
     [Fact]
+    public async Task ReportsAPermissionDenialWithoutDatabaseDetails()
+    {
+        // The exact error seen against ACQMN01_DEV.
+        var repository = new FakeUploadDataRepository
+        {
+            Failure = SqlExceptionFactory.Create(
+                229,
+                "The INSERT permission was denied on the object 'CoreDescrData', database 'ACQMN01_DEV', schema 'MyApps'.")
+        };
+
+        var response = await CreateClient(repository).PostAsync(Route, FileContent(TestDocuments.Valid().ToJsonString()));
+
+        await AssertFailure(
+            response,
+            HttpStatusCode.InternalServerError,
+            "Database upload failed due to insufficient permissions.");
+        var text = await response.Content.ReadAsStringAsync();
+        Assert.DoesNotContain("CoreDescrData", text);
+        Assert.DoesNotContain("ACQMN01_DEV", text);
+    }
+
+    [Fact]
+    public async Task ReportsOtherSqlErrorsAsAGenericFailure()
+    {
+        var repository = new FakeUploadDataRepository
+        {
+            Failure = SqlExceptionFactory.Create(2627, "Violation of PRIMARY KEY constraint 'PK_CoreDescrData'.")
+        };
+
+        var response = await CreateClient(repository).PostAsync(Route, FileContent(TestDocuments.Valid().ToJsonString()));
+
+        await AssertFailure(response, HttpStatusCode.InternalServerError, "Database upload failed.");
+    }
+
+    [Fact]
     public async Task ReturnsASafeErrorWhenSqlServerIsUnavailable()
     {
         // The real repository against a port nothing listens on.

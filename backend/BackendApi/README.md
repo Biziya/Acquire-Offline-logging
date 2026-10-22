@@ -241,7 +241,10 @@ rows. The API never deletes rows.
 // 413 Payload Too Large
 { "success": false, "message": "File exceeds the 10 MB limit." }
 
-// 500 Internal Server Error — connection or procedure failure
+// 500 Internal Server Error — SQL Server denied a permission (error 229 / 230)
+{ "success": false, "message": "Database upload failed due to insufficient permissions." }
+
+// 500 Internal Server Error — any other connection or procedure failure
 { "success": false, "message": "Database upload failed." }
 ```
 
@@ -257,6 +260,38 @@ login needs `EXECUTE` on it. **Check the catalog before uploading:**
 `DefaultConnection` currently points to `Initial Catalog=ACQMN01`, while the
 target table is in `ACQMN01_DEV`. Run uploads only against an approved
 development database.
+
+### Troubleshooting: error 229 (INSERT permission denied)
+
+```text
+The INSERT permission was denied on the object 'CoreDescrData',
+database 'ACQMN01_DEV', schema 'MyApps'.   (Number 229, State 5, Class 14)
+```
+
+This is a database security setting, not an API bug; the API returns
+`Database upload failed due to insufficient permissions.` and logs the full
+SQL error. The error names the **table**, so the `EXECUTE` check on the
+procedure already passed: granting `EXECUTE` alone does not fix it.
+
+A procedure only lends its owner's rights to the tables it uses through an
+unbroken *ownership chain*. The chain breaks — and SQL Server checks the
+table permission against the API login instead — when:
+
+- the procedure (in the `DefaultConnection` database, `ACQMN01` in this
+  repository) writes to `ACQMN01_DEV` by a three-part name: chains never cross
+  databases unless cross-database chaining is on (it is off by default and
+  should stay off);
+- the `MyApps` schema has a different owner than the `dbo` procedure;
+- the statement is dynamic SQL (`EXEC(@sql)` / `sp_executesql`).
+
+`Sql/UploadDataPermissions.sql` contains read-only diagnostics that show which
+case applies, and the least-privilege fixes for a DBA to choose from (all
+commented out): an object-level `SELECT, INSERT, UPDATE` grant on
+`MyApps.CoreDescrData` only, or certificate signing of the procedure so the
+API login keeps `EXECUTE` only. Never `db_owner`, `db_datawriter`,
+schema-wide grants, `TRUSTWORTHY` / cross-db chaining, or `EXECUTE AS OWNER`
+without review. `EXECUTE AS OWNER` would also change `SUSER_NAME()`, and with
+it the `usr` column and the duplicate-matching key.
 
 ### Known limitations of the procedure
 
