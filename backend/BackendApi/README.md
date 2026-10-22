@@ -259,7 +259,8 @@ rows. The API never deletes rows.
 { "success": false, "message": "File exceeds the 10 MB limit." }
 
 // 500 Internal Server Error — SQL Server denied a permission (error 229 / 230)
-{ "success": false, "message": "Database upload failed due to insufficient permissions." }
+{ "success": false,
+  "message": "Database upload is blocked by SQL Server permissions. Contact the database administrator." }
 
 // 500 Internal Server Error — any other connection or procedure failure
 { "success": false, "message": "Database upload failed." }
@@ -271,44 +272,49 @@ client abandons cancels the database call.
 
 ### Database configuration
 
-The endpoint uses the existing `DefaultConnection` (no new connection
-string). The procedure must exist in that connection's database, and the
-login needs `EXECUTE` on it. **Check the catalog before uploading:**
-`DefaultConnection` currently points to `Initial Catalog=ACQMN01`, while the
-target table is in `ACQMN01_DEV`. Run uploads only against an approved
-development database.
+The endpoint uses the existing `DefaultConnection`: `Data Source=BMNULAADB02;
+Initial Catalog=ACQMN01`, SQL login `userAcquire` (both appsettings files; no
+environment variable, user-secrets or other override is configured). The
+procedure therefore runs in **ACQMN01**, and the latest error confirms it
+writes `ACQMN01.MyApps.CoreDescrData`. Earlier logs named `ACQMN01_DEV`,
+which this configuration never pointed to. **Confirm the intended destination
+with the database team before any write test**; if it is `ACQMN01_DEV`, only
+the connection string's `Initial Catalog` changes.
+
+Under the company security model the application login may only execute the
+procedure: it sends no INSERT/UPDATE/DELETE of its own and needs no table
+permissions.
 
 ### Troubleshooting: error 229 (INSERT permission denied)
 
 ```text
 The INSERT permission was denied on the object 'CoreDescrData',
-database 'ACQMN01_DEV', schema 'MyApps'.   (Number 229, State 5, Class 14)
+database 'ACQMN01', schema 'MyApps'.   (Number 229, State 5, Class 14)
 ```
 
-This is a database security setting, not an API bug; the API returns
-`Database upload failed due to insufficient permissions.` and logs the full
-SQL error. The error names the **table**, so the `EXECUTE` check on the
-procedure already passed: granting `EXECUTE` alone does not fix it.
+This is a database authorization problem, not a JSON or parameter problem:
+the API returns `Database upload is blocked by SQL Server permissions. Contact
+the database administrator.` (HTTP 500) and logs the SQL error number, the
+procedure, the connected server/database and SQL Server's message — never the
+credentials or the uploaded JSON.
 
-A procedure only lends its owner's rights to the tables it uses through an
-unbroken *ownership chain*. The chain breaks — and SQL Server checks the
-table permission against the API login instead — when:
+The error names the **table**, so the EXECUTE check on the procedure passed;
+granting EXECUTE does not fix it. The procedure ran its INSERT and SQL Server
+checked it against `userAcquire`, which happens only when the ownership chain
+from `dbo.InsertUpdateCoreDescr_WellCAD` to `MyApps.CoreDescrData` is broken:
+the `MyApps` schema (or table) has a different owner than `dbo`, the INSERT
+is dynamic SQL, or it crosses into another database. An explicit DENY on the
+login matters on top of that.
 
-- the procedure (in the `DefaultConnection` database, `ACQMN01` in this
-  repository) writes to `ACQMN01_DEV` by a three-part name: chains never cross
-  databases unless cross-database chaining is on (it is off by default and
-  should stay off);
-- the `MyApps` schema has a different owner than the `dbo` procedure;
-- the statement is dynamic SQL (`EXEC(@sql)` / `sp_executesql`).
-
-`Sql/UploadDataPermissions.sql` contains read-only diagnostics that show which
-case applies, and the least-privilege fixes for a DBA to choose from (all
-commented out): an object-level `SELECT, INSERT, UPDATE` grant on
-`MyApps.CoreDescrData` only, or certificate signing of the procedure so the
-API login keeps `EXECUTE` only. Never `db_owner`, `db_datawriter`,
-schema-wide grants, `TRUSTWORTHY` / cross-db chaining, or `EXECUTE AS OWNER`
-without review. `EXECUTE AS OWNER` would also change `SUSER_NAME()`, and with
-it the `usr` column and the duplicate-matching key.
+`Sql/UploadDataPermissions.sql` holds read-only diagnostics that show which
+case applies (destination, identity, owners, execution context, dynamic SQL,
+DENYs) and the fixes for the DBA, all commented out. Recommended: **sign the
+procedure with a certificate** whose user holds `SELECT, INSERT, UPDATE` on
+that one table — the application login keeps `EXECUTE` only, which is exactly
+the approved model. Not proposed: `db_owner`, `db_datawriter`, table or
+schema grants to the application, cross-db chaining, `TRUSTWORTHY`, or
+`EXECUTE AS OWNER` (it would change `SUSER_NAME()`, i.e. the `usr` column
+and the duplicate-matching key).
 
 ### Known limitations of the procedure
 

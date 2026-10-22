@@ -179,12 +179,12 @@ public sealed class UploadDataApiTests : IClassFixture<WebApplicationFactory<Pro
     [Fact]
     public async Task ReportsAPermissionDenialWithoutDatabaseDetails()
     {
-        // The exact error seen against ACQMN01_DEV.
+        // The exact error reported by the running API.
         var repository = new FakeUploadDataRepository
         {
             Failure = SqlExceptionFactory.Create(
                 229,
-                "The INSERT permission was denied on the object 'CoreDescrData', database 'ACQMN01_DEV', schema 'MyApps'.")
+                "The INSERT permission was denied on the object 'CoreDescrData', database 'ACQMN01', schema 'MyApps'.")
         };
 
         var response = await CreateClient(repository).PostAsync(Route, FileContent(TestDocuments.Valid().ToJsonString()));
@@ -192,10 +192,10 @@ public sealed class UploadDataApiTests : IClassFixture<WebApplicationFactory<Pro
         await AssertFailure(
             response,
             HttpStatusCode.InternalServerError,
-            "Database upload failed due to insufficient permissions.");
+            "Database upload is blocked by SQL Server permissions. Contact the database administrator.");
         var text = await response.Content.ReadAsStringAsync();
         Assert.DoesNotContain("CoreDescrData", text);
-        Assert.DoesNotContain("ACQMN01_DEV", text);
+        Assert.DoesNotContain("ACQMN01", text);
     }
 
     [Fact]

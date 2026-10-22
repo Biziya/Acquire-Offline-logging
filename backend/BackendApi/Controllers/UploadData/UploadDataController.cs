@@ -25,6 +25,9 @@ public sealed class UploadDataController : ControllerBase
     private readonly ILogger<UploadDataController> _logger;
     private readonly long _maxFileSizeBytes;
 
+    // "server/catalog" of DefaultConnection, for logs only (never credentials).
+    private readonly string _database;
+
     public UploadDataController(
         IUploadDataRepository repository,
         IConfiguration configuration,
@@ -33,6 +36,10 @@ public sealed class UploadDataController : ControllerBase
         _repository = repository;
         _logger = logger;
         _maxFileSizeBytes = configuration.GetValue(MaxFileSizeKey, DefaultMaxFileSizeBytes);
+
+        var connection = new SqlConnectionStringBuilder(
+            configuration.GetConnectionString(BackendApi.Data.ConfigurationExtensions.DefaultConnectionName));
+        _database = $"{connection.DataSource}/{connection.InitialCatalog}";
     }
 
     /// <summary>
@@ -109,19 +116,25 @@ public sealed class UploadDataController : ControllerBase
                 },
                 cancellationToken);
         }
-        catch (SqlException exception) when (IsPermissionDenied(exception))
+        catch (SqlException exception) when (FindPermissionError(exception) is { } denied)
         {
-            // A database security setting, not a problem with the file: the
-            // details (object, database, login) go to the log only.
+            // A database security setting, not a problem with the file. The
+            // server's message names the denied object and its database; it
+            // holds no credentials and none of the uploaded JSON.
             _logger.LogError(
                 exception,
-                "Upload of {FileName} for drillhole {Drillhole} failed: SQL Server denied a permission to the API login.",
+                "Upload of {FileName} for drillhole {Drillhole} blocked by SQL Server permissions: " +
+                "error {SqlErrorNumber} in procedure {Procedure} (connected database {Database}): {SqlMessage}",
                 fileName,
-                result.Drillhole);
+                result.Drillhole,
+                denied.Number,
+                denied.Procedure,
+                _database,
+                denied.Message);
 
             return Failure(
                 StatusCodes.Status500InternalServerError,
-                "Database upload failed due to insufficient permissions.");
+                "Database upload is blocked by SQL Server permissions. Contact the database administrator.");
         }
         catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
         {
@@ -157,8 +170,8 @@ public sealed class UploadDataController : ControllerBase
 
     // 229: "The <permission> permission was denied on the object …";
     // 230: the same, on a column.
-    private static bool IsPermissionDenied(SqlException exception) =>
-        exception.Errors.Cast<SqlError>().Any(error => error.Number is 229 or 230);
+    private static SqlError? FindPermissionError(SqlException exception) =>
+        exception.Errors.Cast<SqlError>().FirstOrDefault(error => error.Number is 229 or 230);
 
     private ObjectResult Failure(int statusCode, string message) =>
         StatusCode(statusCode, new UploadDataResponse { Success = false, Message = message });

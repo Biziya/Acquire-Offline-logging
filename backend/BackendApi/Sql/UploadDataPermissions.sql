@@ -1,123 +1,136 @@
 /*
 ================================================================================
- Upload Data — SQL Server error 229 (INSERT permission denied on
- [ACQMN01_DEV].[MyApps].[CoreDescrData]) — diagnostics and fix options
+ Upload Data — SQL Server error 229 — diagnostics and fix options for the DBA
 ================================================================================
 
- PART A is READ-ONLY: SELECTs and an EXECUTE AS LOGIN / REVERT context switch.
- It changes no data, permissions or objects.
+ Error from POST /api/upload-data (logged by UploadDataController):
+   The INSERT permission was denied on the object 'CoreDescrData',
+   database 'ACQMN01', schema 'MyApps'.            (Number 229, State 5, Class 14)
+   raised inside procedure InsertUpdateCoreDescr_WellCAD
 
- PART B is entirely commented out. Nothing in it runs until a DBA chooses one
- option, fills in the placeholders and executes it deliberately.
+ What the application does (and only this):
+   connection  Data Source=BMNULAADB02; Initial Catalog=ACQMN01;
+               SQL login userAcquire (appsettings.json / appsettings.Development.json;
+               no environment, user-secrets or other overrides are configured)
+   call        EXEC dbo.InsertUpdateCoreDescr_WellCAD
+                   @Action = 'Raw core import_JSON', @Hole, @usr, @fileName, @str_json
+               once per uploaded file. No INSERT/UPDATE/DELETE is sent by the app.
 
- Run in SSMS as a DBA connected to BMNULAADB02. Set these two values first:
-   @ApiLogin  = the SQL login in DefaultConnection (appsettings.json: User ID).
-   Procedure database = the Initial Catalog in DefaultConnection. The API runs
-                the procedure that exists in THAT database. In this repository
-                it is ACQMN01, not ACQMN01_DEV.
+ What 229 means here:
+   The EXECUTE check on the procedure PASSED (otherwise 229 would name the
+   procedure). The procedure then ran its INSERT into MyApps.CoreDescrData and
+   SQL Server checked that INSERT against the caller (userAcquire). That only
+   happens when the ownership chain from dbo.InsertUpdateCoreDescr_WellCAD to
+   MyApps.CoreDescrData is broken:
+     - the MyApps schema / table has a different owner than the dbo procedure, or
+     - the INSERT runs as dynamic SQL (EXEC(@sql) / sp_executesql), or
+     - the procedure writes to another database (cross-database), or
+     - the caller has an explicit DENY (only matters once the chain is broken).
+   PART A shows which one applies.
+
+ PART A is READ-ONLY (SELECTs, EXECUTE AS LOGIN ... REVERT). PART B is
+ commented out; nothing in it runs until a DBA chooses and executes it.
+
+ This script targets ACQMN01: the configured database, and the database named
+ in the latest error. Earlier logs named ACQMN01_DEV. If the team confirms
+ ACQMN01_DEV as the destination instead, the application's connection string
+ must change (not the procedure), and this script is run with every
+ [ACQMN01] / N'ACQMN01' replaced by ACQMN01_DEV.
 ================================================================================
 */
 
 -------------------------------------------------------------------------------
--- PART A — DIAGNOSTICS (read-only)
+-- PART A — DIAGNOSTICS (read-only; run as a DBA in SSMS)
 -------------------------------------------------------------------------------
 
-USE [ACQMN01];   -- << the Initial Catalog of DefaultConnection
+-- A0. Destination: which database holds the procedure and the table?
+SELECT
+    db.name                                                            AS DatabaseName,
+    OBJECT_ID(QUOTENAME(db.name) + N'.dbo.InsertUpdateCoreDescr_WellCAD') AS ProcedureId,
+    OBJECT_ID(QUOTENAME(db.name) + N'.MyApps.CoreDescrData')           AS TableId
+FROM sys.databases AS db
+WHERE db.name IN (N'ACQMN01', N'ACQMN01_DEV');
 GO
 
--- A1. The identity the API really runs as, in the database it connects to.
---     EXECUTE AS LOGIN reproduces the API's security context for this session.
-EXECUTE AS LOGIN = N'userAcquire';   -- << DefaultConnection User ID
+USE [ACQMN01];
+GO
+
+-- A1. The API's identity in this database (EXECUTE AS LOGIN reproduces it).
+EXECUTE AS LOGIN = N'userAcquire';
 
 SELECT
-    DB_NAME()         AS CurrentDatabase,
-    SUSER_SNAME()     AS LoginName,
-    ORIGINAL_LOGIN()  AS OriginalLogin,   -- the DBA here; the API itself sees userAcquire
-    USER_NAME()       AS DatabaseUser,
-    CURRENT_USER      AS CurrentDatabaseUser;
+    DB_NAME()         AS DatabaseName,
+    ORIGINAL_LOGIN()  AS OriginalLogin,   -- the DBA in this session; the API sees userAcquire
+    SUSER_SNAME()     AS SqlLogin,
+    USER_NAME()       AS DatabaseUser;
 
--- Expect CanExecute = 1: error 229 names the TABLE, so the EXECUTE check on
--- the procedure already passed (otherwise the error would name the procedure).
-SELECT HAS_PERMS_BY_NAME(N'dbo.InsertUpdateCoreDescr_WellCAD', N'OBJECT', N'EXECUTE') AS CanExecute;
+SELECT
+    HAS_PERMS_BY_NAME(N'dbo.InsertUpdateCoreDescr_WellCAD', N'OBJECT', N'EXECUTE') AS CanExecuteProcedure,
+    HAS_PERMS_BY_NAME(N'MyApps.CoreDescrData', N'OBJECT', N'INSERT') AS CanInsertDirectly,
+    HAS_PERMS_BY_NAME(N'MyApps.CoreDescrData', N'OBJECT', N'UPDATE') AS CanUpdateDirectly,
+    HAS_PERMS_BY_NAME(N'MyApps.CoreDescrData', N'OBJECT', N'SELECT') AS CanSelectDirectly;
+-- Expected under the approved model: CanExecuteProcedure = 1 and the three
+-- direct permissions = 0. The procedure must then carry the table access itself.
 
 REVERT;
 GO
 
--- A2. Where the procedure lives, who owns it, and whether it switches context.
---     ExecuteAs = CALLER means every permission check NOT covered by an intact
---     ownership chain is made against the API login.
+-- A2. Ownership chain: owner of the procedure vs owner of the table.
+--     The chain is intact only when both rows show the same OwnerUser.
 SELECT
-    DB_NAME()                                             AS ProcedureDatabase,
-    s.name + N'.' + p.name                                AS ProcedureName,
-    owner_user.name                                       AS OwnerUser,
-    SUSER_SNAME(owner_user.sid)                           AS OwnerLogin,
+    CASE o.type WHEN 'P' THEN N'procedure' ELSE N'table' END AS ObjectType,
+    s.name + N'.' + o.name        AS ObjectName,
+    owner_user.name               AS OwnerUser,
+    SUSER_SNAME(owner_user.sid)   AS OwnerLogin
+FROM sys.objects AS o
+JOIN sys.schemas AS s ON s.schema_id = o.schema_id
+JOIN sys.database_principals AS owner_user
+  ON owner_user.principal_id = COALESCE(o.principal_id, s.principal_id)
+WHERE o.object_id IN (OBJECT_ID(N'dbo.InsertUpdateCoreDescr_WellCAD'),
+                      OBJECT_ID(N'MyApps.CoreDescrData'))
+ORDER BY ObjectType;
+
+SELECT
+    s.name                        AS SchemaName,
+    owner_user.name               AS SchemaOwner
+FROM sys.schemas AS s
+JOIN sys.database_principals AS owner_user ON owner_user.principal_id = s.principal_id
+WHERE s.name IN (N'dbo', N'MyApps');
+
+-- A3. Execution context and signatures of the procedure.
+--     ExecuteAs = CALLER: everything outside an intact ownership chain is
+--     checked against userAcquire.
+SELECT
     CASE
         WHEN m.execute_as_principal_id IS NULL THEN N'CALLER'
         WHEN m.execute_as_principal_id = -2    THEN N'OWNER'
         ELSE USER_NAME(m.execute_as_principal_id)
     END                                                   AS ExecuteAs,
-    (SELECT COUNT(*) FROM sys.crypt_properties cp
-      WHERE cp.major_id = p.object_id)                    AS Signatures
-FROM sys.procedures AS p
-JOIN sys.schemas AS s ON s.schema_id = p.schema_id
-JOIN sys.sql_modules AS m ON m.object_id = p.object_id
-JOIN sys.database_principals AS owner_user
-  ON owner_user.principal_id = COALESCE(p.principal_id, s.principal_id)
-WHERE p.object_id = OBJECT_ID(N'dbo.InsertUpdateCoreDescr_WellCAD');
+    (SELECT COUNT(*) FROM sys.crypt_properties AS cp
+      WHERE cp.major_id = m.object_id)                    AS Signatures
+FROM sys.sql_modules AS m
+WHERE m.object_id = OBJECT_ID(N'dbo.InsertUpdateCoreDescr_WellCAD');
 
--- A3. Which tables the procedure touches, and how.
---     A non-NULL referenced_database_name (ACQMN01_DEV) = CROSS-DATABASE access.
---     Tables reached only through dynamic SQL do not appear here; see A4.
-SELECT DISTINCT
-    referenced_database_name,
-    referenced_schema_name,
-    referenced_entity_name
+-- A4. How the procedure reaches its tables.
+--     referenced_database_name not NULL = cross-database access.
+SELECT DISTINCT referenced_database_name, referenced_schema_name, referenced_entity_name
 FROM sys.sql_expression_dependencies
 WHERE referencing_id = OBJECT_ID(N'dbo.InsertUpdateCoreDescr_WellCAD');
 
--- A4. Dynamic SQL in the procedure. Ownership chaining never applies to
---     EXEC(@sql) / sp_executesql, so those statements are always checked
---     against the API login.
+--     Dynamic SQL never uses ownership chaining.
 SELECT
     CASE WHEN def LIKE N'%sp_executesql%' OR def LIKE N'%EXEC(%' OR def LIKE N'%EXEC (%'
               OR def LIKE N'%EXECUTE(%' OR def LIKE N'%EXECUTE (%'
-         THEN 1 ELSE 0 END                                AS UsesDynamicSql,
-    CASE WHEN def LIKE N'%ACQMN01_DEV%' THEN 1 ELSE 0 END AS NamesAcqmn01Dev
+         THEN 1 ELSE 0 END AS UsesDynamicSql
 FROM (SELECT OBJECT_DEFINITION(OBJECT_ID(N'dbo.InsertUpdateCoreDescr_WellCAD')) AS def) AS d;
 GO
 
--- A5. Owner of the target table (through its schema) in ACQMN01_DEV.
---     Same database: the chain is intact only if this owner = the procedure owner (A2).
-SELECT
-    s.name + N'.' + t.name        AS TableName,
-    owner_user.name               AS OwnerUser,
-    SUSER_SNAME(owner_user.sid)   AS OwnerLogin
-FROM [ACQMN01_DEV].sys.tables AS t
-JOIN [ACQMN01_DEV].sys.schemas AS s ON s.schema_id = t.schema_id
-JOIN [ACQMN01_DEV].sys.database_principals AS owner_user
-  ON owner_user.principal_id = COALESCE(t.principal_id, s.principal_id)
-WHERE s.name = N'MyApps' AND t.name = N'CoreDescrData';
-
--- A6. Cross-database ownership chaining (off by default, and should stay off).
-SELECT name, is_db_chaining_on, is_trustworthy_on, SUSER_SNAME(owner_sid) AS DatabaseOwner
-FROM sys.databases
-WHERE name IN (N'ACQMN01', N'ACQMN01_DEV');
-
-SELECT CAST(value_in_use AS int) AS ServerCrossDbChaining
-FROM sys.configurations
-WHERE name = N'cross db ownership chaining';
-GO
-
--- A7. The API login in ACQMN01_DEV: its user, role memberships, and every
---     GRANT / DENY that applies to the table (object, schema or database level).
---     Look especially for DENY rows and for db_denydatawriter / db_denydatareader.
-USE [ACQMN01_DEV];
-GO
-
+-- A5. Explicit GRANT / DENY affecting the API user, and its role memberships.
+--     Look for DENY rows and db_denydatawriter / db_denydatareader.
 DECLARE @ApiUser sysname =
-    (SELECT name FROM sys.database_principals WHERE sid = SUSER_SID(N'userAcquire'));   -- << login
+    (SELECT name FROM sys.database_principals WHERE sid = SUSER_SID(N'userAcquire'));
 
-SELECT @ApiUser AS ApiUserInAcqmn01Dev;   -- NULL = no user; access would be via guest
+SELECT @ApiUser AS ApiUser;
 
 SELECT role_user.name AS RoleName
 FROM sys.database_role_members AS rm
@@ -126,91 +139,68 @@ JOIN sys.database_principals AS role_user ON role_user.principal_id = rm.role_pr
 WHERE member_user.name = @ApiUser;
 
 SELECT
-    grantee.name        AS Grantee,
-    perm.state_desc     AS State,
-    perm.permission_name,
-    perm.class_desc     AS Scope,
+    grantee.name          AS Grantee,
+    perm.state_desc       AS State,
+    perm.permission_name  AS Permission,
     CASE perm.class
         WHEN 1 THEN OBJECT_SCHEMA_NAME(perm.major_id) + N'.' + OBJECT_NAME(perm.major_id)
         WHEN 3 THEN N'SCHEMA::' + SCHEMA_NAME(perm.major_id)
         ELSE N'(database)'
-    END                 AS Securable
+    END                   AS Securable
 FROM sys.database_permissions AS perm
 JOIN sys.database_principals AS grantee ON grantee.principal_id = perm.grantee_principal_id
-WHERE (perm.class = 1 AND perm.major_id = OBJECT_ID(N'MyApps.CoreDescrData'))
-   OR (perm.class = 3 AND perm.major_id = SCHEMA_ID(N'MyApps'))
-   OR (perm.class = 0 AND perm.permission_name IN (N'INSERT', N'UPDATE', N'SELECT', N'DELETE', N'CONTROL'))
-ORDER BY Securable, Grantee, perm.permission_name;
-GO
-
--- A8. Effective table permissions of the API login in ACQMN01_DEV
---     (the provided check, evaluated as the API login).
-EXECUTE AS LOGIN = N'userAcquire';   -- << login
-
-SELECT
-    DB_NAME()   AS CurrentDatabase,
-    USER_NAME() AS DatabaseUser,
-    HAS_PERMS_BY_NAME(N'MyApps.CoreDescrData', N'OBJECT', N'INSERT') AS CanInsert,
-    HAS_PERMS_BY_NAME(N'MyApps.CoreDescrData', N'OBJECT', N'UPDATE') AS CanUpdate,
-    HAS_PERMS_BY_NAME(N'MyApps.CoreDescrData', N'OBJECT', N'SELECT') AS CanSelect,
-    HAS_PERMS_BY_NAME(N'MyApps.CoreDescrData', N'OBJECT', N'DELETE') AS CanDelete;
-
-REVERT;
+WHERE ((perm.class = 1 AND perm.major_id IN (OBJECT_ID(N'MyApps.CoreDescrData'),
+                                             OBJECT_ID(N'dbo.InsertUpdateCoreDescr_WellCAD')))
+    OR (perm.class = 3 AND perm.major_id IN (SCHEMA_ID(N'MyApps'), SCHEMA_ID(N'dbo')))
+    OR (perm.class = 0 AND perm.permission_name IN (N'EXECUTE', N'INSERT', N'UPDATE', N'SELECT')))
+  AND (grantee.name IN (@ApiUser, N'public')
+       OR grantee.principal_id IN (SELECT rm.role_principal_id
+                                   FROM sys.database_role_members AS rm
+                                   JOIN sys.database_principals AS u
+                                     ON u.principal_id = rm.member_principal_id
+                                   WHERE u.name = @ApiUser))
+ORDER BY Securable, Grantee, Permission;
 GO
 
 /*
  Reading the results
  -------------------
- - A3 shows ACQMN01_DEV (and A2's database is ACQMN01):
-     CROSS-DATABASE. Ownership chains stop at the database boundary unless
-     cross-db chaining is on (A6, should stay off). The INSERT is checked
-     against the API login's user in ACQMN01_DEV (A7/A8 CanInsert = 0) -> 229.
-     Fix: B1, or B3 (signing across databases).
- - Procedure in ACQMN01_DEV, A2 owner <> A5 owner:
-     BROKEN OWNERSHIP CHAIN in one database (MyApps schema not owned by dbo).
-     Fix: B2 (signing), or B1.
- - A4 UsesDynamicSql = 1:
-     chaining never applies to dynamic SQL. Fix: B2/B3 (signing), or B1.
- - A7 shows DENY INSERT (or db_denydatawriter membership):
-     the DENY must be removed first (B0). Neither a GRANT nor a signature
-     overrides a DENY held by the caller.
- - A8 CanInsert = 1 but uploads still fail with 229:
-     the API is not running as this login / against this database; recheck A1
-     with the actual connection string used by the running API.
+ A2 owners differ (typical: schema MyApps owned by a user other than dbo)
+     -> BROKEN OWNERSHIP CHAIN. Fix: B1 (recommended) or B2.
+ A4 UsesDynamicSql = 1
+     -> chaining can never apply. Fix: B1.
+ A4 shows another database
+     -> cross-database access; chains stop at the database boundary. Fix: B1
+        done across databases (ask for the cross-database signing variant);
+        do NOT enable cross-db chaining or TRUSTWORTHY.
+ A5 shows DENY INSERT/UPDATE/SELECT, or membership of db_denydatawriter
+     -> also remove that DENY (B0); a signature does not override a caller's DENY.
+ A1 CanExecuteProcedure = 0
+     -> not this error, but needed: GRANT EXECUTE (in B1).
 */
 
 -------------------------------------------------------------------------------
--- PART B — FIX OPTIONS (commented out; for a DBA to choose ONE and run)
+-- PART B — FIX OPTIONS (commented out; a DBA chooses ONE and runs it)
 -------------------------------------------------------------------------------
--- Never: sysadmin, db_owner, db_datawriter, schema-wide grants,
---        cross-db chaining / TRUSTWORTHY ON, or EXECUTE AS OWNER without review
---        (EXECUTE AS OWNER would also change SUSER_NAME(), i.e. the usr column
---        and the procedure's duplicate-matching key).
---
--- Grant only what the procedure's Raw core import_JSON branch actually does:
--- SELECT + INSERT + UPDATE below. Add DELETE only if its definition shows a
--- DELETE. Repeat for any other table A3 lists that it writes to.
+-- Not acceptable: sysadmin, db_owner, db_datawriter, schema-wide grants to the
+-- application, cross-db chaining, TRUSTWORTHY ON. EXECUTE AS OWNER is not
+-- proposed: it would also change SUSER_NAME(), which the procedure writes to
+-- the usr column and uses in its duplicate-matching key.
 
-/* ---- B0. Only if A7 shows an explicit DENY / db_denydatawriter -------------
-USE [ACQMN01_DEV];
-REVOKE INSERT ON OBJECT::[MyApps].[CoreDescrData] FROM [<ApiUser from A7>];   -- removes the DENY
--- or, if the membership is unintended:
--- ALTER ROLE [db_denydatawriter] DROP MEMBER [<ApiUser from A7>];
+/* ---- B0. Only if A5 shows an explicit DENY -------------------------------
+USE [ACQMN01];
+REVOKE INSERT ON OBJECT::[MyApps].[CoreDescrData] FROM [<ApiUser from A5>];   -- removes a DENY INSERT
+-- or: ALTER ROLE [db_denydatawriter] DROP MEMBER [<ApiUser from A5>];
 ------------------------------------------------------------------------------ */
 
-/* ---- B1. Object-level grant to the API user (simplest; recommended for DEV) --
--- The API login can then also write this ONE table directly, outside the
--- procedure. No schema- or database-wide rights.
-USE [ACQMN01_DEV];
--- Only if A7 returned NULL (the login has no user in ACQMN01_DEV):
--- CREATE USER [userAcquire] FOR LOGIN [userAcquire];
-GRANT SELECT, INSERT, UPDATE ON OBJECT::[MyApps].[CoreDescrData] TO [<ApiUser from A7>];
------------------------------------------------------------------------------- */
-
-/* ---- B2. Module signing, procedure and table in the SAME database ---------
--- The API keeps EXECUTE only; the signed procedure carries the table rights.
--- Re-sign after every ALTER PROCEDURE (ALTER drops the signature).
-USE [ACQMN01_DEV];
+/* ---- B1. RECOMMENDED: sign the procedure (application keeps EXECUTE only) --
+-- The table rights belong to a certificate user that cannot log in; they apply
+-- only while this exact procedure runs. userAcquire gets no table access.
+-- An ALTER PROCEDURE drops the signature: re-sign after every change.
+-- Grant only what the procedure's Raw core import_JSON branch does: SELECT,
+-- INSERT, UPDATE (add DELETE only if its definition has one; repeat for any
+-- other table A4 lists that it writes).
+USE [ACQMN01];
 CREATE CERTIFICATE [UploadDataProcSigning]
     ENCRYPTION BY PASSWORD = N'<strong password>'
     WITH SUBJECT = N'Signs dbo.InsertUpdateCoreDescr_WellCAD (MyApps.CoreDescrData access)',
@@ -219,46 +209,38 @@ CREATE USER [UploadDataProcSigner] FROM CERTIFICATE [UploadDataProcSigning];
 GRANT SELECT, INSERT, UPDATE ON OBJECT::[MyApps].[CoreDescrData] TO [UploadDataProcSigner];
 ADD SIGNATURE TO OBJECT::[dbo].[InsertUpdateCoreDescr_WellCAD]
     BY CERTIFICATE [UploadDataProcSigning] WITH PASSWORD = N'<strong password>';
--- Only if A1 showed CanExecute = 0:
--- GRANT EXECUTE ON OBJECT::[dbo].[InsertUpdateCoreDescr_WellCAD] TO [<ApiUser>];
+-- Only if A1 showed CanExecuteProcedure = 0:
+-- GRANT EXECUTE ON OBJECT::[dbo].[InsertUpdateCoreDescr_WellCAD] TO [<ApiUser from A5>];
 ------------------------------------------------------------------------------ */
 
-/* ---- B3. Module signing ACROSS databases (procedure in ACQMN01) -----------
--- Same idea as B2; the certificate's public key is copied to ACQMN01_DEV.
+/* ---- B2. Repair the ownership chain (only after reviewing side effects) ----
+-- Makes dbo the owner of the MyApps schema, so every dbo procedure can reach
+-- every MyApps object without table permissions, and the current owner loses
+-- its implicit rights. Review all other users of the MyApps schema first.
 USE [ACQMN01];
-CREATE CERTIFICATE [UploadDataProcSigning]
-    ENCRYPTION BY PASSWORD = N'<strong password>'
-    WITH SUBJECT = N'Signs dbo.InsertUpdateCoreDescr_WellCAD (cross-db to ACQMN01_DEV)',
-         EXPIRY_DATE = '2036-12-31';
-ADD SIGNATURE TO OBJECT::[dbo].[InsertUpdateCoreDescr_WellCAD]
-    BY CERTIFICATE [UploadDataProcSigning] WITH PASSWORD = N'<strong password>';
-DECLARE @PublicKey varbinary(max) = CERTENCODED(CERT_ID(N'UploadDataProcSigning'));
-DECLARE @Sql nvarchar(max) =
-    N'CREATE CERTIFICATE [UploadDataProcSigning] FROM BINARY = '
-    + CONVERT(nvarchar(max), @PublicKey, 1) + N';';
-EXEC [ACQMN01_DEV].sys.sp_executesql @Sql;   -- public key only, no private key
-
-USE [ACQMN01_DEV];
-CREATE USER [UploadDataProcSigner] FROM CERTIFICATE [UploadDataProcSigning];
--- A cross-database signature needs AUTHENTICATE in the target database:
-GRANT AUTHENTICATE TO [UploadDataProcSigner];
-GRANT SELECT, INSERT, UPDATE ON OBJECT::[MyApps].[CoreDescrData] TO [UploadDataProcSigner];
--- The caller still needs CONNECT to ACQMN01_DEV (a user, as in B1, without the table grant).
+ALTER AUTHORIZATION ON SCHEMA::[MyApps] TO [dbo];
+-- (or, narrower, only this table:)
+-- ALTER AUTHORIZATION ON OBJECT::[MyApps].[CoreDescrData] TO SCHEMA OWNER;   -- if the table has its own owner
 ------------------------------------------------------------------------------ */
 
 -------------------------------------------------------------------------------
--- PART C — VERIFY AFTER THE FIX (read-only; run after test uploads)
+-- PART C — VERIFY AFTER THE FIX (read-only; run after the test uploads)
 -------------------------------------------------------------------------------
 /*
 SELECT HOLEID, PROJECTCODE, [FROM], [TO], PRIORITY, NAME, VALUE, COMMENT_VALUE, usr
-FROM [ACQMN01_DEV].[MyApps].[CoreDescrData]
+FROM [ACQMN01].[MyApps].[CoreDescrData]
 WHERE HOLEID = 'GTZO_0001_1'
 ORDER BY [FROM], [TO], NAME;
 
 -- Duplicate check: must return no rows after uploading the same file twice.
 SELECT HOLEID, PROJECTCODE, [FROM], [TO], PRIORITY, NAME, usr, COUNT(*) AS Copies
-FROM [ACQMN01_DEV].[MyApps].[CoreDescrData]
+FROM [ACQMN01].[MyApps].[CoreDescrData]
 WHERE HOLEID = 'GTZO_0001_1'
 GROUP BY HOLEID, PROJECTCODE, [FROM], [TO], PRIORITY, NAME, usr
 HAVING COUNT(*) > 1;
+
+-- Nothing else touched: other holes' row count unchanged before/after uploads.
+SELECT COUNT(*) AS OtherRows
+FROM [ACQMN01].[MyApps].[CoreDescrData]
+WHERE HOLEID <> 'GTZO_0001_1';
 */
