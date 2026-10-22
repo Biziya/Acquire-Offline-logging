@@ -116,11 +116,12 @@ file = <exported lithology .json file>
 Uploads one exported Raw Litho JSON document (the format the frontend exports,
 e.g. `frontend/src/other/raw-lithology-test.json`) through the existing stored
 procedure. All inserts and updates happen inside the procedure; the API does
-no SQL INSERT/UPDATE of its own and never rewrites the JSON.
+no SQL INSERT/UPDATE of its own. The frontend uploads the original export;
+the backend validates it and sends the procedure only the fields it stores.
 
 ```text
 Controllers/UploadData/UploadDataController.cs   HTTP: file checks, responses
-Controllers/UploadData/UploadDataValidator.cs    JSON structure and row checks (read-only)
+Controllers/UploadData/UploadDataValidator.cs    validation + the filtered procedure JSON
 Repositories/UploadData/UploadDataRepository.cs  the one stored procedure call
 Models/UploadData/UploadDataRequest.cs           the procedure's parameter values
 Models/UploadData/UploadDataResponse.cs          every response body
@@ -146,8 +147,22 @@ Models/UploadData/UploadDataResponse.cs          every response body
    Errors name the row (`Row 3: lithoFrom must be less than lithoTo.`); the
    first 20 are listed, then `…and N more errors.`. Nothing is truncated or
    converted. An invalid file never reaches the database.
-4. The **original file text, unchanged**, is passed to the procedure in a
-   single call for the whole document (never once per row).
+4. A **filtered copy** is built for the procedure (the uploaded file itself is
+   not changed) and passed in a single call for the whole document (never once
+   per row):
+   - top level: `project`, `drillhole`, `rows` only;
+   - each row: `lithoFrom`, `lithoTo` (as JSON numbers, value unchanged:
+     `"12.50"` → `12.50`) and the ten stored attributes, under their original
+     names and with their original values. An attribute missing from the
+     upload stays missing (the procedure reads `NULL`); `""` stays `""`;
+     nothing is defaulted, trimmed or invented.
+
+   ```json
+   { "project": "ZOOVCH", "drillhole": "GTZO_0001_1", "rows": [
+     { "lithoFrom": 5, "lithoTo": 10, "lithoCode": "0--", "colorCode": "10G4/2",
+       "redoxCode": "0042_MN1", "ca": "", "om": "", "ox": "", "sedim": "",
+       "granulo": "", "hardness": "", "lithologyComments": "" } ] }
+   ```
 
 ### Stored procedure call
 
@@ -162,7 +177,7 @@ parameters, async calls and the request's cancellation token (command timeout
 | `@Hole` | `varchar(20)` | the JSON `drillhole` |
 | `@usr` | `varchar(50)` | the authenticated web user, or `NULL` (see below) |
 | `@fileName` | `varchar(50)` | the uploaded file name (no path) |
-| `@str_json` | `nvarchar(max)` | the uploaded JSON, unchanged |
+| `@str_json` | `nvarchar(max)` | the filtered JSON (step 4 above) |
 
 Every result set the procedure returns is read to the end so that an error
 raised by a later statement still fails the request. The API does not report
@@ -195,8 +210,10 @@ The procedure's `Raw core import_JSON` branch writes to
 **Not stored** by the procedure today: `campaign`, `created_at`,
 `modified_at`, `created_by`, `edited_by`, and the row fields `id`,
 `extractionType`, `corePass`, `recoveryStart`, `recoveryEnd`, `coreEnd`,
-`omFacies`, `py`, `lithologicalDescription`. They are accepted and sent
-unchanged, but the procedure ignores them.
+`omFacies`, `py`, `lithologicalDescription`. They are accepted in the upload
+but **filtered out** of `@str_json`. The procedure's `OPENJSON` also reads `py`
+and `omFacies`, but its raw-import INSERT never stores them, so they are not
+sent; storing them would need a procedure change.
 
 ### SQL user (`usr`) behaviour
 

@@ -17,6 +17,9 @@ public sealed class UploadDataRequest
     /// <summary>The uploaded file name, sent as <c>@fileName</c>.</summary>
     public required string FileName { get; init; }
 
-    /// <summary>The uploaded file content, unchanged, sent as <c>@str_json</c>.</summary>
+    /// <summary>
+    /// The validated upload reduced to the fields the procedure stores
+    /// (see <c>UploadDataValidator</c>), sent as <c>@str_json</c>.
+    /// </summary>
     public required string Json { get; init; }
 }

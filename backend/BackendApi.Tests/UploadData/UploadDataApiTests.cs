@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
+using System.Text.Json.Nodes;
 using BackendApi.Models.UploadData;
 using BackendApi.Repositories.UploadData;
 using Microsoft.AspNetCore.Authentication;
@@ -25,12 +26,10 @@ public sealed class UploadDataApiTests : IClassFixture<WebApplicationFactory<Pro
     }
 
     [Fact]
-    public async Task UploadsTheOriginalJsonOnceAndReportsTheRowCount()
+    public async Task SendsTheFilteredJsonOnceAndReportsTheRowCount()
     {
         var repository = new FakeUploadDataRepository();
-        // Unusual spacing and an unknown field must reach the procedure untouched.
-        var json = TestDocuments.Valid().ToJsonString().Replace("{", "{ ") +
-                   "\n";
+        var json = TestDocuments.Valid().ToJsonString();
 
         var response = await CreateClient(repository).PostAsync(Route, FileContent(json));
 
@@ -43,7 +42,7 @@ public sealed class UploadDataApiTests : IClassFixture<WebApplicationFactory<Pro
         Assert.Equal(1, body.TotalRows);
 
         var call = Assert.Single(repository.Calls);
-        Assert.Equal(json, call.Json);
+        Assert.Equal(TestDocuments.ValidStoredProcedureJson, call.Json);
         Assert.Equal("GTZO_0001_1", call.Drillhole);
         Assert.Equal("upload.json", call.FileName);
         Assert.Null(call.UserName);
@@ -80,7 +79,7 @@ public sealed class UploadDataApiTests : IClassFixture<WebApplicationFactory<Pro
         var body = await response.Content.ReadFromJsonAsync<UploadDataResponse>();
         Assert.Equal(53, body!.TotalRows);
         var call = Assert.Single(repository.Calls);
-        Assert.Equal(json, call.Json);
+        Assert.Equal(53, JsonNode.Parse(call.Json)!["rows"]!.AsArray().Count);
         Assert.Equal("yashgaa.json", call.FileName);
     }
 

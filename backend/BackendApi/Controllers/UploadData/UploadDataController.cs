@@ -75,14 +75,12 @@ public sealed class UploadDataController : ControllerBase
                 $"File name must be {UploadDataRepository.FileNameSize} characters or fewer.");
         }
 
-        string json;
         UploadDataValidator.Result result;
 
         try
         {
             using var reader = new StreamReader(file.OpenReadStream(), StrictUtf8);
-            json = await reader.ReadToEndAsync(cancellationToken);
-            result = UploadDataValidator.Validate(json);
+            result = UploadDataValidator.Validate(await reader.ReadToEndAsync(cancellationToken));
         }
         catch (Exception exception) when (exception is JsonException or DecoderFallbackException)
         {
@@ -107,7 +105,7 @@ public sealed class UploadDataController : ControllerBase
                     Drillhole = result.Drillhole,
                     UserName = GetAuthenticatedUserName(),
                     FileName = fileName,
-                    Json = json
+                    Json = result.StoredProcedureJson
                 },
                 cancellationToken);
         }

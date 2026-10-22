@@ -17,7 +17,62 @@ public sealed class UploadDataValidatorTests
         Assert.Equal(["Row 31: lithoTo is required."], result.Errors);
         Assert.Equal("ZOOVCH", result.Project);
         Assert.Equal("GTZO_0001_1", result.Drillhole);
-        Assert.Equal(31, result.TotalRows);
+        Assert.Equal(0, result.TotalRows);
+        Assert.Equal("", result.StoredProcedureJson);
+    }
+
+    [Fact]
+    public void BuildsTheReferenceStoredProcedurePayload()
+    {
+        var result = UploadDataValidator.Validate(TestDocuments.Valid().ToJsonString());
+
+        Assert.Equal(TestDocuments.ValidStoredProcedureJson, result.StoredProcedureJson);
+    }
+
+    [Fact]
+    public void DropsEveryFieldTheProcedureDoesNotStore()
+    {
+        var document = TestDocuments.Valid();
+        document["created_by"] = "CORP\\creator";
+        document["extraMetadata"] = "x";
+        var row = document["rows"]![0]!.AsObject();
+        row["py"] = "P1";
+        row["omFacies"] = "F2";
+        row["unknownField"] = 7;
+
+        var payload = JsonNode.Parse(UploadDataValidator.Validate(document.ToJsonString()).StoredProcedureJson)!;
+
+        Assert.Equal(["project", "drillhole", "rows"], payload.AsObject().Select(p => p.Key));
+        Assert.Equal(
+            ["lithoFrom", "lithoTo", "lithoCode", "colorCode", "redoxCode", "ca", "om", "ox",
+             "sedim", "granulo", "hardness", "lithologyComments"],
+            payload["rows"]![0]!.AsObject().Select(p => p.Key));
+    }
+
+    [Fact]
+    public void KeepsValuesExactlyAndAddsNoDefaults()
+    {
+        var document = TestDocuments.Valid();
+        var row = document["rows"]![0]!.AsObject();
+        row["lithoFrom"] = " 12.50 ";
+        row["lithoTo"] = 13.75m;
+        row["lithologyComments"] = "Шавар, fine  sand + clay <5%>";
+        row["granulo"] = null;
+        row.Remove("hardness");
+        document["drillhole"] = " GTZO_0001_1";
+
+        var payload = JsonNode.Parse(UploadDataValidator.Validate(document.ToJsonString()).StoredProcedureJson)!;
+        var stored = payload["rows"]![0]!.AsObject();
+
+        Assert.Equal(" GTZO_0001_1", payload["drillhole"]!.GetValue<string>());
+        Assert.Equal("12.50", stored["lithoFrom"]!.ToJsonString());
+        Assert.Equal("13.75", stored["lithoTo"]!.ToJsonString());
+        Assert.Equal("Шавар, fine  sand + clay <5%>", stored["lithologyComments"]!.GetValue<string>());
+        Assert.Equal("0--", stored["lithoCode"]!.GetValue<string>());
+        Assert.Equal("", stored["ca"]!.GetValue<string>());
+        Assert.True(stored.ContainsKey("granulo"));
+        Assert.Null(stored["granulo"]);
+        Assert.False(stored.ContainsKey("hardness"));
     }
 
     [Fact]

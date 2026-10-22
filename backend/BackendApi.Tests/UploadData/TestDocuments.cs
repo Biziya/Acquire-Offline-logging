@@ -15,6 +15,13 @@ internal static class TestDocuments
         ["rows"] = new JsonArray(Row("5", "10"))
     };
 
+    /// <summary>
+    /// What the stored procedure receives for <see cref="Valid"/>: the task's
+    /// reference payload, field for field.
+    /// </summary>
+    public const string ValidStoredProcedureJson =
+        """{"project":"ZOOVCH","drillhole":"GTZO_0001_1","rows":[{"lithoFrom":5,"lithoTo":10,"lithoCode":"0--","colorCode":"10G4/2","redoxCode":"0042_MN1","ca":"","om":"","ox":"","sedim":"","granulo":"","hardness":"","lithologyComments":""}]}""";
+
     /// <summary>A valid document with intervals 0–5, 5–10, … as numeric strings.</summary>
     public static JsonObject WithRows(int count)
     {
