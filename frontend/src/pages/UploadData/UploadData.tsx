@@ -415,12 +415,11 @@ function UploadData() {
     try {
       const response = await importUploadData(file, controller.signal);
       if (requestControllerRef.current === controller) {
-        // Confirmed by the backend: the draft is done. Resetting the dataset
-        // also deletes it from IndexedDB.
-        resetDataset();
+        // Confirmed by the backend. The data stays on screen (and in the
+        // draft) for checking or a corrected re-upload; Cancel clears it.
         showToast({
           type: "success",
-          message: response.message || "Upload complete",
+          message: response.message || "Data uploaded successfully.",
         });
       }
     } catch (error) {

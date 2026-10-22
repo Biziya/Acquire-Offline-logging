@@ -10,7 +10,7 @@ services/
 │   ├── backendStatus.ts          GET /api/status
 │   ├── drillholeApi.ts           GET /api/drillholes
 │   ├── rawLithoApi.ts            the 9 lookup endpoints
-│   └── uploadData.ts             POST /api/uploaddata
+│   └── uploadData.ts             POST /api/upload-data
 ├── IndexDB/
 │   ├── rawLithoDatabase.ts       owns raw-litho-db: version, stores, transactions
 │   ├── rawLithoSaveQueue.ts      pending snapshots, serialized saves and retries

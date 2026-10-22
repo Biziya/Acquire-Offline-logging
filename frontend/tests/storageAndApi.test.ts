@@ -117,7 +117,7 @@ describe("external response validation", () => {
       message: "Imported",
       count: 2,
     });
-    expect(fetch.mock.calls[0]?.[0]).toBe("/api/uploaddata");
+    expect(fetch.mock.calls[0]?.[0]).toBe("/api/upload-data");
     const body: unknown = fetch.mock.calls[0]?.[1]?.body;
     if (!(body instanceof FormData)) throw new Error("Expected multipart form data.");
     const uploadedFile = body.get("file");
@@ -126,5 +126,60 @@ describe("external response validation", () => {
     await expect(importUploadData(file)).rejects.toThrow(
       "Invalid upload response",
     );
+  });
+
+  it("reports the backend message and first row error, never a raw error page", async () => {
+    const file = new File(["{}"], "data.json", { type: "application/json" });
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          Response.json(
+            {
+              success: false,
+              message: "Invalid lithology data.",
+              errors: ["Row 3: lithoFrom must be less than lithoTo.", "Row 4: lithoTo is required."],
+            },
+            { status: 400 },
+          ),
+        )
+        .mockResolvedValueOnce(
+          Response.json({ success: false, message: "Database upload failed." }, { status: 500 }),
+        )
+        .mockResolvedValueOnce(
+          new Response("System.Exception: Login failed for user 'sa'\n   at ...", { status: 500 }),
+        ),
+    );
+
+    await expect(importUploadData(file)).rejects.toThrow(
+      "Invalid lithology data. Row 3: lithoFrom must be less than lithoTo. (and other errors)",
+    );
+    await expect(importUploadData(file)).rejects.toThrow("Database upload failed.");
+    await expect(importUploadData(file)).rejects.toThrow(/^Upload failed$/);
+  });
+
+  it("reports a request that runs past the timeout", async () => {
+    const file = new File(["{}"], "data.json", { type: "application/json" });
+    // A timeout signal that has already fired, as after 180 s.
+    const timeout = vi.spyOn(AbortSignal, "timeout").mockImplementation(() =>
+      AbortSignal.abort(new DOMException("The operation timed out.", "TimeoutError")),
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_url: string, init: RequestInit) => Promise.reject(init.signal?.reason)),
+    );
+
+    try {
+      await expect(importUploadData(file)).rejects.toThrow("Upload timed out");
+      // A user Cancel is still an abort, not a timeout.
+      timeout.mockRestore();
+      const cancelled = Object.assign(new Error("Cancelled"), { name: "AbortError" });
+      await expect(importUploadData(file, AbortSignal.abort(cancelled))).rejects.toBe(
+        cancelled,
+      );
+    } finally {
+      timeout.mockRestore();
+    }
   });
 });

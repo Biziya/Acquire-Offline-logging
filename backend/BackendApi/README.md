@@ -39,7 +39,7 @@ BackendApi/
 │
 ├── Repositories/
 │   ├── RawLithoPage/          # one folder per API, each with I<Name>Repository + <Name>Repository
-│   └── UploadData/
+│   └── UploadData/            # IUploadDataRepository + UploadDataRepository
 │
 ├── Models/
 │   ├── CurrentUser/
@@ -105,8 +105,200 @@ Example response:
 
 Test it through Swagger or the request included in `BackendApi.http`.
 
+## Upload Data endpoint
+
+```text
+POST /api/upload-data
+Content-Type: multipart/form-data
+file = <exported lithology .json file>
+```
+
+Uploads one exported Raw Litho JSON document (the format the frontend exports,
+e.g. `frontend/src/other/raw-lithology-test.json`) through the existing stored
+procedure. All inserts and updates happen inside the procedure; the API does
+no SQL INSERT/UPDATE of its own and never rewrites the JSON.
+
+```text
+Controllers/UploadData/UploadDataController.cs   HTTP: file checks, responses
+Controllers/UploadData/UploadDataValidator.cs    JSON structure and row checks (read-only)
+Repositories/UploadData/UploadDataRepository.cs  the one stored procedure call
+Models/UploadData/UploadDataRequest.cs           the procedure's parameter values
+Models/UploadData/UploadDataResponse.cs          every response body
+```
+
+### Request flow
+
+1. A file is required (`400` otherwise), at most `UploadData:MaxFileSizeBytes`
+   (`appsettings.json`, default 10 MB; `413` otherwise), named `*.json`, with a
+   name of at most 50 characters (`@fileName varchar(50)`).
+2. The content must be valid UTF-8 JSON (`400 Invalid JSON file.`).
+3. The document is validated (`400 Invalid lithology data.` with `errors`):
+   - `project` and `drillhole` are non-empty text; `drillhole` is at most 20
+     characters (`@Hole varchar(20)`);
+   - `rows` is a non-empty array of objects;
+   - each row's `lithoFrom` and `lithoTo` are present and are plain decimal
+     numbers, as JSON numbers or numeric strings (`"5"`, `"12.75"`; no exponent
+     or thousands separator), with `lithoFrom < lithoTo`;
+   - each stored attribute (`lithoCode`, `colorCode`, `redoxCode`, `ca`, `om`,
+     `ox`, `sedim`, `granulo`, `hardness`, `lithologyComments`) is text, `null`
+     or missing. Empty strings are valid and are passed on as empty strings.
+
+   Errors name the row (`Row 3: lithoFrom must be less than lithoTo.`); the
+   first 20 are listed, then `…and N more errors.`. Nothing is truncated or
+   converted. An invalid file never reaches the database.
+4. The **original file text, unchanged**, is passed to the procedure in a
+   single call for the whole document (never once per row).
+
+### Stored procedure call
+
+`UploadDataRepository` runs `dbo.InsertUpdateCoreDescr_WellCAD` with
+`Microsoft.Data.SqlClient`, `CommandType.StoredProcedure`, explicitly typed
+parameters, async calls and the request's cancellation token (command timeout
+120 s):
+
+| Parameter | Type | Value |
+| --- | --- | --- |
+| `@Action` | `varchar(50)` | `'Raw core import_JSON'` |
+| `@Hole` | `varchar(20)` | the JSON `drillhole` |
+| `@usr` | `varchar(50)` | the authenticated web user, or `NULL` (see below) |
+| `@fileName` | `varchar(50)` | the uploaded file name (no path) |
+| `@str_json` | `nvarchar(max)` | the uploaded JSON, unchanged |
+
+Every result set the procedure returns is read to the end so that an error
+raised by a later statement still fails the request. The API does not report
+inserted/updated counts: the procedure does not return them.
+
+### JSON → database mapping
+
+The procedure's `Raw core import_JSON` branch writes to
+`[ACQMN01_DEV].[MyApps].[CoreDescrData]` (`HOLEID`, `PROJECTCODE`, `FROM`,
+`TO`, `PRIORITY`, `NAME`, `VALUE`, `COMMENT_VALUE`, `CONSISTENTCHECK`, `usr`,
+`FileName`, `PathName`), one row per interval and attribute (`NAME`/`VALUE`):
+
+| JSON field | Stored as |
+| --- | --- |
+| `drillhole` | `HOLEID` |
+| `project` | `PROJECTCODE` |
+| `lithoFrom` | `FROM` |
+| `lithoTo` | `TO` |
+| `lithoCode` | `NAME = 'LithoFacies'` |
+| `colorCode` | `NAME = 'Colour'` |
+| `redoxCode` | `NAME = 'RedoxFacies'` |
+| `ca` | `NAME = 'CA'` |
+| `om` | `NAME = 'OM'` |
+| `ox` | `NAME = 'OX'` |
+| `sedim` | `NAME = 'InternalStructure'` |
+| `granulo` | `NAME = 'Granulo'` |
+| `hardness` | `NAME = 'Hardness'` |
+| `lithologyComments` | `NAME = 'LithologyComments'` |
+
+**Not stored** by the procedure today: `campaign`, `created_at`,
+`modified_at`, `created_by`, `edited_by`, and the row fields `id`,
+`extractionType`, `corePass`, `recoveryStart`, `recoveryEnd`, `coreEnd`,
+`omFacies`, `py`, `lithologicalDescription`. They are accepted and sent
+unchanged, but the procedure ignores them.
+
+### SQL user (`usr`) behaviour
+
+The procedure starts with `SELECT @usr = SUSER_NAME();`, which **replaces**
+whatever `@usr` the API sends. The `usr` column therefore holds the SQL Server
+login of the connection (with the current `DefaultConnection`, the SQL login
+`userAcquire`), not the Windows user shown as "Imported By" in the frontend.
+
+The API still sends `@usr`, but only a name the server verified
+(`User.Identity`); a user name sent by the client is never used. The upload
+endpoint is anonymous, like every endpoint except `/api/currentuser`, so `@usr`
+is normally `NULL`. Recording the real importer would need both a procedure
+change (use `@usr` instead of `SUSER_NAME()`) and `[Authorize]` on this
+endpoint. Neither is done here: the procedure is unchanged, and adding
+`[Authorize]` would make the upload fail for anyone whose browser does not send
+Windows credentials. Until then, anyone who can reach the API can upload.
+
+### Duplicates and updates
+
+There is no duplicate detection in the API. The procedure matches existing
+rows on `HOLEID`, `PROJECTCODE`, `FROM`, `TO`, `PRIORITY`, `NAME` and `usr`:
+uploading the same file again updates those rows instead of adding new ones,
+and a changed value updates the matching row. Because `usr` is part of the key,
+the same file uploaded under a *different* SQL login creates a second set of
+rows. The API never deletes rows.
+
+### Responses
+
+```json
+// 200 OK — totalRows is the number of JSON rows received, not database rows.
+{ "success": true, "message": "Data uploaded successfully.",
+  "drillhole": "GTZO_0001_1", "project": "ZOOVCH", "totalRows": 53 }
+
+// 400 Bad Request
+{ "success": false, "message": "No file was uploaded." }
+{ "success": false, "message": "Only .json files are accepted." }
+{ "success": false, "message": "File name must be 50 characters or fewer." }
+{ "success": false, "message": "Invalid JSON file." }
+{ "success": false, "message": "Invalid lithology data.",
+  "errors": [ "Row 3: lithoFrom must be less than lithoTo." ] }
+
+// 413 Payload Too Large
+{ "success": false, "message": "File exceeds the 10 MB limit." }
+
+// 500 Internal Server Error — connection or procedure failure
+{ "success": false, "message": "Database upload failed." }
+```
+
+SQL Server errors, connection details and stack traces are logged on the
+server (with the file name and drillhole) and never returned. A request the
+client abandons cancels the database call.
+
+### Database configuration
+
+The endpoint uses the existing `DefaultConnection` (no new connection
+string). The procedure must exist in that connection's database, and the
+login needs `EXECUTE` on it. **Check the catalog before uploading:**
+`DefaultConnection` currently points to `Initial Catalog=ACQMN01`, while the
+target table is in `ACQMN01_DEV`. Run uploads only against an approved
+development database.
+
+### Known limitations of the procedure
+
+- `usr` is always `SUSER_NAME()` (see above).
+- Not every JSON field is stored (see the mapping).
+- No inserted/updated counts are returned.
+- Column sizes of `CoreDescrData` (e.g. `PROJECTCODE`, `VALUE`) and the
+  procedure's `OPENJSON` column types were not available while this was built,
+  so the API checks only the parameter sizes above. If the procedure reads
+  values into shorter `OPENJSON ... WITH` columns, SQL Server truncates them
+  without an error; that would have to be fixed in the procedure.
+- Whether the procedure wraps its work in a transaction is not known; a
+  cancelled or failed call may leave a partial upload until the file is
+  uploaded again.
+
+## Tests
+
+Automated tests live in `../BackendApi.Tests` (xUnit). They cover the
+validator and the endpoint through the real ASP.NET Core pipeline with a fake
+repository, plus the real repository against an unreachable server (safe
+`500`). They never connect to a real database.
+
+```bash
+dotnet test ../BackendApi.Tests
+```
+
+Manual check against an approved development database:
+
+1. `dotnet run --launch-profile https`, then open Swagger at the URL printed
+   on start-up (`https://localhost:5237/swagger` or
+   `http://localhost:7047/swagger`, per `Properties/launchSettings.json`).
+2. `POST /api/upload-data` with a valid export → `200`, `totalRows` = rows in
+   the file. Check `CoreDescrData` for the drillhole.
+3. Upload the same file again → row count for that `HOLEID` unchanged.
+4. Change one value (e.g. a `lithoCode`), upload → that row's `VALUE` updated.
+
+The request in `BackendApi.http` can be used instead of Swagger.
+
 ## Build verification
 
 ```bash
+dotnet restore
 dotnet build
+dotnet test ../BackendApi.Tests
 ```

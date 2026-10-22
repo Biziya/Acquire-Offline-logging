@@ -1,5 +1,5 @@
+using System.Text;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using BackendApi.Models.UploadData;
 using BackendApi.Repositories.UploadData;
 using Microsoft.AspNetCore.Mvc;
@@ -7,228 +7,141 @@ using Microsoft.AspNetCore.Mvc;
 namespace BackendApi.Controllers.UploadData;
 
 [ApiController]
-[Route("api/uploaddata")]
+[Route("api/upload-data")]
 [Tags("UploadData")]
 public sealed class UploadDataController : ControllerBase
 {
-    private static readonly JsonSerializerOptions InputJsonOptions =
-        new(JsonSerializerDefaults.Web)
-        {
-            NumberHandling = JsonNumberHandling.AllowReadingFromString
-        };
+    private const string MaxFileSizeKey = "UploadData:MaxFileSizeBytes";
+    private const long DefaultMaxFileSizeBytes = 10 * 1024 * 1024;
+
+    // Rejects invalid UTF-8 instead of replacing it, so the text sent to the
+    // database is exactly what was uploaded.
+    private static readonly Encoding StrictUtf8 = new UTF8Encoding(
+        encoderShouldEmitUTF8Identifier: false,
+        throwOnInvalidBytes: true);
 
     private readonly IUploadDataRepository _repository;
     private readonly ILogger<UploadDataController> _logger;
+    private readonly long _maxFileSizeBytes;
 
     public UploadDataController(
         IUploadDataRepository repository,
+        IConfiguration configuration,
         ILogger<UploadDataController> logger)
     {
         _repository = repository;
         _logger = logger;
+        _maxFileSizeBytes = configuration.GetValue(MaxFileSizeKey, DefaultMaxFileSizeBytes);
     }
 
+    /// <summary>
+    /// Validates an exported lithology JSON file and stores it through
+    /// dbo.InsertUpdateCoreDescr_WellCAD ('Raw core import_JSON').
+    /// </summary>
     [HttpPost]
     [Consumes("multipart/form-data")]
-    [ProducesResponseType(
-        typeof(UploadDataResponse),
-        StatusCodes.Status200OK)]
-    [ProducesResponseType(
-        typeof(ProblemDetails),
-        StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(
-        typeof(ProblemDetails),
-        StatusCodes.Status500InternalServerError)]
-    public async Task<IActionResult> UploadAsync(
-        IFormFile file,
+    [ProducesResponseType<UploadDataResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<UploadDataResponse>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<UploadDataResponse>(StatusCodes.Status413PayloadTooLarge)]
+    [ProducesResponseType<UploadDataResponse>(StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<UploadDataResponse>> UploadAsync(
+        IFormFile? file,
         CancellationToken cancellationToken)
-    {
-        var fileError = ValidateFile(file);
-
-        if (fileError is not null)
-        {
-            return fileError;
-        }
-
-        UploadDataRequest? request;
-
-        try
-        {
-            request = await ReadRequestAsync(file, cancellationToken);
-        }
-        catch (JsonException exception)
-        {
-            return BadRequestProblem("Invalid JSON", exception.Message);
-        }
-
-        var requestError = ValidateRequest(request);
-
-        if (requestError is not null)
-        {
-            return requestError;
-        }
-
-        var project = request!.Project!.Trim();
-        var drillhole = request.Drillhole!.Trim();
-        var rows = request.Rows!;
-
-        var processedJson = BuildProcessedJson(project, drillhole, rows);
-
-        return await SaveAsync(processedJson, drillhole, rows.Count, cancellationToken);
-    }
-
-    private IActionResult? ValidateFile(IFormFile file)
     {
         if (file is null || file.Length == 0)
         {
-            return BadRequestProblem(
-                "Invalid upload",
-                "A non-empty JSON file is required.");
+            return Failure(StatusCodes.Status400BadRequest, "No file was uploaded.");
         }
 
-        if (!HasJsonExtension(file.FileName))
+        if (file.Length > _maxFileSizeBytes)
         {
-            return BadRequestProblem(
-                "Invalid file type",
-                "Only .json files are accepted.");
+            return Failure(
+                StatusCodes.Status413PayloadTooLarge,
+                $"File exceeds the {_maxFileSizeBytes / (1024 * 1024)} MB limit.");
         }
 
-        return null;
-    }
+        var fileName = Path.GetFileName(file.FileName);
 
-    private IActionResult? ValidateRequest(UploadDataRequest? request)
-    {
-        if (request is null)
+        if (!string.Equals(Path.GetExtension(fileName), ".json", StringComparison.OrdinalIgnoreCase))
         {
-            return BadRequestProblem(
-                "Invalid JSON",
-                "The uploaded file does not contain a JSON object.");
+            return Failure(StatusCodes.Status400BadRequest, "Only .json files are accepted.");
         }
 
-        if (string.IsNullOrWhiteSpace(request.Project) ||
-            string.IsNullOrWhiteSpace(request.Drillhole))
+        if (fileName.Length > UploadDataRepository.FileNameSize)
         {
-            return BadRequestProblem(
-                "Missing required data",
-                "The project and drillhole fields are required.");
+            return Failure(
+                StatusCodes.Status400BadRequest,
+                $"File name must be {UploadDataRepository.FileNameSize} characters or fewer.");
         }
 
-        if (request.Rows is null)
-        {
-            return BadRequestProblem(
-                "Missing required data",
-                "The rows field is required.");
-        }
+        string json;
+        UploadDataValidator.Result result;
 
-        if (request.Rows.Count == 0)
-        {
-            return BadRequestProblem(
-                "Missing row data",
-                "At least one Raw Lithology row is required.");
-        }
-
-        if (request.Rows.Any(row => row is null))
-        {
-            return BadRequestProblem(
-                "Invalid row data",
-                "The rows array cannot contain null values.");
-        }
-
-        return null;
-    }
-
-    private async Task<IActionResult> SaveAsync(
-        string processedJson,
-        string drillhole,
-        int rowsSubmitted,
-        CancellationToken cancellationToken)
-    {
         try
         {
-            await _repository.UploadAsync(processedJson, cancellationToken);
+            using var reader = new StreamReader(file.OpenReadStream(), StrictUtf8);
+            json = await reader.ReadToEndAsync(cancellationToken);
+            result = UploadDataValidator.Validate(json);
+        }
+        catch (Exception exception) when (exception is JsonException or DecoderFallbackException)
+        {
+            return Failure(StatusCodes.Status400BadRequest, "Invalid JSON file.");
+        }
 
-            return Ok(new UploadDataResponse
+        if (result.Errors.Count > 0)
+        {
+            return BadRequest(new UploadDataResponse
             {
-                Success = true,
-                Message = "Raw Lithology data uploaded successfully.",
-                Drillhole = drillhole,
-                RowsSubmitted = rowsSubmitted
+                Success = false,
+                Message = "Invalid lithology data.",
+                Errors = result.Errors
             });
         }
-        catch (OperationCanceledException)
-            when (cancellationToken.IsCancellationRequested)
+
+        try
         {
-            throw;
+            await _repository.UploadAsync(
+                new UploadDataRequest
+                {
+                    Drillhole = result.Drillhole,
+                    UserName = GetAuthenticatedUserName(),
+                    FileName = fileName,
+                    Json = json
+                },
+                cancellationToken);
         }
-        catch (Exception exception)
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
         {
             _logger.LogError(
                 exception,
-                "Raw Lithology upload failed for drillhole {Drillhole}.",
-                drillhole);
+                "Upload of {FileName} for drillhole {Drillhole} failed.",
+                fileName,
+                result.Drillhole);
 
-            return Problem(
-                statusCode: StatusCodes.Status500InternalServerError,
-                title: "Database operation failed",
-                detail: "The Raw Lithology data could not be saved.");
+            return Failure(StatusCodes.Status500InternalServerError, "Database upload failed.");
         }
-    }
 
-    private static async Task<UploadDataRequest?> ReadRequestAsync(
-        IFormFile file,
-        CancellationToken cancellationToken)
-    {
-        await using var stream = file.OpenReadStream();
-
-        return await JsonSerializer.DeserializeAsync<UploadDataRequest>(
-            stream,
-            InputJsonOptions,
-            cancellationToken);
-    }
-
-    private static string BuildProcessedJson(
-        string project,
-        string drillhole,
-        List<UploadDataRowRequest?> rows)
-    {
-        var payload = new
+        return Ok(new UploadDataResponse
         {
-            project,
-            drillhole,
-
-            rows = rows
-                .Select(row => new
-                {
-                    lithoFrom = row!.LithoFrom,
-                    lithoTo = row.LithoTo,
-                    lithoCode = row.LithoCode ?? string.Empty,
-                    colorCode = row.ColorCode ?? string.Empty,
-                    ca = row.Ca ?? string.Empty,
-                    om = row.Om ?? string.Empty,
-                    omFacies = row.OmFacies ?? string.Empty,
-                    py = row.Py ?? string.Empty,
-                    ox = row.Ox ?? string.Empty,
-                    sedim = row.Sedim ?? string.Empty,
-                    redoxCode = row.RedoxCode ?? string.Empty,
-                    granulo = row.Granulo ?? string.Empty,
-                    hardness = row.Hardness ?? string.Empty,
-                    lithologyComments = row.LithologyComments ?? string.Empty
-                })
-                .ToList()
-        };
-
-        return JsonSerializer.Serialize(payload);
+            Success = true,
+            Message = "Data uploaded successfully.",
+            Drillhole = result.Drillhole,
+            Project = result.Project,
+            TotalRows = result.TotalRows
+        });
     }
 
-    private static bool HasJsonExtension(string fileName) =>
-        string.Equals(
-            Path.GetExtension(fileName),
-            ".json",
-            StringComparison.OrdinalIgnoreCase);
+    // Only an identity the server verified is passed on, never a name the
+    // client sent. The endpoint is anonymous, so this is usually null.
+    private string? GetAuthenticatedUserName() =>
+        User.Identity is
+        {
+            IsAuthenticated: true,
+            Name: { Length: > 0 and <= UploadDataRepository.UserSize } name
+        }
+            ? name
+            : null;
 
-    private IActionResult BadRequestProblem(string title, string detail) =>
-        Problem(
-            statusCode: StatusCodes.Status400BadRequest,
-            title: title,
-            detail: detail);
+    private ObjectResult Failure(int statusCode, string message) =>
+        StatusCode(statusCode, new UploadDataResponse { Success = false, Message = message });
 }

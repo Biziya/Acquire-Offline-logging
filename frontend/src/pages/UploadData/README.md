@@ -6,9 +6,10 @@ Route: `/upload-data`
 
 Loads a Raw Litho JSON export, lets the user review and correct every record in
 an editable, virtualized table, validates the result, and uploads it to
-`POST /api/uploaddata`. The loaded file and every edit are kept in IndexedDB,
+`POST /api/upload-data`. The loaded file and every edit are kept in IndexedDB,
 so they survive navigating to another page and a browser refresh; they are
-cleared by **Cancel**, choosing another file, or a confirmed successful upload.
+cleared by **Cancel** or choosing another file. A successful upload clears
+nothing, so the data stays available for checking or a corrected re-upload.
 See *Draft persistence* below.
 
 ## Draft persistence
@@ -20,7 +21,7 @@ file loaded  → write at once
 cell edited  → write after draft.saveDebounceMs (config.yaml), not per keystroke
 leave page   → pending write flushed on unmount and on `pagehide` (refresh / close)
 Cancel       → abort request, reset page, delete draft
-upload ok    → reset page, delete draft, success toast
+upload ok    → page and draft kept, success toast
 upload fails → draft and edits kept, error toast; retry with Upload to Database
 ```
 
@@ -130,11 +131,12 @@ identity comes from the backend's `GET /api/currentuser` (Windows Integrated
 Authentication); see *currentUser.ts* in `src/services/README.md`.
 
 **No `imported_by` in the uploaded file.** Uploading never changes
-`created_by`, and `imported_by` is not added to the JSON. The backend contract
-(`UploadDataRequest`) has no such field: the server would silently drop it, so
-the file would look as if it recorded the importer when nothing was stored. The
-importer should be recorded by the server from its own authenticated request;
-today Windows Authentication protects only `/api/currentuser`, not the upload. Unknown fields such as `created_by` are
+`created_by`, and `imported_by` is not added to the JSON. The stored procedure does
+not read such a field, so the file would look as if it recorded the importer
+when nothing was stored. The database `usr` column is not the importer either:
+the procedure sets it to `SUSER_NAME()`, the SQL Server login of the backend's
+connection (see the backend README, *SQL user behaviour*). Today Windows
+Authentication protects only `/api/currentuser`, not the upload. Unknown fields such as `created_by` are
 ignored by the server, so they never break an upload.
 
 ## Scrolling
@@ -210,7 +212,7 @@ No new business rules are introduced:
 
 | Severity | Checks |
 | --- | --- |
-| error (blocks upload) | missing project / drillhole; `rows` missing or empty; a row that is not an object; non-whole-number id; empty or non-numeric depth; non-text value in a text field; invalid timestamp; Litho From > Litho To; duplicate interval; unknown lookup code (when the lookup is loaded) |
+| error (blocks upload) | missing project / drillhole; `rows` missing or empty; a row that is not an object; non-whole-number id; empty or non-numeric depth; non-text value in a text field; invalid timestamp; Litho From ≥ Litho To (same rule as the backend); duplicate interval; unknown lookup code (when the lookup is loaded) |
 | warning | required field empty; campaign or timestamp missing; lookup data still loading or unavailable |
 
 Invalid and warning cells are highlighted, the status column shows ✓ / ! / ✕
@@ -225,10 +227,11 @@ Upload to Database → handleImportRequest()   re-validate; blocking errors → 
 Confirm     → handleImport()
   unchanged → the original file (picked in this visit)
   edited or restored → new File(JSON.stringify(workingDocument, null, 2), same name)
-  POST /api/uploaddata   multipart/form-data, field "file"
-    ok    → reset the page, delete the draft, success toast (only after the server confirms)
-    error → error toast with the server message; the draft and edits are kept for a retry
-    abort → ignored
+  POST /api/upload-data  multipart/form-data, field "file"; gives up after 180 s
+    ok      → success toast ("Data uploaded successfully."); the page and draft are kept
+    error   → error toast with the server message (and its first row error); data kept for a retry
+    timeout → "Upload timed out" error toast; data kept
+    abort   → ignored
 ```
 
 The request carries an `AbortController` signal; a second click cannot submit
@@ -251,8 +254,8 @@ in the error.
 
 | Question | Answer |
 | --- | --- |
-| Which API does this page call? | `POST /api/uploaddata`, plus the lookup `GET`s for validation |
-| What is persisted? | The working document (IndexedDB `upload-data-db`) until Cancel or a successful upload |
+| Which API does this page call? | `POST /api/upload-data`, plus the lookup `GET`s for validation |
+| What is persisted? | The working document (IndexedDB `upload-data-db`) until Cancel or another file is chosen |
 | Where are the rules? | `uploadDataValidation.ts` |
 | Where is an edit applied? | `applyCellEdits` in `uploadDataDocument.ts` |
 | Which file is uploaded? | The original when unchanged, otherwise the serialized working document |

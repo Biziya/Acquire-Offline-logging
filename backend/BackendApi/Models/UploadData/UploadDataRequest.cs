@@ -1,24 +1,22 @@
-using System.Text.Json.Serialization;
-
 namespace BackendApi.Models.UploadData;
 
+/// <summary>
+/// One validated upload, passed to <c>dbo.InsertUpdateCoreDescr_WellCAD</c>.
+/// </summary>
 public sealed class UploadDataRequest
 {
-    [JsonPropertyName("project")]
-    public string? Project { get; set; }
+    /// <summary>The JSON <c>drillhole</c> value, sent as <c>@Hole</c>.</summary>
+    public required string Drillhole { get; init; }
 
-    [JsonPropertyName("campaign")]
-    public string? Campaign { get; set; }
+    /// <summary>
+    /// The authenticated web user, sent as <c>@usr</c>, or <c>null</c> for an
+    /// anonymous request. The procedure replaces it with <c>SUSER_NAME()</c>.
+    /// </summary>
+    public string? UserName { get; init; }
 
-    [JsonPropertyName("drillhole")]
-    public string? Drillhole { get; set; }
+    /// <summary>The uploaded file name, sent as <c>@fileName</c>.</summary>
+    public required string FileName { get; init; }
 
-    [JsonPropertyName("created_at")]
-    public DateTimeOffset? CreatedAt { get; set; }
-
-    [JsonPropertyName("modified_at")]
-    public DateTimeOffset? ModifiedAt { get; set; }
-
-    [JsonPropertyName("rows")]
-    public List<UploadDataRowRequest?>? Rows { get; set; }
+    /// <summary>The uploaded file content, unchanged, sent as <c>@str_json</c>.</summary>
+    public required string Json { get; init; }
 }

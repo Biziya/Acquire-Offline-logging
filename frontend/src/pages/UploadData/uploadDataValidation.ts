@@ -16,7 +16,7 @@ import { getDocumentRows, type UploadDocument } from "./uploadDataDocument";
  * Checks an imported (and possibly edited) document before upload. No new
  * business rules are invented here; every check comes from one of two places:
  *
- *   error    — the backend contract (POST /api/uploaddata rejects it: missing
+ *   error    — the backend contract (POST /api/upload-data rejects it: missing
  *              project / drillhole / rows, a null row, an empty or non-numeric
  *              depth, a non-text value in a text field, a non-integer id or
  *              timestamp it cannot parse), or a Raw Litho rule the Raw Litho
@@ -184,12 +184,13 @@ function validateRow(
   if (
     isValidDepth(row.lithoFrom) &&
     isValidDepth(row.lithoTo) &&
-    Number(row.lithoFrom) > Number(row.lithoTo)
+    // Same rule as the backend: an interval must have a length.
+    Number(row.lithoFrom) >= Number(row.lithoTo)
   ) {
     issues.push({
       severity: "error",
       field: "lithoTo",
-      message: "Litho From is greater than Litho To.",
+      message: "Litho From must be less than Litho To.",
     });
   }
 

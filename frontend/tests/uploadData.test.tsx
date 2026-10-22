@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import UploadData from "../src/pages/UploadData/UploadData";
 import { stubDesktopViewport } from "./viewport";
+import { deferred } from "./deferred";
 import { importUploadData } from "../src/services/Api/uploadData";
 import { getCurrentWindowsUser } from "../src/services/currentUser";
 import { applyCellEdits } from "../src/pages/UploadData/uploadDataDocument";
@@ -78,7 +79,7 @@ describe("upload document validation", () => {
     );
     expect(result.rowStatus).toEqual(["error", "error", "error"]);
     expect(result.rowIssues[2]?.map((issue) => issue.message)).toEqual(
-      expect.arrayContaining(["Litho From is greater than Litho To.", "Litho Code is required."]),
+      expect.arrayContaining(["Litho From must be less than Litho To.", "Litho Code is required."]),
     );
   });
 
@@ -385,7 +386,7 @@ describe("Upload Data draft persistence", () => {
     expect(screen.getByText("Edited")).toBeInTheDocument();
   });
 
-  it("uploads the restored working document, then clears the draft", async () => {
+  it("uploads the restored working document and keeps it after success", async () => {
     const user = userEvent.setup();
     (await loadAndEdit()).unmount();
     render(<UploadData />);
@@ -399,8 +400,30 @@ describe("Upload Data draft persistence", () => {
     expect(json.extraMetadata).toBe("kept");
 
     expect(await screen.findByText("Upload confirmed")).toBeInTheDocument();
-    expect(within(zone()).getByText("Drag and drop your JSON file")).toBeInTheDocument();
-    await waitFor(async () => expect(await readUploadDataDraft()).toBeNull());
+    // Nothing is cleared automatically: the table, file and draft remain.
+    expect(comment(2)).toHaveValue("kept edit");
+    expect(within(zone()).getByText("upload.json")).toBeInTheDocument();
+    expect(await readUploadDataDraft()).not.toBeNull();
+  });
+
+  it("sends one request while an upload is in flight", async () => {
+    const pending = deferred<{ message: string }>();
+    vi.mocked(importUploadData).mockReturnValueOnce(pending.promise);
+    const user = userEvent.setup();
+    await loadAndEdit();
+
+    await user.click(screen.getByRole("button", { name: "Upload to Database" }));
+    const confirm = screen.getByRole("button", { name: "Confirm upload" });
+    fireEvent.click(confirm);
+    fireEvent.click(confirm);
+    const uploading = await screen.findByRole("button", { name: "Uploading…" });
+    expect(uploading).toBeDisabled();
+    await user.click(uploading);
+    expect(importUploadData).toHaveBeenCalledTimes(1);
+
+    pending.resolve({ message: "Data uploaded successfully." });
+    expect(await screen.findByText("Data uploaded successfully.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Upload to Database" })).toBeEnabled();
   });
 
   it("keeps the draft when the upload fails", async () => {

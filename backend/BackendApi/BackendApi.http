@@ -55,7 +55,14 @@ Accept: application/json
 
 ###
 
-POST {{BackendApi_HostAddress}}/api/uploaddata
+# Upload Data: multipart/form-data with one field, "file" (a .json export).
+# This runs dbo.InsertUpdateCoreDescr_WellCAD against DefaultConnection, so it
+# writes to that database. Send it only to an approved development database.
+POST {{BackendApi_HostAddress}}/api/upload-data
+Content-Type: multipart/form-data; boundary=UploadBoundary
+
+--UploadBoundary
+Content-Disposition: form-data; name="file"; filename="DH-001.json"
 Content-Type: application/json
 
 {
@@ -74,15 +81,15 @@ Content-Type: application/json
       "coreEnd": "",
       "lithoFrom": "10",
       "lithoTo": "12",
-      "lithoCode": "",
-      "colorCode": "21e12",
-      "ca": "12e1",
+      "lithoCode": "0--",
+      "colorCode": "10G4/2",
+      "ca": "",
       "om": "",
       "omFacies": "",
       "py": "",
       "ox": "",
       "sedim": "",
-      "redoxCode": "",
+      "redoxCode": "0042_MN1",
       "granulo": "",
       "hardness": "",
       "lithologyComments": "",
@@ -90,5 +97,6 @@ Content-Type: application/json
     }
   ]
 }
+--UploadBoundary--
 
 ###
