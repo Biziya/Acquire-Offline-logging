@@ -303,6 +303,15 @@ After opening, the repository checks the connection really is on that
 database and refuses to run otherwise, so an upload never lands silently in
 `ACQMN01`. Each upload logs server, database, SQL login and database user.
 
+**Windows authentication (Development).** `appsettings.Development.json` sets
+`"UploadData": { "UseWindowsAuthentication": true }`: the upload then connects
+with `Integrated Security=True` as the Windows account running the API
+(`dotnet run` / `dotnet watch` from your session = you), with no password in
+configuration. `userAcquire` is not allowed to run the procedure's INSERT
+(error 229); a Windows account with the rights works. Other APIs keep the SQL
+login. Hosted (IIS, service), the API runs as its service account, which then
+needs the rights instead; `usr` stores whichever login connects.
+
 Under the company security model the application login may only execute the
 procedure: it sends no INSERT/UPDATE/DELETE of its own and needs no table
 permissions.

@@ -13,6 +13,7 @@ public sealed class UploadDataRepository : IUploadDataRepository
     // The upload's database, when it differs from DefaultConnection's
     // Initial Catalog (same server and login; other APIs are unaffected).
     private const string DatabaseKey = "UploadData:Database";
+    private const string WindowsAuthenticationKey = "UploadData:UseWindowsAuthentication";
 
     // Sizes of the procedure's parameters: @Hole varchar(20), @usr and
     // @fileName varchar(50). The controller rejects longer values, so nothing
@@ -38,6 +39,15 @@ public sealed class UploadDataRepository : IUploadDataRepository
         if (!string.IsNullOrWhiteSpace(database))
         {
             builder.InitialCatalog = database;
+        }
+
+        // Windows authentication: connect as the Windows account the API runs
+        // under (no password anywhere) instead of DefaultConnection's SQL login.
+        if (configuration.GetValue<bool>(WindowsAuthenticationKey))
+        {
+            builder.Remove("User ID");
+            builder.Remove("Password");
+            builder.IntegratedSecurity = true;
         }
 
         _connectionString = builder.ConnectionString;
