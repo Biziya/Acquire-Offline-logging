@@ -55,7 +55,8 @@ export interface LookupDefinition {
 }
 
 export interface ApiLookupDefinition extends LookupDefinition {
-  endpoint: string;
+  /* The list's key in the GET /api/table-constants response. */
+  responseKey: string;
   cacheKey: string;
 }
 

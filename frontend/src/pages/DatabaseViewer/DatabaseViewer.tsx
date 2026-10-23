@@ -1,158 +1,141 @@
-import { useMemo, useState } from "react";
+import type { Drillhole } from "../../types/domain";
+import { isAbortError } from "../../types/validation";
+import { useEffect, useRef, useState } from "react";
 import DatabaseViewerTable from "./DatabaseViewerTable";
 import { databaseViewerConfig } from "./config";
-import { generateMockLithologyRecords } from "./databaseViewerMockData";
-import type { LithologyRecord } from "./databaseViewerTypes";
-import {
-  FIELD,
-  FIELD_CONTROL,
-  FIELD_LABEL,
-  READONLY_VALUE,
-} from "../../components/fieldStyles";
+import type { DataViewerResponse } from "./databaseViewerTypes";
+import { getDataViewerRecords } from "../../services/Api/dataViewerApi";
+import { useToast } from "../../hooks/useToast";
+import Toast from "../../components/Toast";
+// The Raw Litho drillhole selector and list, reused as they are.
+import RawLithoFilters from "../RawLitho/RawLithoFilters";
+import { useDrillholes } from "../RawLitho/hooks/useDrillholes";
+import { OUTLINE_BUTTON, OUTLINE_BUTTON_NAVY } from "../RawLitho/rawLithoStyles";
 
-const { title, mockData } = databaseViewerConfig;
-// Fixed seed: the same mock records every time a size is chosen.
-const MOCK_SEED = 1;
-
+const { title } = databaseViewerConfig;
 const numberFormat = new Intl.NumberFormat("en-US");
 
-interface DrillholeGroup {
-  project: string;
-  campaign: string;
-  records: LithologyRecord[];
-}
+type View =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "loaded"; data: DataViewerResponse }
+  | { status: "error" };
+
+const EMPTY_MESSAGES = {
+  idle: "Select a drillhole to view its records.",
+  loading: "Loading records…",
+  loaded: "No records are stored for this drillhole.",
+  error: "Unable to load the records.",
+} as const;
 
 /*
- * Records grouped by drillhole, each group ordered by Litho From. Built once
- * per dataset, so choosing a drillhole is a map lookup, not a scan. Project and
- * Campaign come from the drillhole's own records, so they never change for a
- * drillhole.
- */
-function groupByDrillhole(records: readonly LithologyRecord[]) {
-  const groups = new Map<string, DrillholeGroup>();
-
-  records.forEach((record) => {
-    const group = groups.get(record.drillhole);
-    if (group) group.records.push(record);
-    else
-      groups.set(record.drillhole, {
-        project: record.project,
-        campaign: record.campaign,
-        records: [record],
-      });
-  });
-
-  groups.forEach((group) =>
-    group.records.sort((first, second) => first.lithoFrom - second.lithoFrom),
-  );
-
-  return groups;
-}
-
-/*
- * Read-only view of lithology records. MOCK DATA ONLY for now: the records
- * are generated in the browser and nothing is requested from the backend.
- * State is local to the page; it shares nothing with Raw Litho.
+ * Read-only view of the records stored for one drillhole (GET /api/dataviewer,
+ * filtered by HOLEID), with its Project and Campaign. Nothing is edited or
+ * written. Choosing another drillhole aborts the previous request, so an
+ * older, slower answer can never replace the current one.
  */
 function DatabaseViewer() {
-  const [size, setSize] = useState(mockData.defaultSize);
-  const [drillhole, setDrillhole] = useState("");
+  const { toast, showToast, hideToast } = useToast();
+  const { drillholes, isLoading, error } = useDrillholes(showToast);
+  const [holeId, setHoleId] = useState("");
+  const [view, setView] = useState<View>({ status: "idle" });
+  const requestRef = useRef<AbortController | null>(null);
 
-  // Generated and grouped only when the size changes, never per render.
-  const groups = useMemo(
-    () =>
-      groupByDrillhole(generateMockLithologyRecords(size, MOCK_SEED, mockData)),
-    [size],
-  );
-  const drillholes = useMemo(
-    () => Array.from(groups.keys()).sort((a, b) => a.localeCompare(b)),
-    [groups],
-  );
+  // Leaving the page cancels a request still in flight.
+  useEffect(() => () => requestRef.current?.abort(), []);
 
-  const selected = groups.get(drillhole);
-  const records = selected?.records ?? [];
+  function loadRecords(nextHoleId: string) {
+    requestRef.current?.abort();
+    requestRef.current = null;
+    setHoleId(nextHoleId);
+
+    if (!nextHoleId) {
+      setView({ status: "idle" });
+      return;
+    }
+
+    const request = new AbortController();
+    requestRef.current = request;
+    setView({ status: "loading" });
+
+    getDataViewerRecords(nextHoleId, request.signal).then(
+      (data) => {
+        if (requestRef.current === request) setView({ status: "loaded", data });
+      },
+      (loadError) => {
+        if (requestRef.current !== request || isAbortError(loadError)) return;
+
+        console.error("Unable to load Data Viewer records.", loadError);
+        setView({ status: "error" });
+        showToast({ type: "error", message: "Unable to load drillhole records" });
+      },
+    );
+  }
+
+  const data = view.status === "loaded" ? view.data : null;
+  // Project and Campaign as the Data Viewer API resolved them.
+  const shownDrillhole: Drillhole | null = data
+    ? {
+        holeId: data.drillhole,
+        projectCode: data.project ?? "",
+        campaign: data.campaign ?? "",
+      }
+    : null;
+
+  let recordStatus = "No drillhole selected";
+  if (view.status === "loading") recordStatus = "Loading records…";
+  else if (view.status === "error") recordStatus = "Records unavailable";
+  else if (data) recordStatus = `${numberFormat.format(data.totalRecords)} records`;
 
   return (
     <section className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden">
-      <div className="mb-1.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
-        <h1 className="m-0 text-[1.3rem] font-[650] tracking-[-0.01em] text-rl-navy">
-          {title}
-        </h1>
+      <h1 className="m-0 mb-1.5 text-[1.3rem] font-[650] tracking-[-0.01em] text-rl-navy">
+        {title}
+      </h1>
 
-        <p
-          className="m-0 rounded-md border border-[#e8c27a] bg-[#fff8e8] px-2.5 py-1 text-[0.78rem] font-semibold text-[#7a4b00]"
-          role="note"
-        >
-          Mock data — generated in the browser, not read from the database
-        </p>
-      </div>
-
-      <div className="mb-2 flex flex-wrap items-end gap-3">
-        <label className={FIELD}>
-          <span className={FIELD_LABEL}>Drillhole</span>
-          <select
-            className={`${FIELD_CONTROL} w-[190px] max-w-full px-2.5`}
-            value={drillhole}
-            onChange={(event) => setDrillhole(event.target.value)}
-          >
-            <option value="">Select drillhole</option>
-            {drillholes.map((value) => (
-              <option key={value}>{value}</option>
-            ))}
-          </select>
-        </label>
-
-        <div className={FIELD}>
-          <span className={FIELD_LABEL}>Project</span>
-          <output className={READONLY_VALUE} aria-label="Project">
-            {selected?.project || "—"}
-          </output>
-        </div>
-
-        <div className={FIELD}>
-          <span className={FIELD_LABEL}>Campaign</span>
-          <output className={READONLY_VALUE} aria-label="Campaign">
-            {selected?.campaign || "—"}
-          </output>
-        </div>
-
-        <label className={`${FIELD} ml-auto`}>
-          <span className={FIELD_LABEL}>Mock records</span>
-          <select
-            className={`${FIELD_CONTROL} px-2.5`}
-            value={size}
-            onChange={(event) => setSize(Number(event.target.value))}
-          >
-            {mockData.sizes.map((value) => (
-              <option key={value} value={value}>
-                {numberFormat.format(value)}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
+      <RawLithoFilters
+        drillholes={drillholes}
+        selectedHoleId={holeId}
+        selectedDrillhole={shownDrillhole}
+        isLoading={isLoading}
+        error={error}
+        onDrillholeChange={loadRecords}
+      />
 
       <div className="mb-1.5 flex flex-wrap items-center gap-2.5">
         <h2 className="m-0 text-[0.85rem] font-semibold text-rl-text">
-          Dataset Records
+          Database Records
         </h2>
         <p className="m-0 text-[0.8rem] text-rl-text-muted" aria-live="polite">
-          {selected
-            ? `${numberFormat.format(records.length)} records`
-            : "No drillhole selected"}
+          {recordStatus}
         </p>
+        {view.status === "error" && (
+          <button
+            className={`${OUTLINE_BUTTON} ${OUTLINE_BUTTON_NAVY} h-[26px] px-2.5 text-[0.8rem]`}
+            type="button"
+            onClick={() => loadRecords(holeId)}
+          >
+            Retry
+          </button>
+        )}
       </div>
 
       <DatabaseViewerTable
         // A new drillhole starts at the top of its records.
-        key={drillhole}
-        records={records}
-        emptyMessage={
-          selected
-            ? "This drillhole has no records."
-            : "Select a drillhole to view its records."
-        }
+        key={holeId}
+        records={data?.records ?? []}
+        emptyMessage={EMPTY_MESSAGES[view.status]}
       />
+
+      {toast && (
+        <Toast
+          key={toast.id}
+          message={toast.message}
+          type={toast.type}
+          isVisible
+          onClose={() => hideToast(toast.id)}
+        />
+      )}
     </section>
   );
 }

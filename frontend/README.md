@@ -42,7 +42,7 @@ configuration, and merge any custom root configuration with the included default
 | `src/services/IndexDB/rawLithoSaveQueue.ts` | Latest pending snapshot per drillhole and serialized writes |
 | `src/pages/RawLitho/rawLithoHelpers.ts` | Document normalization, JSON import validation and export |
 | `src/pages/UploadData/` | JSON review: editable virtualized preview, validation, upload of the original or edited document |
-| `src/pages/DatabaseViewer/` | Read-only, virtualized lithology viewer — **mock data only**, no backend calls |
+| `src/pages/DatabaseViewer/` | Read-only, virtualized viewer of the records stored for one drillhole (`GET /api/dataviewer`) |
 | `src/pages/*/config.yaml` + `src/config/yamlConfig.ts` | Static UI settings per page, parsed and validated once at load |
 | `src/css/index.css` | Tailwind CSS v4 entry (`@tailwindcss/vite`) and the shared `rl-*` design tokens |
 | `tests/` | Persistence, operations, storage/API, keyboard, Upload Data, Database Viewer and YAML configuration tests |

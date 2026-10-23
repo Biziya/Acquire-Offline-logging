@@ -1,120 +1,80 @@
 # Database Viewer page
 
-Route: `/database-viewer` (sidebar: **Database Viewer**)
+Route: `/database-viewer`
 
 ## Purpose
 
-Read-only table of the lithology records of one drillhole. **Mock data only for
-now**: records are generated in the browser, nothing is requested from the
-backend, and a "Mock data" banner stays visible so the table is never mistaken
-for production records. There is no editing, deleting, creating, saving or
-uploading, no IndexedDB, and no SQL Server connection.
+Read-only view of the records stored in the database for one drillhole:
+`GET /api/dataviewer?drillhole=<HOLEID>`, which reads
+`MyApps.CoreDescrData` (`ACQMN01_DEV`) filtered by `HOLEID`. Nothing is
+edited, written or calculated; values are shown as the database holds them.
 
-## Folder tree
+## Files
 
 ```text
 DatabaseViewer/
-├── config.yaml                 title, overscan, mock-data settings
-├── config.ts                   typed, validated copy of config.yaml
-├── DatabaseViewer.tsx          page: drillhole selector, Project/Campaign, count
-├── DatabaseViewerTable.tsx     virtualized read-only table
-├── databaseViewerMockData.ts   MOCK record generator
-├── databaseViewerTypes.ts      LithologyRecord + column keys
-└── README.md                   this file
+├── DatabaseViewer.tsx        page: drillhole selection, request, states, toast
+├── DatabaseViewerTable.tsx   read-only virtualized table
+├── databaseViewerTypes.ts    API response types and the table columns
+├── config.ts / config.yaml   title, overscan, table minWidth
+└── README.md
 ```
 
-## Page layout
+The request lives in `services/Api/dataViewerApi.ts` (`getDataViewerRecords`),
+which validates the response before the page sees it.
+
+## Layout
 
 ```text
-Database Viewer                                   [Mock data banner]
-Drillhole [select ▼]   Project [read-only]   Campaign [read-only]   Mock records [10,000 ▼]
-Dataset Records  139 records
-| Ins | Litho From (m) | Litho To (m) | Litho Code | … | Hardness |
+Database Viewer
+Drillhole [search ▾]   Project [ZOOVCH]   Campaign [2015]
+Database Records   53 records   [Retry — only after an error]
+┌ # │ HOLEID │ PROJECTCODE │ FROM │ TO │ PRIORITY │ NAME │ VALUE │ … │ Imported_by ┐
 ```
 
-- **Drillhole** is the only filter. It is a native `<select>`, so typing the
-  first characters jumps to a matching drillhole. There is no separate search,
-  Project / Campaign filter or Clear button.
-- **Project** and **Campaign** are `<output>` elements: they show the selected
-  drillhole's values and cannot be edited.
-- With no drillhole selected the table is empty and says so; the count reads
-  "No drillhole selected". Choosing one shows its records and its count.
+- **Drillhole** is Raw Litho's own selector (`RawLithoFilters` +
+  `useDrillholes`): the same list from `GET /api/drillholes` (or its offline
+  cache), the same search. Selecting here does not change Raw Litho's
+  "recent drillholes".
+- **Project / Campaign** are the values the Data Viewer API returns for the
+  drillhole (resolved by the backend from the Drillholes query). `—` while
+  nothing is loaded, or when the API returns `null` (no single match — never
+  guessed).
 
-## Same look as Raw Litho, read-only
+## Table
 
-The table reproduces the Raw Litho table:
+One row per database row — the table stores one row per interval and
+attribute (`NAME` / `VALUE`), and the viewer does not pivot or merge them.
+Columns are the database columns in query order, labelled with their database
+names (`databaseViewerTypes.ts`); rows keep the API's order
+(`FROM, TO, PRIORITY, NAME`).
 
-- **Columns, labels, widths, row height, minimum width:** read from Raw
-  Litho's `config.yaml`, through `rawLithoConfig`. They are not duplicated
-  here, so changing a Raw Litho column changes both tables.
-- **Header, grid, zebra rows, hover tint, cell font, frame:** come from the
-  shared `components/dataTableStyles.ts`.
-- **Index column:** reads `Ins` and counts from 1 within the drillhole.
+| Value | Shown as |
+| --- | --- |
+| `NULL` | empty cell (nothing filled in) |
+| `FROM` / `TO` numbers | at least two decimals, never rounded: `5` → `5.00`, `12.125` → `12.125` |
+| other numbers, text, dates | exactly as received (`2026-10-22T10:00:00`) |
 
-Only the configuration and the styles are shared. Nothing from Raw Litho's
-workspace, persistence, validation, navigation or editing code is imported.
+The table is virtualized like Raw Litho's (only the visible rows plus
+`overscan` are rendered) and borrows its row height and index-column width.
+It scrolls horizontally inside its frame below `table.minWidth`.
 
-Cells are plain text, with no inputs or lookups, and there are no row or save
-buttons. Raw Litho's required-field `*` markers are left out because they
-only mean something when editing. A long value is truncated with an ellipsis
-and shown in full in the cell's tooltip.
+## States
 
-The column widths are proportions, so the table fills the page width without
-horizontal scrolling. Below Raw Litho's `minWidth` (760 px of table), for
-example on a narrow window with the sidebar expanded, the table scrolls inside
-its own frame instead of squeezing cells.
+| State | Status text | Table |
+| --- | --- | --- |
+| nothing selected | No drillhole selected | Select a drillhole to view its records. |
+| loading | Loading records… | Loading records… |
+| loaded | `N records` | the rows, or "No records are stored for this drillhole." |
+| error | Records unavailable + **Retry** | Unable to load the records. — plus the shared error toast (5 s) |
 
-## Mock data
-
-`generateMockLithologyRecords(size, seed, settings)` builds records
-programmatically; there is no fixture file. The page always uses the same seed
-(`MOCK_SEED`), so a given size always gives the same records and the same ids
-(`1…n`).
-
-- **Labelling:** every project, campaign and drillhole starts with `MOCK-`.
-- **Fixed identity:** drillhole names and each drillhole's project and campaign
-  are fixed by its position, not by the random values. A drillhole keeps its
-  Project and Campaign when the size changes, and so does the current
-  selection.
-- **Depths:** intervals are contiguous within each drillhole.
-- **Codes:** plausible shapes, **not** the API lookup tables.
-
-The dataset is generated and grouped by drillhole in one `useMemo` keyed on
-the size. It is built once per choice, never per render, and choosing a
-drillhole is a map lookup. Each group is ordered by Litho From.
-
-There is no Refresh button. **Mock records** picks 10,000, 50,000 or
-100,000 records in total, about 139, 694 or 1,389 per drillhole with the
-default 72 drillholes.
-
-## Scrolling
-
-Virtualized with `@tanstack/react-virtual`. Only the visible rows plus
-`overscan` are in the DOM, and two spacer rows keep real `<table>` layout and
-the sticky header. Rows are keyed by record id. Choosing another drillhole
-starts at the top of its records.
+**Stale results.** Each selection aborts the previous request
+(`AbortController`) and only the latest request may update the page, so a
+slow answer for an earlier drillhole can never replace the current one.
+Leaving the page cancels a request still in flight.
 
 ## Configuration
 
-`config.yaml` holds `title`, `table.overscan` and `mockData`: the offered sizes,
-the default size, and how many projects, campaigns and drillholes to generate.
-It is parsed and validated once at module load; a bad value fails start-up
-with the file and key in the error. The table's appearance is configured in
-`RawLitho/config.yaml` (see above).
-
-## Connecting the real database later
-
-1. Replace the `useMemo` that generates and groups mock records with a request
-   for the selected drillhole.
-2. Keep `LithologyRecord` as the row shape.
-
-The table does not depend on where the records came from.
-
-## Manual test checklist
-
-1. Open Database Viewer → mock banner, "No drillhole selected", empty table.
-2. Choose a drillhole → Project and Campaign fill in (read-only), the count and table update, rows run in Litho From order.
-3. Put Raw Litho and Database Viewer side by side → identical columns, widths, header and rows.
-4. Switch to 100,000 records and a drillhole → smooth scrolling; only a few dozen rows are in the DOM.
-5. Confirm there is no Refresh button and the network tab shows no request.
-6. Narrow the window to ~1024 px → no horizontal scrollbar on the page or the table.
+`config.yaml`: `title`, `table.overscan`, `table.minWidth`. Parsed and
+validated once at load; a bad value fails start-up (and `npm test`) with the
+file and key in the error.

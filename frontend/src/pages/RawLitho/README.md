@@ -189,15 +189,15 @@ Displayed left to right, with `Ins` (the derived row number) first:
 | --- | --- | --- | --- | --- |
 | Litho From (m) | `lithoFrom` | number | ✅ | — |
 | Litho To (m) | `lithoTo` | number | ✅ | — |
-| Litho Code | `lithoCode` | lookup | ✅ | `/api/lithocodes` |
-| Color Code | `colorCode` | lookup | ✅ | `/api/colour` |
-| CA | `ca` | lookup | | `/api/ca` |
-| OM | `om` | lookup | | `/api/om` |
-| OM Facies | `omFacies` | lookup | | `/api/omfacies` |
-| PY | `py` | lookup | | `/api/py` |
-| OX | `ox` | lookup | | `/api/ox` |
-| Sedim | `sedim` | lookup | | `/api/sedim` |
-| Redox Code | `redoxCode` | lookup | ✅ | `/api/redoxcode` |
+| Litho Code | `lithoCode` | lookup | ✅ | `/api/table-constants` → `lithoCode` |
+| Color Code | `colorCode` | lookup | ✅ | `/api/table-constants` → `colourCode` |
+| CA | `ca` | lookup | | `/api/table-constants` → `caCode` |
+| OM | `om` | lookup | | `/api/table-constants` → `omCode` |
+| OM Facies | `omFacies` | lookup | | `/api/table-constants` → `omFaciesCode` |
+| PY | `py` | lookup | | `/api/table-constants` → `pyCode` |
+| OX | `ox` | lookup | | `/api/table-constants` → `oxCode` |
+| Sedim | `sedim` | lookup | | `/api/table-constants` → `sedimCode` |
+| Redox Code | `redoxCode` | lookup | ✅ | `/api/table-constants` → `redoxCode` |
 | Lithology Comments | `lithologyComments` | text | | — |
 | Granulo | `granulo` | lookup | | local digits 0–9 |
 | Hardness | `hardness` | lookup | | local digits 0–9 |
@@ -923,9 +923,9 @@ the dataset:
 **When it is not set**
 - An existing or imported document without one (older files and drafts) keeps
   none; the current user is never filled in.
-- A document created and saved while no identity is available has none —
-  for example when the browser did not send Windows credentials to
-  `/api/currentuser` (see `src/services/README.md`).
+- A document created and saved while no identity is available has none.
+  Today that is every new document: the app has no verified user since
+  `/api/currentuser` was removed (see `src/services/README.md`).
 
 **Compatibility**
 - Older JSON files and IndexedDB drafts without the field load as before.

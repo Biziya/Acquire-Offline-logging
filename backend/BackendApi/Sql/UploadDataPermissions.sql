@@ -9,7 +9,7 @@
    raised inside procedure InsertUpdateCoreDescr_WellCAD
 
  What the application does (and only this):
-   connection  Data Source=BMNULAADB02; database ACQMN01_DEV (UploadData:Database;
+   connection  Data Source=BMNULAADB02; database ACQMN01_DEV (CoreDescrData:Database;
                DefaultConnection's Initial Catalog ACQMN01 is used by the other APIs);
                SQL login userAcquire (appsettings.json / appsettings.Development.json;
                no environment, user-secrets or other overrides are configured)

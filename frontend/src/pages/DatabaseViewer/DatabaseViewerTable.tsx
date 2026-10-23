@@ -8,37 +8,50 @@ import {
   bodyRowClass,
   toPercentWidths,
 } from "../../components/dataTableStyles";
-// Appearance only: the Raw Litho table's column order, labels, widths, row
-// height and minimum width. Nothing from Raw Litho's editing code is used.
+// Appearance only: Raw Litho's row height and index-column width, so both
+// tables look the same. Nothing from Raw Litho's editing code is used.
 import { rawLithoConfig } from "../RawLitho/config";
 import {
-  LITHOLOGY_COLUMN_KEYS,
-  type LithologyRecord,
+  DATA_VIEWER_COLUMNS,
+  type DataViewerRecord,
+  type DataViewerValue,
 } from "./databaseViewerTypes";
 import { databaseViewerConfig } from "./config";
 
 interface DatabaseViewerTableProps {
-  records: readonly LithologyRecord[];
+  records: readonly DataViewerRecord[];
   emptyMessage: string;
 }
 
-const { rowHeight, minWidth, indexColumnWidth } = rawLithoConfig;
-const { overscan } = databaseViewerConfig;
+const { rowHeight, indexColumnWidth } = rawLithoConfig;
+const { overscan, minWidth } = databaseViewerConfig;
 
-const columns = rawLithoConfig.columns.flatMap((column) => {
-  const key = LITHOLOGY_COLUMN_KEYS.find((item) => item === column.key);
-  return column.visible && key ? [{ key, label: column.label, width: column.width }] : [];
-});
 const [indexWidth, ...columnWidths] = toPercentWidths([
   indexColumnWidth,
-  ...columns.map((column) => column.width),
+  ...DATA_VIEWER_COLUMNS.map((column) => column.width),
 ]);
 
+// At least two decimals, never rounded, no thousands separator: 5 → "5.00",
+// 12.125 → "12.125". Only how the stored number is written changes.
+const depthFormat = new Intl.NumberFormat("en-US", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 20,
+  useGrouping: false,
+});
+
+/* The stored value as text. NULL is an empty cell; nothing is filled in. */
+function cellText(value: DataViewerValue, isDepth: boolean) {
+  if (value === null) return "";
+  if (isDepth && typeof value === "number") return depthFormat.format(value);
+  return String(value);
+}
+
 /*
- * Read-only, virtualized and styled exactly like the Raw Litho table: only
- * the rows in view (plus `overscan`) are in the DOM, and two spacer rows stand
- * in for the rest, which keeps real <table> layout and the sticky header.
- * Values are plain text — there are no inputs. Rows are keyed by record id.
+ * Read-only and virtualized like the Raw Litho table: only the rows in view
+ * (plus `overscan`) are in the DOM, and two spacer rows stand in for the
+ * rest, which keeps real <table> layout and the sticky header. Values are
+ * plain text — there are no inputs. Rows are shown in the API's order
+ * (FROM, TO, PRIORITY, NAME).
  */
 function DatabaseViewerTable({ records, emptyMessage }: DatabaseViewerTableProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -47,14 +60,13 @@ function DatabaseViewerTable({ records, emptyMessage }: DatabaseViewerTableProps
     getScrollElement: () => scrollRef.current,
     estimateSize: () => rowHeight,
     overscan,
-    getItemKey: (index) => records[index]?.id ?? index,
   });
 
   const items = virtualizer.getVirtualItems();
   const paddingTop = items[0]?.start ?? 0;
   const paddingBottom =
     virtualizer.getTotalSize() - (items[items.length - 1]?.end ?? 0);
-  const columnCount = columns.length + 1;
+  const columnCount = DATA_VIEWER_COLUMNS.length + 1;
 
   return (
     <div
@@ -62,7 +74,7 @@ function DatabaseViewerTable({ records, emptyMessage }: DatabaseViewerTableProps
       className={TABLE_FRAME}
       tabIndex={0}
       role="region"
-      aria-label="Lithology records"
+      aria-label="Database records"
     >
       <table
         className={TABLE}
@@ -72,9 +84,9 @@ function DatabaseViewerTable({ records, emptyMessage }: DatabaseViewerTableProps
         <thead>
           <tr>
             <th className={HEADER_CELL} style={{ width: indexWidth }}>
-              Ins
+              #
             </th>
-            {columns.map((column, index) => (
+            {DATA_VIEWER_COLUMNS.map((column, index) => (
               <th
                 key={column.key}
                 className={HEADER_CELL}
@@ -105,16 +117,16 @@ function DatabaseViewerTable({ records, emptyMessage }: DatabaseViewerTableProps
                 aria-rowindex={item.index + 2}
               >
                 <td className={BODY_CELL}>{item.index + 1}</td>
-                {columns.map((column) => {
-                  const value = String(record[column.key]);
+                {DATA_VIEWER_COLUMNS.map((column) => {
+                  const text = cellText(record[column.key], Boolean(column.depth));
 
                   return (
                     <td
                       key={column.key}
                       className={`${BODY_CELL} truncate px-1 text-rl-text`}
-                      title={value || undefined}
+                      title={text || undefined}
                     >
-                      {value}
+                      {text}
                     </td>
                   );
                 })}

@@ -32,7 +32,7 @@ src/
 │   └── RawExtraction.tsx   earlier page, no route
 ├── types/           shared domain types and runtime guards
 ├── hooks/
-│   ├── useCurrentUser.ts  signed-in Windows user, or null (see services/currentUser.ts)
+│   ├── useCurrentUser.ts  verified signed-in user, or null (see services/currentUser.ts)
 │   └── useToast.ts        one notification at a time (showToast / hideToast)
 ├── services/        API clients, IndexedDB, lookup config, current user (own README)
 ├── App.tsx          layout + routes
@@ -64,7 +64,7 @@ sidebar stays mounted while the route changes.
 ```text
 App
 ├── Sidebar                collapsible, NavLink-based, owns its collapsed state
-│   ├── user name          footer; Windows user from useCurrentUser(), then a divider
+│   ├── user name          footer; user from useCurrentUser(), then a divider
 │   └── StatusIndicator    footer; polls GET /api/status every 5s (900ms timeout)
 └── main.page-content
     └── Routes
@@ -76,9 +76,9 @@ App
 The sidebar footer shows, left-aligned, the signed-in Windows user
 (`Bek` for a local account, `COMPANY\bek` for a domain account; truncated
 with a tooltip when long), a thin divider, then the backend status (green
-"Online", amber "Offline"). The user comes from `useCurrentUser()`, i.e. the
-backend's Windows-authenticated `GET /api/currentuser`; when it cannot be
-verified it reads "User not identified" — never a hostname or a guess. The sidebar is a flex column: the navigation
+"Online", amber "Offline"). The user comes from `useCurrentUser()`; with no
+verified identity (today: always, see `services/README.md`) it reads "User
+not identified" — never a hostname or a guess. The sidebar is a flex column: the navigation
 takes the free height and scrolls if it ever runs out of room, and the footer
 never shrinks, so the indicator stays pinned without overlapping the links.
 When the sidebar is collapsed only the coloured light is shown; its `title`
@@ -95,7 +95,7 @@ and the draft loader in `useRawLithoDraftPersistence` ignores stale load results
 | --- | --- | --- |
 | `/` | `pages/Home.tsx` | Placeholder heading. The file carries a TODO asking for requirements. |
 | `/raw-litho` | `pages/RawLitho/RawLitho.tsx` | The main feature. [README](pages/RawLitho/README.md) |
-| `/database-viewer` | `pages/DatabaseViewer/DatabaseViewer.tsx` | Read-only, **mock data only**. [README](pages/DatabaseViewer/README.md) |
+| `/database-viewer` | `pages/DatabaseViewer/DatabaseViewer.tsx` | Read-only stored records of one drillhole (`GET /api/dataviewer`). [README](pages/DatabaseViewer/README.md) |
 | `/upload-data` | `pages/UploadData/UploadData.tsx` | [README](pages/UploadData/README.md) |
 
 Not routed: `pages/RawExtraction.tsx` (complete but removed from `App.tsx`) and

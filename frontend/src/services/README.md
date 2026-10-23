@@ -8,8 +8,9 @@ services/
 ├── Api/
 │   ├── apiConfig.ts              buildApiUrl — the only place a URL is built
 │   ├── backendStatus.ts          GET /api/status
+│   ├── dataViewerApi.ts          GET /api/dataviewer?drillhole=… (Database Viewer)
 │   ├── drillholeApi.ts           GET /api/drillholes
-│   ├── rawLithoApi.ts            the 9 lookup endpoints
+│   ├── rawLithoApi.ts            GET /api/table-constants (all 9 lookups)
 │   └── uploadData.ts             POST /api/upload-data
 ├── IndexDB/
 │   ├── rawLithoDatabase.ts       owns raw-litho-db: version, stores, transactions
@@ -50,12 +51,15 @@ unique. Better to fall back to the cache than to render a half-valid list.
 
 `getRawLithoLookup(fieldKey)` → array of records for one lookup.
 
-- Resolves the endpoint through `RAW_LITHO_API_LOOKUP_BY_FIELD`; an unknown
-  field rejects immediately.
-- **De-duplicates in flight**: promises are cached in a module-level `Map`, so
-  nine requests happen once per page load even across remounts.
-- A rejected request is deleted from the map, so a retry can be attempted.
-- Throws unless the body is an array of objects containing string values for the configured code property.
+- All nine lists come from **one** request, `GET /api/table-constants`
+  (`{ caCode: [...], colourCode: [...], ... }`); the lookup's `responseKey`
+  picks its list. An unknown field rejects immediately.
+- **Shared in flight**: the one request is cached at module level, so all
+  nine lookups on every page cost a single call per page load.
+- A failed request, or a list that fails validation, is forgotten, so a
+  retry asks the server again.
+- Throws unless that list is an array of objects with a string value for the
+  configured code property; one bad list fails only its own lookup.
 
 ### `backendStatus.ts`
 
@@ -140,7 +144,7 @@ the row renderer, and validation.
 
 | Export | Contents |
 | --- | --- |
-| `RAW_LITHO_LOOKUPS` | The 9 API lookups: `fieldKey`, `label`, `endpoint`, `codeProperty`, `cacheKey` |
+| `RAW_LITHO_LOOKUPS` | The 9 API lookups: `fieldKey`, `label`, `responseKey` (list key in `/api/table-constants`), `codeProperty`, `cacheKey` |
 | `RAW_LITHO_LOCAL_LOOKUPS` | Granulo and Hardness: `source: "local"`, digits 0–9, `maxLength: 1`, numeric input guard |
 | `GRANULO_HARDNESS_OPTIONS` | `[{ code: "0" }, … { code: "9" }]` |
 | `RAW_LITHO_ALL_LOOKUPS` | Both lists, used by lookup validation |
@@ -155,42 +159,24 @@ validation all pick it up.
 
 ## currentUser.ts
 
-`getCurrentWindowsUser()` is the one place the app asks who is signed in
-(`Bek` for a local account, `COMPANY\bek` for a domain account). Through
-`hooks/useCurrentUser.ts` it feeds the sidebar user name, Raw Litho's
+`getCurrentWindowsUser()` is the one place the app asks who is signed in.
+Through `hooks/useCurrentUser.ts` it feeds the sidebar user name, Raw Litho's
 `created_by` / `edited_by`, and Upload Data's "Edited By" stamp and
 "Imported By".
 
-**How the name is obtained.** A browser cannot read the Windows login, so
-`getCurrentWindowsUser()` asks the backend: `GET /api/currentuser`
-(`VITE_CURRENT_USER_PATH` in `frontend/.env`) with `credentials: "include"`.
-That endpoint is protected by Windows Integrated Authentication (Negotiate:
-Kerberos or NTLM), so the browser proves the signed-in Windows user and the
-backend answers `{ "userName": ... }`:
+**The frontend owns identity, and today has no verified one.** The backend's
+`GET /api/currentuser` (Windows Integrated Authentication) was removed with
+the move to five APIs. A browser cannot read the Windows login and the app
+has no SSO provider, so `getCurrentWindowsUser()` resolves `null` without any
+request. Every caller already handles that: the sidebar shows "User not
+identified", Imported By shows `—`, and `created_by` / `edited_by` are left
+unset (a file's existing values are kept). The hostname, user agent, a
+build-time user name, browser fingerprinting or anything typed in are never
+used.
 
-| Account | Windows reports | Shown |
-| --- | --- | --- |
-| Local account | `DESKTOP-OD9CS4B\Bek` | `Bek` (the computer prefix is dropped) |
-| Domain account | `COMPANY\bek` | `COMPANY\bek` |
-
-A verified name is kept for the rest of the page load. An error status (401
-when the browser sent no Windows credentials), a malformed body or a network
-failure gives `null`, shown as a neutral placeholder, and is not kept:
-`useCurrentUser()` asks again every 10 seconds until a name arrives, so
-starting the backend after the page fills in the name without a refresh. The hostname, user agent, a
-build-time user name or anything typed in are never used.
-
-**Browser and deployment notes**
-- Edge and Chrome send Windows credentials to `localhost` automatically. A
-  backend on another host name must be in the browser's Local intranet zone
-  (or an `AuthServerAllowlist` policy), otherwise the browser asks for a login.
-- `npm run dev`: Vite proxies `/api/currentuser` over a single kept-alive
-  connection (`vite.config.ts`), because NTLM authenticates a connection, not
-  a request. This is dev-only: anything that reaches the dev server shares
-  that authenticated connection, which is fine on a single-user PC.
-- Production should serve the frontend and `/api` from one origin (as today,
-  `VITE_API_BASE_URL` empty). A cross-origin API would need its CORS policy
-  changed from `AllowAnyOrigin` to named origins with `AllowCredentials`.
+**Adding a trusted provider later** (for example an SSO token issued to this
+app): resolve its verified name in `getCurrentWindowsUser()`; nothing else
+changes.
 
 ## Caching strategy
 

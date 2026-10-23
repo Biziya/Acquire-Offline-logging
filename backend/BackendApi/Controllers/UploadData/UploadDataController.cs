@@ -103,7 +103,6 @@ public sealed class UploadDataController : ControllerBase
                 new UploadDataRequest
                 {
                     Drillhole = result.Drillhole,
-                    UserName = GetAuthenticatedUserName(),
                     FileName = fileName,
                     Json = result.StoredProcedureJson
                 },
@@ -149,17 +148,6 @@ public sealed class UploadDataController : ControllerBase
             TotalRows = result.TotalRows
         });
     }
-
-    // Only an identity the server verified is passed on, never a name the
-    // client sent. The endpoint is anonymous, so this is usually null.
-    private string? GetAuthenticatedUserName() =>
-        User.Identity is
-        {
-            IsAuthenticated: true,
-            Name: { Length: > 0 and <= UploadDataRepository.UserSize } name
-        }
-            ? name
-            : null;
 
     // 229: "The <permission> permission was denied on the object …";
     // 230: the same, on a column.

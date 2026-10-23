@@ -116,7 +116,7 @@ These can be three different people, and none is ever guessed:
 | --- | --- | --- |
 | Created By | `created_by` in the selected JSON file (written by Raw Litho) | `—` — e.g. an older file |
 | Edited By | `edited_by` in the selected JSON file; replaced by the current user when a record is edited here | `—` |
-| Imported By | the signed-in Windows user from `useCurrentUser()` — the person about to upload | `—` |
+| Imported By | the verified signed-in user from `useCurrentUser()` — the person about to upload | `—` (today always: no verified user) |
 
 - Created By is never changed by this page.
 - An actual record edit (`handleEdit`) sets `edited_by` to the trusted current
@@ -126,18 +126,18 @@ These can be three different people, and none is ever guessed:
 - Both JSON fields live in the working document, so the IndexedDB draft
   restores them; Imported By is resolved again from the current user.
 
-**Imported By shows `—` when the backend cannot verify the user.** The
-identity comes from the backend's `GET /api/currentuser` (Windows Integrated
-Authentication); see *currentUser.ts* in `src/services/README.md`.
+**Imported By shows `—` while no verified user exists.** The frontend owns
+identity but has no trusted source since `GET /api/currentuser` was removed;
+see *currentUser.ts* in `src/services/README.md`.
 
 **No `imported_by` in the uploaded file.** Uploading never changes
 `created_by`, and `imported_by` is not added to the JSON. The stored procedure does
 not read such a field, so the file would look as if it recorded the importer
 when nothing was stored. The database `usr` column is not the importer either:
 the procedure sets it to `SUSER_NAME()`, the SQL Server login of the backend's
-connection (see the backend README, *SQL user behaviour*). Today Windows
-Authentication protects only `/api/currentuser`, not the upload. Unknown fields such as `created_by` are
-ignored by the server, so they never break an upload.
+connection (see the backend README, *SQL user behaviour*). The upload API is
+anonymous. Unknown fields such as `created_by` are ignored by the server, so
+they never break an upload.
 
 ## Scrolling
 

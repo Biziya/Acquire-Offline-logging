@@ -1,43 +1,61 @@
 import type { RowField, LookupRecord } from "../../types/domain";
-import { isLookupRecords } from "../../types/validation";
+import { isLookupRecords, isRecord } from "../../types/validation";
 import { RAW_LITHO_API_LOOKUP_BY_FIELD } from "../rawLithoLookupConfig";
 import { buildApiUrl } from "./apiConfig";
 
-const requestByField = new Map<RowField, Promise<LookupRecord[]>>();
+/*
+ * All nine Raw Litho lookup lists come from one request,
+ * GET /api/table-constants: { caCode: [...], colourCode: [...], ... }.
+ * Every page shares it; a failed request is forgotten so the next call asks
+ * again. Each list is checked on its own, so one malformed list fails only
+ * that lookup.
+ */
+let tableConstantsRequest: Promise<Record<string, unknown>> | null = null;
 
-export function getRawLithoLookup(fieldKey: RowField): Promise<LookupRecord[]> {
-  const lookup = RAW_LITHO_API_LOOKUP_BY_FIELD[fieldKey];
-
-  if (!lookup) {
-    return Promise.reject(new Error(`Unknown Raw Litho lookup: ${fieldKey}`));
-  }
-
-  const existing = requestByField.get(fieldKey);
-  if (existing) return existing;
-  {
-    const request = fetch(buildApiUrl(lookup.endpoint), {
+function getTableConstants(): Promise<Record<string, unknown>> {
+  if (!tableConstantsRequest) {
+    const request = fetch(buildApiUrl("/api/table-constants"), {
       headers: { Accept: "application/json" },
     })
       .then(async (response) => {
         if (!response.ok) {
           throw new Error(
-            `${lookup.label} request failed with HTTP ${response.status}.`,
+            `Table constants request failed with HTTP ${response.status}.`,
           );
         }
 
-        const records: unknown = await response.json();
-        if (!isLookupRecords(records, lookup.codeProperty)) {
-          throw new Error(`${lookup.label} API did not return an array.`);
+        const body: unknown = await response.json();
+        if (!isRecord(body)) {
+          throw new Error("Table constants API did not return an object.");
         }
 
-        return records;
+        return body;
       })
       .catch((error) => {
-        requestByField.delete(fieldKey);
+        if (tableConstantsRequest === request) tableConstantsRequest = null;
         throw error;
       });
 
-    requestByField.set(fieldKey, request);
-    return request;
+    tableConstantsRequest = request;
   }
+
+  return tableConstantsRequest;
+}
+
+export async function getRawLithoLookup(fieldKey: RowField): Promise<LookupRecord[]> {
+  const lookup = RAW_LITHO_API_LOOKUP_BY_FIELD[fieldKey];
+
+  if (!lookup) {
+    throw new Error(`Unknown Raw Litho lookup: ${fieldKey}`);
+  }
+
+  const request = getTableConstants();
+  const records = (await request)[lookup.responseKey];
+  if (!isLookupRecords(records, lookup.codeProperty)) {
+    // Ask the server again next time instead of reusing the bad response.
+    if (tableConstantsRequest === request) tableConstantsRequest = null;
+    throw new Error(`${lookup.label} list is missing or invalid in the table constants.`);
+  }
+
+  return records;
 }

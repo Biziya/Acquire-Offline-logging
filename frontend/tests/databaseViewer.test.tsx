@@ -1,103 +1,176 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import DatabaseViewer from "../src/pages/DatabaseViewer/DatabaseViewer";
-import { databaseViewerConfig } from "../src/pages/DatabaseViewer/config";
-import { generateMockLithologyRecords } from "../src/pages/DatabaseViewer/databaseViewerMockData";
+import type {
+  DataViewerRecord,
+  DataViewerResponse,
+} from "../src/pages/DatabaseViewer/databaseViewerTypes";
+import { getDataViewerRecords } from "../src/services/Api/dataViewerApi";
+import { deferred } from "./deferred";
 import { stubDesktopViewport } from "./viewport";
 
-const settings = databaseViewerConfig.mockData;
+vi.mock("../src/services/Api/drillholeApi", () => ({
+  getDrillholes: vi.fn(async () => [
+    { holeId: "GTZO_0001_1", projectCode: "ZOOVCH", campaign: "2015" },
+    { holeId: "GTZO_0002_1", projectCode: "ZOOVCH", campaign: "2016" },
+  ]),
+}));
+vi.mock("../src/services/Api/dataViewerApi", () => ({
+  getDataViewerRecords: vi.fn(),
+}));
 
 stubDesktopViewport();
 
-describe("mock lithology data", () => {
-  it("is reproducible, labelled as mock and has stable ids", () => {
-    const first = generateMockLithologyRecords(10000, 1, settings);
-    expect(first).toHaveLength(10000);
-    expect(generateMockLithologyRecords(10000, 1, settings)).toEqual(first);
-    expect(first.map((record) => record.id)).toEqual(
-      Array.from({ length: 10000 }, (_, index) => index + 1),
-    );
-    expect(first.every((record) => record.drillhole.startsWith("MOCK-"))).toBe(true);
-    expect(first.every((record) => record.lithoFrom < record.lithoTo)).toBe(true);
+function record(overrides: Partial<DataViewerRecord> = {}): DataViewerRecord {
+  return {
+    holeId: "GTZO_0001_1",
+    projectCode: "ZOOVCH",
+    from: 5,
+    to: 10.125,
+    priority: 1,
+    name: "LithoFacies",
+    value: "0--",
+    commentValue: null,
+    consistentCheck: null,
+    usr: "DOMAIN\\bsarangerel",
+    fileName: "yashgaa.json",
+    pathName: null,
+    createdAt: "2026-10-22T10:00:00",
+    modifiedAt: null,
+    importedBy: null,
+    ...overrides,
+  };
+}
 
-    // Intervals are contiguous within a drillhole.
-    first.slice(1).forEach((record, index) => {
-      const previous = first[index];
-      if (previous && previous.drillhole === record.drillhole) {
-        expect(record.lithoFrom).toBe(previous.lithoTo);
-      }
-    });
-  });
+function response(drillhole: string, records: DataViewerRecord[], campaign: string | null = "2015"): DataViewerResponse {
+  return { drillhole, project: "ZOOVCH", campaign, totalRecords: records.length, records };
+}
 
-  it("generates 100,000 records quickly", () => {
-    const started = performance.now();
-    expect(generateMockLithologyRecords(100000, 3, settings)).toHaveLength(100000);
-    expect(performance.now() - started).toBeLessThan(2000);
-  });
-});
+const rows = (container: HTMLElement) =>
+  container.querySelectorAll("tbody tr[aria-rowindex]");
+
+const fieldValue = (label: string) => screen.getByText(label).nextElementSibling;
+
+async function chooseDrillhole(user: ReturnType<typeof userEvent.setup>, holeId: string) {
+  const input = screen.getByRole("combobox", { name: "Drillhole" });
+  await waitFor(() => expect(input).toBeEnabled());
+  await user.clear(input);
+  await user.type(input, holeId);
+  await user.click(screen.getByRole("option", { name: holeId }));
+}
 
 describe("Database Viewer page", () => {
-  afterEach(() => vi.restoreAllMocks());
+  beforeEach(() => vi.mocked(getDataViewerRecords).mockReset());
 
-  const rows = (container: HTMLElement) =>
-    container.querySelectorAll("tbody tr[aria-rowindex]");
-
-  it("offers only the Drillhole selector and shows its Project and Campaign read-only", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch");
+  it("loads the selected drillhole's stored records with its Project and Campaign", async () => {
+    vi.mocked(getDataViewerRecords).mockResolvedValue(
+      response("GTZO_0001_1", [record(), record({ name: "Colour", value: "10G4/2" })]),
+    );
     const user = userEvent.setup();
     const { container } = render(<DatabaseViewer />);
 
-    expect(screen.getByText(/Mock data/)).toBeInTheDocument();
-    expect(screen.queryByRole("searchbox")).toBeNull();
-    expect(screen.queryByRole("button", { name: /clear filters/i })).toBeNull();
     expect(screen.getByText("No drillhole selected")).toBeInTheDocument();
     expect(screen.getByText("Select a drillhole to view its records.")).toBeInTheDocument();
-    expect(rows(container)).toHaveLength(0);
+    expect(getDataViewerRecords).not.toHaveBeenCalled();
 
-    await user.selectOptions(screen.getByLabelText("Drillhole"), "MOCK-DH-012-003");
-    expect(screen.getByLabelText("Project")).toHaveTextContent("MOCK-PRJ-01");
-    expect(screen.getByLabelText("Campaign")).toHaveTextContent("MOCK-C2026");
-    expect(screen.getByLabelText("Project").tagName).toBe("OUTPUT");
-    expect(screen.getByText("139 records")).toBeInTheDocument();
+    await chooseDrillhole(user, "GTZO_0001_1");
 
-    // Read-only: plain text cells, no inputs or row actions.
-    const table = screen.getByRole("region", { name: "Lithology records" });
-    expect(table.querySelector("input, select, textarea, button")).toBeNull();
-    expect(screen.queryByRole("button", { name: /add row|remove|save/i })).toBeNull();
-
-    // Ordered by Litho From, numbered from 1 like Raw Litho's "Ins".
-    const depths = Array.from(rows(container)).map((row) =>
-      Number(row.children[1]?.textContent),
-    );
-    expect(depths[0]).toBe(0);
-    expect(depths).toEqual([...depths].sort((a, b) => a - b));
-    expect(rows(container)[0]?.children[0]).toHaveTextContent("1");
-
-    // No Refresh: the page has no buttons at all.
-    expect(screen.queryByRole("button")).toBeNull();
-    expect(fetchSpy).not.toHaveBeenCalled();
-  });
-
-  it("uses Raw Litho's columns and renders only a window of a large drillhole", async () => {
-    const user = userEvent.setup();
-    const { container } = render(<DatabaseViewer />);
+    expect(await screen.findByText("2 records")).toBeInTheDocument();
+    expect(getDataViewerRecords).toHaveBeenCalledWith("GTZO_0001_1", expect.any(AbortSignal));
+    expect(fieldValue("Project")).toHaveTextContent("ZOOVCH");
+    expect(fieldValue("Campaign")).toHaveTextContent("2015");
 
     expect(
       Array.from(container.querySelectorAll("thead th")).map((th) => th.textContent),
     ).toEqual([
-      "Ins", "Litho From (m)", "Litho To (m)", "Litho Code", "Color Code", "CA", "OM",
-      "OM Facies", "PY", "OX", "Sedim", "Redox Code", "Lithology Comments", "Granulo",
-      "Hardness",
+      "#", "HOLEID", "PROJECTCODE", "FROM", "TO", "PRIORITY", "NAME", "VALUE",
+      "COMMENT_VALUE", "CONSISTENTCHECK", "usr", "FileName", "PathName",
+      "Created_at", "Modified_at", "Imported_by",
     ]);
 
-    await user.selectOptions(screen.getByLabelText("Mock records"), "100000");
-    await user.selectOptions(screen.getByLabelText("Drillhole"), "MOCK-DH-011-001");
-    expect(screen.getByText("1,389 records")).toBeInTheDocument();
+    // Stored values as they are: depths with at least two decimals (never
+    // rounded), NULL as an empty cell, text unchanged.
+    const cells = Array.from(rows(container)[0]!.children).map((cell) => cell.textContent);
+    expect(cells).toEqual([
+      "1", "GTZO_0001_1", "ZOOVCH", "5.00", "10.125", "1", "LithoFacies", "0--",
+      "", "", "DOMAIN\\bsarangerel", "yashgaa.json", "", "2026-10-22T10:00:00", "", "",
+    ]);
+    expect(rows(container)[1]).toHaveTextContent("10G4/2");
+
+    // Read-only: plain text cells only.
+    const table = screen.getByRole("region", { name: "Database records" });
+    expect(table.querySelector("input, select, textarea, button")).toBeNull();
+  });
+
+  it("shows only the latest selection when an older request answers last", async () => {
+    const first = deferred<DataViewerResponse>();
+    const second = deferred<DataViewerResponse>();
+    vi.mocked(getDataViewerRecords)
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise);
+    const user = userEvent.setup();
+    const { container } = render(<DatabaseViewer />);
+
+    await chooseDrillhole(user, "GTZO_0001_1");
+    expect(screen.getByText("Loading records…", { selector: "p[aria-live]" })).toBeInTheDocument();
+    const firstSignal = vi.mocked(getDataViewerRecords).mock.calls[0]![1]!;
+
+    await chooseDrillhole(user, "GTZO_0002_1");
+    expect(firstSignal.aborted).toBe(true);
+
+    second.resolve(response("GTZO_0002_1", [record({ holeId: "GTZO_0002_1" })], "2016"));
+    expect(await screen.findByText("1 records")).toBeInTheDocument();
+    first.resolve(response("GTZO_0001_1", [record(), record(), record()]));
+
+    await waitFor(() => expect(fieldValue("Campaign")).toHaveTextContent("2016"));
+    expect(rows(container)).toHaveLength(1);
+    expect(rows(container)[0]).toHaveTextContent("GTZO_0002_1");
+  });
+
+  it("treats a drillhole without stored records as an empty result", async () => {
+    vi.mocked(getDataViewerRecords).mockResolvedValue(response("GTZO_0001_1", [], null));
+    const user = userEvent.setup();
+    render(<DatabaseViewer />);
+
+    await chooseDrillhole(user, "GTZO_0001_1");
+
+    expect(await screen.findByText("0 records")).toBeInTheDocument();
+    expect(screen.getByText("No records are stored for this drillhole.")).toBeInTheDocument();
+    expect(fieldValue("Campaign")).toHaveTextContent("—");   // null: shown as unknown, not guessed
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("reports a failed request with the shared error toast and can retry", async () => {
+    vi.mocked(getDataViewerRecords)
+      .mockRejectedValueOnce(new Error("Data Viewer request failed with HTTP 500."))
+      .mockResolvedValueOnce(response("GTZO_0001_1", [record()]));
+    const user = userEvent.setup();
+    render(<DatabaseViewer />);
+
+    await chooseDrillhole(user, "GTZO_0001_1");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Unable to load drillhole records");
+    expect(screen.getByText("Records unavailable")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByText("1 records")).toBeInTheDocument();
+    expect(getDataViewerRecords).toHaveBeenCalledTimes(2);
+  });
+
+  it("renders only a window of a large drillhole", async () => {
+    const many = Array.from({ length: 5000 }, (_, index) =>
+      record({ from: index, to: index + 1 }),
+    );
+    vi.mocked(getDataViewerRecords).mockResolvedValue(response("GTZO_0001_1", many));
+    const user = userEvent.setup();
+    const { container } = render(<DatabaseViewer />);
+
+    await chooseDrillhole(user, "GTZO_0001_1");
+
+    expect(await screen.findByText("5,000 records")).toBeInTheDocument();
     expect(rows(container).length).toBeGreaterThan(0);
     expect(rows(container).length).toBeLessThan(100);
-
-    await user.selectOptions(screen.getByLabelText("Drillhole"), "");
-    expect(rows(container)).toHaveLength(0);
+    expect(within(rows(container)[0] as HTMLElement).getAllByRole("cell")[3]).toHaveTextContent("0.00");
   });
 });

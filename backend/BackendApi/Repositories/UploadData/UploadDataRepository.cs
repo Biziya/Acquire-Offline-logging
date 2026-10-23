@@ -10,16 +10,11 @@ public sealed class UploadDataRepository : IUploadDataRepository
     private const string StoredProcedureName = "dbo.InsertUpdateCoreDescr_WellCAD";
     private const string ActionName = "Raw core import_JSON";
 
-    // The upload's database, when it differs from DefaultConnection's
-    // Initial Catalog (same server and login; other APIs are unaffected).
-    private const string DatabaseKey = "UploadData:Database";
-    private const string WindowsAuthenticationKey = "UploadData:UseWindowsAuthentication";
-
     // Sizes of the procedure's parameters: @Hole varchar(20), @usr and
     // @fileName varchar(50). The controller rejects longer values, so nothing
     // is silently truncated here.
     public const int HoleSize = 20;
-    public const int UserSize = 50;
+    private const int UserSize = 50;
     public const int FileNameSize = 50;
 
     // A whole drillhole is one call; allow more than the 30 s default.
@@ -33,25 +28,9 @@ public sealed class UploadDataRepository : IUploadDataRepository
         IConfiguration configuration,
         ILogger<UploadDataRepository> logger)
     {
-        var builder = new SqlConnectionStringBuilder(configuration.GetRequiredConnectionString());
-        var database = configuration[DatabaseKey];
-
-        if (!string.IsNullOrWhiteSpace(database))
-        {
-            builder.InitialCatalog = database;
-        }
-
-        // Windows authentication: connect as the Windows account the API runs
-        // under (no password anywhere) instead of DefaultConnection's SQL login.
-        if (configuration.GetValue<bool>(WindowsAuthenticationKey))
-        {
-            builder.Remove("User ID");
-            builder.Remove("Password");
-            builder.IntegratedSecurity = true;
-        }
-
-        _connectionString = builder.ConnectionString;
-        _database = builder.InitialCatalog;
+        // The CoreDescrData section's database and login (see ConfigurationExtensions).
+        _connectionString = configuration.GetCoreDescrDataConnectionString();
+        _database = new SqlConnectionStringBuilder(_connectionString).InitialCatalog;
         _logger = logger;
     }
 
@@ -84,8 +63,10 @@ public sealed class UploadDataRepository : IUploadDataRepository
             {
                 command.Parameters.Add("@Action", SqlDbType.VarChar, 50).Value = ActionName;
                 command.Parameters.Add("@Hole", SqlDbType.VarChar, HoleSize).Value = request.Drillhole;
-                command.Parameters.Add("@usr", SqlDbType.VarChar, UserSize).Value =
-                    (object?)request.UserName ?? DBNull.Value;
+                // NULL, as in the SSMS test: the procedure stores SUSER_NAME()
+                // (the connecting login) instead, and the API has no verified
+                // web user to send.
+                command.Parameters.Add("@usr", SqlDbType.VarChar, UserSize).Value = DBNull.Value;
                 command.Parameters.Add("@fileName", SqlDbType.VarChar, FileNameSize).Value = request.FileName;
                 command.Parameters.Add("@str_json", SqlDbType.NVarChar, -1).Value = request.Json;
 

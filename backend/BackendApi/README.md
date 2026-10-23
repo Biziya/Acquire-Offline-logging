@@ -6,104 +6,205 @@ ASP.NET Core Web API for the application backend.
 
 - .NET 10 SDK or a newer SDK capable of targeting `net10.0`
 - Access to the configured SQL Server database
-- An ASP.NET Core HTTPS development certificate
 
 ## Restore and run
 
-From the `BackendApi` directory:
+From the `BackendApi` directory (the app is used over HTTP):
 
 ```bash
 dotnet restore
-dotnet run --launch-profile https
+dotnet run --launch-profile http
 ```
 
 Swagger UI is available in Development at:
 
 ```text
-https://localhost:7047/swagger
+http://localhost:7047/swagger
 ```
+
+## The five APIs
+
+| # | API | Method and route | Database | Purpose |
+| --- | --- | --- | --- | --- |
+| 1 | Drillholes | `GET /api/drillholes` | `ACQMN01` (`ZOOVCH_COLLAR_LIST`) | Every drillhole with Project and Campaign |
+| 2 | Table Constants | `GET /api/table-constants` | `ACQMN01` (`QV_VS_LOOKUP_RO`) | All nine Raw Litho lookup lists |
+| 3 | Upload Data | `POST /api/upload-data` | `ACQMN01_DEV` (procedure) | Store an exported lithology JSON |
+| 4 | Data Viewer | `GET /api/dataviewer?drillhole=…` | `ACQMN01_DEV` (`MyApps.CoreDescrData`) | Stored records of one drillhole |
+| 5 | Status | `GET /api/status` | — | Backend online check |
+
+No other application route exists (Swagger is Development-only
+infrastructure). `ApiRoutesTests` fails if a route is added or one of the
+removed ones returns. Removed: `GET /api/currentuser`, the nine lookup routes
+(`/api/lithocodes`, `/api/colour`, `/api/ca`, `/api/om`, `/api/omfacies`,
+`/api/py`, `/api/ox`, `/api/sedim`, `/api/redoxcode`) and `/api/uploaddata`.
 
 ## Project structure
 
-Backend code is grouped by page. Everything belonging to the Raw Litho page
-lives under a single `RawLithoPage` level in each main folder.
+One folder per API in each main folder; namespaces mirror the folders
+(`BackendApi.Controllers.DataViewer`, `BackendApi.Repositories.DataViewer`, …).
 
 ```text
 BackendApi/
 ├── Controllers/
-│   ├── RawLithoPage/          # CaCode, ColourCode, Drillhole, LithoCode, OmCode,
-│   │                          # OmFaciesCode, OxCode, PyCode, RedoxCode, SedimCode
-│   ├── CurrentUser/           # GET /api/currentuser (Windows Authentication)
-│   ├── Status/
-│   └── UploadData/
-│
-├── Repositories/
-│   ├── RawLithoPage/          # one folder per API, each with I<Name>Repository + <Name>Repository
-│   └── UploadData/            # IUploadDataRepository + UploadDataRepository
-│
+│   ├── Drillholes/       DrillholesController
+│   ├── TableConstants/   TableConstantsController
+│   ├── UploadData/       UploadDataController, UploadDataValidator
+│   ├── DataViewer/       DataViewerController
+│   └── Status/           StatusController
+├── Repositories/         one I<Name>Repository + <Name>Repository per API
+│   ├── Drillholes/       (no Status folder: Status reads no data)
+│   ├── TableConstants/
+│   ├── UploadData/
+│   └── DataViewer/
 ├── Models/
-│   ├── CurrentUser/
-│   ├── RawLithoPage/          # DTOs / responses for the Raw Litho endpoints
-│   ├── Status/
-│   └── UploadData/
-│
-└── Data/                      # small shared data-access helpers
+│   ├── Drillholes/  TableConstants/  UploadData/  DataViewer/  Status/
+└── Data/                 shared helpers: connection strings, reader helpers
 ```
 
-Namespaces mirror the folders, for example:
+Database access uses `Microsoft.Data.SqlClient` only, always parameterised.
 
-```csharp
-namespace BackendApi.Controllers.RawLithoPage;
-namespace BackendApi.Repositories.RawLithoPage.CaCode;
-namespace BackendApi.Models.RawLithoPage;
+## Database configuration
+
+```text
+appsettings.json              ConnectionStrings:DefaultConnection   Data Source=BMNULAADB02; Initial Catalog=ACQMN01; User ID=userAcquire; …
+appsettings.json              CoreDescrData:Database                ACQMN01_DEV
+appsettings.Development.json  CoreDescrData:UseWindowsAuthentication  true
 ```
 
-## Current user endpoint
+- Drillholes and Table Constants use `DefaultConnection` as it is (`ACQMN01`,
+  SQL login `userAcquire`).
+- Upload Data and Data Viewer work on `MyApps.CoreDescrData`. They use
+  `DefaultConnection` with only the database replaced by
+  `CoreDescrData:Database` (`ConfigurationExtensions.GetCoreDescrDataConnectionString`).
+  No second connection string, no credentials in code.
+- With `CoreDescrData:UseWindowsAuthentication` (Development), those two
+  connect with `Integrated Security=True` as the Windows account running the
+  API (`dotnet run` / `dotnet watch` in your session = you), with no password
+  anywhere. `userAcquire` is not allowed to run the upload procedure's INSERT
+  (error 229, see below); a Windows account with the rights works. Hosted
+  (IIS, service), the API runs as its service account, which then needs
+  `EXECUTE` on `dbo.InsertUpdateCoreDescr_WellCAD` (Upload Data) and `SELECT`
+  on `MyApps.CoreDescrData`, or an approved read-only view or procedure in its
+  place (Data Viewer).
 
-`GET /api/currentuser` returns the Windows user calling the API, proven by
-Windows Integrated Authentication (`Microsoft.AspNetCore.Authentication.Negotiate`:
-Kerberos or NTLM). The frontend shows it in the sidebar and uses it for
-`created_by`, `edited_by` and Upload Data's "Imported By".
-
-```json
-{ "userName": "Bek" }            // local account (computer prefix dropped)
-{ "userName": "COMPANY\\bek" }   // domain account
-```
-
-- Only this endpoint has `[Authorize]`. No fallback policy is set, so every
-  other endpoint stays anonymous, exactly as before.
-- Without Windows credentials the response is `401` with
-  `WWW-Authenticate: Negotiate`; browsers then authenticate automatically for
-  `localhost` / Local intranet sites.
-- Test from PowerShell on the same PC:
-  `Invoke-RestMethod http://localhost:7047/api/currentuser -UseDefaultCredentials`.
-- Hosted in IIS instead of Kestrel: enable Windows Authentication for the site
-  (and keep Anonymous Authentication on for the other endpoints).
-
-## Drillholes endpoint
+## Drillholes
 
 ```text
 GET /api/drillholes
 ```
 
-The endpoint reads the `DefaultConnection` connection string from configuration
-and returns a plain JSON array. An empty database result is returned as `[]` with
-HTTP `200 OK`. Database failures return HTTP `500 Internal Server Error` with a
-safe JSON error response.
-
-Example response:
-
-```json
-[
-  {
-    "holeId": "DH001",
-    "projectCode": "PROJECT-A",
-    "campaign": "2026"
-  }
-]
+```sql
+SELECT HOLEID, PROJECTCODE, RIGHT(PROSPECT, 4) AS CAMPAIGN FROM ZOOVCH_COLLAR_LIST;
 ```
 
-Test it through Swagger or the request included in `BackendApi.http`.
+```json
+[ { "holeId": "GTZO_0001_1", "projectCode": "ZOOVCH", "campaign": "2015" } ]
+```
+
+An empty result is `[]` with `200`. Database failures return `500` with
+`{ "error": "Unable to retrieve drillholes." }`. Data Viewer reuses the same
+query, filtered by `HOLEID` (`DrillholeRepository.GetByHoleIdAsync`).
+
+## Table Constants
+
+```text
+GET /api/table-constants
+```
+
+Replaces the nine lookup endpoints with one query on `QV_VS_LOOKUP_RO` (same
+view, same `FIELDNAME`s). Each list keeps the item shape its old endpoint
+returned, so codes, descriptions and field names are unchanged:
+
+| Key | `FIELDNAME` | Item | Old route |
+| --- | --- | --- | --- |
+| `caCode` | `Min1Qty` | `{ "caCode", "description" }` | `/api/ca` |
+| `colourCode` | `Colour` | `{ "colourCode", "description" }` | `/api/colour` |
+| `lithoCode` | `LithoFacies` | `{ "lithoCode", "description" }` | `/api/lithocodes` |
+| `omCode` | `Min2Qty` | `{ "omCode", "description" }` | `/api/om` |
+| `omFaciesCode` | `OM_Facies` | `{ "omFaciesCode", "description" }` | `/api/omfacies` |
+| `oxCode` | `Min4Qty` | `{ "oxCode", "description" }` | `/api/ox` |
+| `pyCode` | `Min3Qty` | `{ "pyCode", "description" }` | `/api/py` |
+| `redoxCode` | `RedoxFacies` | `{ "redoxCode", "description" }` | `/api/redoxcode` |
+| `sedimCode` | `InternalStructure` | `{ "sedimCode", "description" }` | `/api/sedim` |
+
+```json
+{
+  "caCode":      [ { "caCode": "1", "description": "…" } ],
+  "colourCode":  [ { "colourCode": "10G4/2", "description": "…" } ],
+  "lithoCode":   [ { "lithoCode": "0--", "description": "…" } ],
+  "omCode": [], "omFaciesCode": [], "oxCode": [], "pyCode": [], "redoxCode": [], "sedimCode": []
+}
+```
+
+Database failures return `500` with `{ "error": "Unable to retrieve table constants." }`.
+
+## Data Viewer
+
+```text
+GET /api/dataviewer?drillhole=GTZO_0001_1
+```
+
+Read-only. Drillhole = `HOLEID`. Reads `MyApps.CoreDescrData` in the
+`CoreDescrData:Database` (`ACQMN01_DEV`), parameterised, ordered by
+`[FROM], [TO], [PRIORITY], [NAME]`:
+
+```sql
+SELECT [HOLEID], [PROJECTCODE], [FROM], [TO], [PRIORITY], [NAME], [VALUE],
+       [COMMENT_VALUE], [CONSISTENTCHECK], [usr], [FileName], [PathName],
+       [Created_at], [Modified_at], [Imported_by]
+FROM [MyApps].[CoreDescrData]
+WHERE [HOLEID] = @Drillhole;
+```
+
+```json
+{
+  "drillhole": "GTZO_0001_1",
+  "project": "ZOOVCH",
+  "campaign": "2015",
+  "totalRecords": 1,
+  "records": [
+    { "holeId": "GTZO_0001_1", "projectCode": "ZOOVCH", "from": 5.0, "to": 10.0,
+      "priority": 1, "name": "LithoFacies", "value": "0--", "commentValue": null,
+      "consistentCheck": null, "usr": "DOMAIN\\user", "fileName": "yashgaa.json",
+      "pathName": null, "createdAt": "2026-10-22T10:00:00", "modifiedAt": null,
+      "importedBy": null }
+  ]
+}
+```
+
+- Values are returned as stored: numbers stay numbers, dates become ISO text,
+  `NULL` stays `null`. Nothing is filled in or converted.
+- **Project / Campaign** come from the Drillholes query for the same `HOLEID`
+  (Campaign is not in `CoreDescrData`; the two tables are in different
+  databases, so they are looked up, not joined). One entry: its values.
+  Several entries: the one whose project matches the stored rows'
+  `PROJECTCODE`; still ambiguous: `campaign` is `null` (logged, never guessed).
+  No entry: `project` from the stored rows if they agree on one, `campaign` `null`.
+- No stored rows: `200` with `"totalRecords": 0, "records": []`.
+- Missing or blank `drillhole`, or longer than 20 characters (`HOLEID` is
+  written through `@Hole varchar(20)`): `400 { "error": "…" }`.
+- Database failure: `500 { "error": "Unable to retrieve drillhole records." }`;
+  details are logged only.
+
+## Status
+
+`GET /api/status` returns `{ "status": "online", "message": "Backend connection successful" }`.
+
+## Identity (current user)
+
+`GET /api/currentuser` and the Windows Integrated Authentication behind it
+(`Microsoft.AspNetCore.Authentication.Negotiate`) were removed: no API needs
+authentication now. The frontend owns identity resolution
+(`frontend/src/services/currentUser.ts`), but a browser cannot read the
+Windows login and the app has no SSO provider, so it currently has **no
+verified user**: the sidebar shows "User not identified", Upload Data's
+Imported By shows "—", and `created_by` / `edited_by` are no longer set on new
+documents and edits. Restoring them needs a trusted identity source (for
+example an SSO token issued to the app, or an authenticated endpoint); a name
+typed or sent by the browser is never treated as an identity.
+
+The database records the SQL login instead: the upload procedure stores
+`SUSER_NAME()` in `usr` (see below).
 
 ## Upload Data endpoint
 
@@ -238,14 +339,12 @@ whatever `@usr` the API sends. The `usr` column therefore holds the SQL Server
 login of the connection (with the current `DefaultConnection`, the SQL login
 `userAcquire`), not the Windows user shown as "Imported By" in the frontend.
 
-The API still sends `@usr`, but only a name the server verified
-(`User.Identity`); a user name sent by the client is never used. The upload
-endpoint is anonymous, like every endpoint except `/api/currentuser`, so `@usr`
-is normally `NULL`. Recording the real importer would need both a procedure
-change (use `@usr` instead of `SUSER_NAME()`) and `[Authorize]` on this
-endpoint. Neither is done here: the procedure is unchanged, and adding
-`[Authorize]` would make the upload fail for anyone whose browser does not send
-Windows credentials. Until then, anyone who can reach the API can upload.
+The API sends `@usr = NULL`, as the working SSMS test did: there is no verified
+web user to send, and the procedure ignores the value anyway. Recording the
+real importer would need both a procedure change (use `@usr` instead of
+`SUSER_NAME()`) and an authenticated, verified identity in the API. Neither is
+done here. All five endpoints are anonymous: anyone who can reach the API can
+upload.
 
 ### Duplicates and updates
 
@@ -286,35 +385,14 @@ SQL Server errors, connection details and stack traces are logged on the
 server (with the file name and drillhole) and never returned. A request the
 client abandons cancels the database call.
 
-### Database configuration
+### Database
 
-`DefaultConnection` (`Data Source=BMNULAADB02; Initial Catalog=ACQMN01;`
-SQL login `userAcquire`) is shared by every API. The upload uses the same
-server and login but its own database:
-
-```json
-"UploadData": { "Database": "ACQMN01_DEV" }
-```
-
-`UploadDataRepository` replaces only the `Initial Catalog` with this value
-(no second connection string, no credentials in code); the lookup APIs keep
-`ACQMN01`. Remove the setting to upload to `DefaultConnection`'s database.
-After opening, the repository checks the connection really is on that
-database and refuses to run otherwise, so an upload never lands silently in
-`ACQMN01`. Each upload logs server, database, SQL login and database user.
-
-**Windows authentication (Development).** `appsettings.Development.json` sets
-`"UploadData": { "UseWindowsAuthentication": true }`: the upload then connects
-with `Integrated Security=True` as the Windows account running the API
-(`dotnet run` / `dotnet watch` from your session = you), with no password in
-configuration. `userAcquire` is not allowed to run the procedure's INSERT
-(error 229); a Windows account with the rights works. Other APIs keep the SQL
-login. Hosted (IIS, service), the API runs as its service account, which then
-needs the rights instead; `usr` stores whichever login connects.
-
-Under the company security model the application login may only execute the
-procedure: it sends no INSERT/UPDATE/DELETE of its own and needs no table
-permissions.
+See *Database configuration* above: the upload uses the `CoreDescrData`
+connection (`ACQMN01_DEV`). After opening, the repository checks the
+connection really is on that database and refuses to run otherwise, so an
+upload never lands silently in `ACQMN01`. Each upload logs server, database,
+SQL login and database user. Under the company security model the login may
+only execute the procedure: the API sends no INSERT/UPDATE/DELETE of its own.
 
 ### Troubleshooting: error 229 (INSERT permission denied)
 
@@ -363,10 +441,18 @@ and the duplicate-matching key).
 
 ## Tests
 
-Automated tests live in `../BackendApi.Tests` (xUnit). They cover the
-validator and the endpoint through the real ASP.NET Core pipeline with a fake
-repository, plus the real repository against an unreachable server (safe
-`500`). They never connect to a real database.
+Automated tests live in `../BackendApi.Tests` (xUnit), through the real
+ASP.NET Core pipeline with fake repositories; they never connect to a real
+database:
+
+- `ApiRoutesTests`: exactly the five routes; removed routes return `404`.
+- `TableConstants/`: `FIELDNAME` to list grouping, response keys and item
+  names, safe `500`.
+- `DataViewer/`: records and values as stored (NULLs kept), Project /
+  Campaign resolution (single, matching, ambiguous, missing), empty result,
+  `400` for a missing or too-long drillhole, safe `500`.
+- `UploadData/`: validation, filtering, one procedure call, error 229 and
+  other SQL errors, an unreachable server.
 
 ```bash
 dotnet test ../BackendApi.Tests
@@ -374,15 +460,16 @@ dotnet test ../BackendApi.Tests
 
 Manual check against an approved development database:
 
-1. `dotnet run --launch-profile https`, then open Swagger at the URL printed
-   on start-up (`https://localhost:5237/swagger` or
-   `http://localhost:7047/swagger`, per `Properties/launchSettings.json`).
+1. `dotnet run --launch-profile http`, then open Swagger at
+   `http://localhost:7047/swagger`.
 2. `POST /api/upload-data` with a valid export → `200`, `totalRows` = rows in
    the file. Check `CoreDescrData` for the drillhole.
 3. Upload the same file again → row count for that `HOLEID` unchanged.
 4. Change one value (e.g. a `lithoCode`), upload → that row's `VALUE` updated.
 
-The request in `BackendApi.http` can be used instead of Swagger.
+5. `GET /api/dataviewer?drillhole=<HOLEID>` shows the stored rows.
+
+The requests in `BackendApi.http` can be used instead of Swagger.
 
 ## Build verification
 

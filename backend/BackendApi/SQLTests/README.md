@@ -28,7 +28,7 @@ SSMS → **File → Open → File…** → `backend/BackendApi/SQLTests/Test_Upl
 | Server name | `BMNULAADB02` |
 | Authentication | **SQL Server Authentication** |
 | Login | `userAcquire` (password from the team / `appsettings.json`; never paste it into tickets) |
-| Database the upload uses | `ACQMN01_DEV` (`UploadData:Database`; other APIs use `ACQMN01`) |
+| Database the upload uses | `ACQMN01_DEV` (`CoreDescrData:Database`; other APIs use `ACQMN01`) |
 
 Permissions belong to a login. If you connect with Windows Authentication
 (your own account), the results describe **your** rights, not the backend's,

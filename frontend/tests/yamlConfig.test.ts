@@ -24,9 +24,11 @@ describe("YAML page configuration", () => {
       rowHeight: 28,
       overscan: 10,
     });
-    expect(readDatabaseViewerConfig(databaseViewerText).mockData.sizes).toEqual([
-      10000, 50000, 100000,
-    ]);
+    expect(readDatabaseViewerConfig(databaseViewerText)).toEqual({
+      title: "Database Viewer",
+      overscan: 12,
+      minWidth: 1500,
+    });
   });
 
   it("controls column visibility, labels and row settings", () => {
@@ -73,11 +75,11 @@ describe("YAML page configuration", () => {
     ).toThrow(/lithologyComments\.width must be a whole number/);
   });
 
-  it("requires the default mock size to be one of the offered sizes", () => {
+  it("requires a whole-number Database Viewer table width", () => {
     expect(() =>
       readDatabaseViewerConfig(
-        databaseViewerText.replace("defaultSize: 10000", "defaultSize: 123"),
+        databaseViewerText.replace("minWidth: 1500", "minWidth: wide"),
       ),
-    ).toThrow(/mockData\.defaultSize must be one of mockData\.sizes/);
+    ).toThrow(/table\.minWidth/);
   });
 });

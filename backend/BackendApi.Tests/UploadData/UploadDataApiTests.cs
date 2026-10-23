@@ -5,8 +5,6 @@ using System.Text;
 using System.Text.Json.Nodes;
 using BackendApi.Models.UploadData;
 using BackendApi.Repositories.UploadData;
-using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authentication.Negotiate;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -45,24 +43,6 @@ public sealed class UploadDataApiTests : IClassFixture<WebApplicationFactory<Pro
         Assert.Equal(TestDocuments.ValidStoredProcedureJson, call.Json);
         Assert.Equal("GTZO_0001_1", call.Drillhole);
         Assert.Equal("upload.json", call.FileName);
-        Assert.Null(call.UserName);
-    }
-
-    [Fact]
-    public async Task PassesOnlyAServerVerifiedUserName()
-    {
-        var repository = new FakeUploadDataRepository();
-        var client = CreateClient(repository);
-        var content = FileContent(TestDocuments.Valid().ToJsonString());
-        // A user name sent as a form field is not an identity and is ignored.
-        content.Add(new StringContent("CORP\\spoofed"), "usr");
-
-        var request = new HttpRequestMessage(HttpMethod.Post, Route) { Content = content };
-        request.Headers.Add(TestAuthHandler.UserHeader, "CORP\\bek");
-        await client.SendAsync(request);
-        await client.PostAsync(Route, FileContent(TestDocuments.Valid().ToJsonString()));
-
-        Assert.Equal(["CORP\\bek", null], repository.Calls.Select(call => call.UserName));
     }
 
     [Fact]
@@ -238,18 +218,11 @@ public sealed class UploadDataApiTests : IClassFixture<WebApplicationFactory<Pro
                     builder.UseSetting(key, value);
                 }
 
-                builder.ConfigureTestServices(services =>
+                if (repository is not null)
                 {
-                    // TestServer cannot run Negotiate; keep the scheme, swap its handler.
-                    services.PostConfigure<AuthenticationOptions>(options =>
-                        options.SchemeMap[NegotiateDefaults.AuthenticationScheme].HandlerType =
-                            typeof(TestAuthHandler));
-
-                    if (repository is not null)
-                    {
-                        services.AddSingleton<IUploadDataRepository>(repository);
-                    }
-                });
+                    builder.ConfigureTestServices(services =>
+                        services.AddSingleton<IUploadDataRepository>(repository));
+                }
             })
             .CreateClient();
 

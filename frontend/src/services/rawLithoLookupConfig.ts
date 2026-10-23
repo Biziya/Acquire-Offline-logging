@@ -1,65 +1,68 @@
 import type { ApiLookupDefinition, LookupDefinition } from "../types/domain";
+
+// The nine lists served together by GET /api/table-constants. `responseKey`
+// names each list in that response; its items keep `codeProperty` + description.
 export const RAW_LITHO_LOOKUPS = Object.freeze<ApiLookupDefinition[]>([
   {
     fieldKey: "lithoCode",
     label: "Litho Code",
-    endpoint: "/api/lithocodes",
+    responseKey: "lithoCode",
     codeProperty: "lithoCode",
     cacheKey: "lithoCodes",
   },
   {
     fieldKey: "colorCode",
     label: "Colour",
-    endpoint: "/api/colour",
+    responseKey: "colourCode",
     codeProperty: "colourCode",
     cacheKey: "colours",
   },
   {
     fieldKey: "ca",
     label: "CA",
-    endpoint: "/api/ca",
+    responseKey: "caCode",
     codeProperty: "caCode",
     cacheKey: "ca",
   },
   {
     fieldKey: "om",
     label: "OM",
-    endpoint: "/api/om",
+    responseKey: "omCode",
     codeProperty: "omCode",
     cacheKey: "om",
   },
   {
     fieldKey: "omFacies",
     label: "OM Facies",
-    endpoint: "/api/omfacies",
+    responseKey: "omFaciesCode",
     codeProperty: "omFaciesCode",
     cacheKey: "omFacies",
   },
   {
     fieldKey: "py",
     label: "PY",
-    endpoint: "/api/py",
+    responseKey: "pyCode",
     codeProperty: "pyCode",
     cacheKey: "py",
   },
   {
     fieldKey: "ox",
     label: "OX",
-    endpoint: "/api/ox",
+    responseKey: "oxCode",
     codeProperty: "oxCode",
     cacheKey: "ox",
   },
   {
     fieldKey: "sedim",
     label: "Sedim",
-    endpoint: "/api/sedim",
+    responseKey: "sedimCode",
     codeProperty: "sedimCode",
     cacheKey: "sedim",
   },
   {
     fieldKey: "redoxCode",
     label: "Redox Code",
-    endpoint: "/api/redoxcode",
+    responseKey: "redoxCode",
     codeProperty: "redoxCode",
     cacheKey: "redoxCodes",
   },

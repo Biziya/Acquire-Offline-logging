@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace BackendApi.Controllers.Status;
 
 [ApiController]
-[Route("api/[controller]")]
+[Route("api/status")]
 [Produces("application/json")]
 public sealed class StatusController : ControllerBase
 {

@@ -2,19 +2,12 @@
 # Read once when the page module loads (config.ts); a bad value stops start-up
 # with the file and key in the error.
 #
-# The table's columns, labels, widths, row height and minimum width are NOT
-# set here: the viewer reads them from RawLitho/config.yaml so both tables
-# always look the same. Change them there.
+# The row height and index-column width come from RawLitho/config.yaml so both
+# tables look the same. The columns are the database columns
+# (databaseViewerTypes.ts).
 
 title: "Database Viewer"
 
 table:
   overscan: 12           # rows rendered above and below the visible window
-
-# MOCK DATA ONLY - the page is not connected to the database yet.
-mockData:
-  sizes: [10000, 50000, 100000]   # choices in the "Mock records" selector
-  defaultSize: 10000
-  projects: 3
-  campaignsPerProject: 2
-  drillholesPerCampaign: 12
+  minWidth: 1500         # px; below it the table scrolls inside its frame

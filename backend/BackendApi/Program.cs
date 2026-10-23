@@ -1,15 +1,7 @@
-using BackendApi.Repositories.RawLithoPage.CaCode;
-using BackendApi.Repositories.RawLithoPage.ColourCode;
-using BackendApi.Repositories.RawLithoPage.Drillhole;
-using BackendApi.Repositories.RawLithoPage.LithoCode;
-using BackendApi.Repositories.RawLithoPage.OmCode;
-using BackendApi.Repositories.RawLithoPage.OmFaciesCode;
-using BackendApi.Repositories.RawLithoPage.OxCode;
-using BackendApi.Repositories.RawLithoPage.PyCode;
-using BackendApi.Repositories.RawLithoPage.RedoxCode;
-using BackendApi.Repositories.RawLithoPage.SedimCode;
+using BackendApi.Repositories.DataViewer;
+using BackendApi.Repositories.Drillholes;
+using BackendApi.Repositories.TableConstants;
 using BackendApi.Repositories.UploadData;
-using Microsoft.AspNetCore.Authentication.Negotiate;
 
 const string CorsPolicy = "FrontendCors";
 
@@ -19,28 +11,11 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Raw Litho page repositories.
+// One repository per API that reads or writes the database (Status has none).
 builder.Services.AddScoped<IDrillholeRepository, DrillholeRepository>();
-builder.Services.AddScoped<ILithoCodeRepository, LithoCodeRepository>();
-builder.Services.AddScoped<IColourRepository, ColourRepository>();
-builder.Services.AddScoped<ICaRepository, CaRepository>();
-builder.Services.AddScoped<IOmRepository, OmRepository>();
-builder.Services.AddScoped<IOmFaciesRepository, OmFaciesRepository>();
-builder.Services.AddScoped<IPyRepository, PyRepository>();
-builder.Services.AddScoped<IOxRepository, OxRepository>();
-builder.Services.AddScoped<ISedimRepository, SedimRepository>();
-builder.Services.AddScoped<IRedoxCodeRepository, RedoxCodeRepository>();
-
-// Upload page repositories.
+builder.Services.AddScoped<ITableConstantsRepository, TableConstantsRepository>();
 builder.Services.AddScoped<IUploadDataRepository, UploadDataRepository>();
-
-// Windows Integrated Authentication, used only by GET /api/currentuser (which
-// carries [Authorize]). No fallback policy is set, so every other endpoint
-// stays anonymous exactly as before.
-builder.Services
-    .AddAuthentication(NegotiateDefaults.AuthenticationScheme)
-    .AddNegotiate();
-builder.Services.AddAuthorization();
+builder.Services.AddScoped<IDataViewerRepository, DataViewerRepository>();
 
 builder.Services.AddCors(options =>
 {
@@ -64,9 +39,6 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 app.UseCors(CorsPolicy);
-
-app.UseAuthentication();
-app.UseAuthorization();
 
 app.MapControllers();
 

@@ -22,7 +22,6 @@ import type { RawLithoDocument } from "../src/types/domain";
 
 vi.mock("../src/services/currentUser", () => ({
   getCurrentWindowsUser: vi.fn(async () => null),
-  isCurrentUserLookupEnabled: () => false,
 }));
 vi.mock("../src/services/Api/backendStatus", () => ({
   getBackendStatus: vi.fn(async () => ({ status: "online" })),

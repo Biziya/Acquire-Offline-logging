@@ -98,12 +98,42 @@ describe("external response validation", () => {
       "fetch",
       vi
         .fn()
-        .mockResolvedValueOnce(new Response('[{"lithoCode":3}]'))
-        .mockResolvedValueOnce(new Response('[{"lithoCode":"Unknown"}]')),
+        .mockResolvedValueOnce(new Response('{"lithoCode":[{"lithoCode":3}]}'))
+        .mockResolvedValueOnce(new Response('{"lithoCode":[{"lithoCode":"Unknown"}]}')),
     );
     await expect(getRawLithoLookup("lithoCode")).rejects.toThrow();
     await expect(getRawLithoLookup("lithoCode")).resolves.toEqual([
       { lithoCode: "Unknown" },
+    ]);
+  });
+
+  it("loads all nine lookups with one /api/table-constants request", async () => {
+    const constants = {
+      lithoCode: [{ lithoCode: "0--", description: "Unknown" }],
+      colourCode: [{ colourCode: "10G4/2", description: "Greenish grey" }],
+      caCode: [{ caCode: "1", description: null }],
+      omCode: [{ omCode: "2", description: "OM" }],
+      omFaciesCode: [{ omFaciesCode: "A", description: "Facies A" }],
+      pyCode: [{ pyCode: "N", description: "No" }],
+      oxCode: [{ oxCode: "Y", description: "Yes" }],
+      sedimCode: [{ sedimCode: "LAM", description: "Laminated" }],
+      redoxCode: [{ redoxCode: "0042_MN1", description: "Reduced" }],
+    };
+    const fetch = vi.fn<(url: string) => Promise<Response>>(async () => Response.json(constants));
+    vi.stubGlobal("fetch", fetch);
+    // A fresh module: the shared request must not come from an earlier test.
+    vi.resetModules();
+    const api = await import("../src/services/Api/rawLithoApi");
+
+    const fields = ["lithoCode", "colorCode", "ca", "om", "omFacies", "py", "ox", "sedim", "redoxCode"] as const;
+    const lists = await Promise.all(fields.map((field) => api.getRawLithoLookup(field)));
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch.mock.calls[0]?.[0]).toBe("/api/table-constants");
+    expect(lists).toEqual([
+      constants.lithoCode, constants.colourCode, constants.caCode, constants.omCode,
+      constants.omFaciesCode, constants.pyCode, constants.oxCode, constants.sedimCode,
+      constants.redoxCode,
     ]);
   });
   it("keeps the multipart upload endpoint and validates success messages", async () => {
