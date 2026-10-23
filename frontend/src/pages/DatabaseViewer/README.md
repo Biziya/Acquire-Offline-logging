@@ -4,77 +4,84 @@ Route: `/database-viewer`
 
 ## Purpose
 
-Read-only view of the records stored in the database for one drillhole:
-`GET /api/dataviewer?drillhole=<HOLEID>`, which reads
-`MyApps.CoreDescrData` (`ACQMN01_DEV`) filtered by `HOLEID`. Nothing is
-edited, written or calculated; values are shown as the database holds them.
+Read-only view of the records stored in the database for one drillhole
+(`GET /api/dataviewer?drillhole=<HOLEID>`, `MyApps.CoreDescrData`), laid out
+exactly like the Raw Litho table. Nothing is edited, written or calculated.
 
 ## Files
 
 ```text
 DatabaseViewer/
-├── DatabaseViewer.tsx        page: drillhole selection, request, states, toast
-├── DatabaseViewerTable.tsx   read-only virtualized table
-├── databaseViewerTypes.ts    API response types and the table columns
-├── config.ts / config.yaml   title, overscan, table minWidth
+├── DatabaseViewer.tsx        page: drillhole selection, status line, toast
+├── DatabaseViewerTable.tsx   read-only virtualized table in Raw Litho's look
+├── databaseViewerRows.ts     database rows → one row per interval (pure)
+├── databaseViewerStore.ts    page state for the session (survives navigation)
+├── databaseViewerTypes.ts    API response types
+├── config.ts / config.yaml   title, overscan
 └── README.md
 ```
 
 The request lives in `services/Api/dataViewerApi.ts` (`getDataViewerRecords`),
-which validates the response before the page sees it.
+which validates the response before it is used.
 
-## Layout
+## Table — same as Raw Litho
 
-```text
-Database Viewer
-Drillhole [search ▾]   Project [ZOOVCH]   Campaign [2015]
-Database Records   53 records   [Retry — only after an error]
-┌ # │ HOLEID │ PROJECTCODE │ FROM │ TO │ PRIORITY │ NAME │ VALUE │ … │ Imported_by ┐
-```
+The database keeps one row per interval and attribute (`NAME` / `VALUE`). The
+viewer shows one row per interval with **Raw Litho's own column list**
+(`tableColumns` and `INDEX_COLUMN_WIDTH` from `RawLitho/constants.ts`), so
+headers, order, widths, the "Ins" column, row height and minimum width can
+never differ from Raw Litho. Frame, header, cells, zebra rows and hover come
+from the shared `components/dataTableStyles.ts`; cell text uses Raw Litho's
+cell font size. Only Raw Litho's required-field `*` is left out (nothing is
+entered here).
 
-- **Drillhole** is Raw Litho's own selector (`RawLithoFilters` +
-  `useDrillholes`): the same list from `GET /api/drillholes` (or its offline
-  cache), the same search. Selecting here does not change Raw Litho's
-  "recent drillholes".
-- **Project / Campaign** are the values the Data Viewer API returns for the
-  drillhole (resolved by the backend from the Drillholes query). `—` while
-  nothing is loaded, or when the API returns `null` (no single match — never
-  guessed).
+`NAME` → column is the upload procedure's mapping read backwards:
 
-## Table
-
-One row per database row — the table stores one row per interval and
-attribute (`NAME` / `VALUE`), and the viewer does not pivot or merge them.
-Columns are the database columns in query order, labelled with their database
-names (`databaseViewerTypes.ts`); rows keep the API's order
-(`FROM, TO, PRIORITY, NAME`).
-
-| Value | Shown as |
+| `NAME` | Column |
 | --- | --- |
-| `NULL` | empty cell (nothing filled in) |
-| `FROM` / `TO` numbers | at least two decimals, never rounded: `5` → `5.00`, `12.125` → `12.125` |
-| other numbers, text, dates | exactly as received (`2026-10-22T10:00:00`) |
+| `LithoFacies` | Litho Code |
+| `Colour` | Color Code |
+| `CA` / `OM` / `OX` | CA / OM / OX |
+| `InternalStructure` | Sedim |
+| `RedoxFacies` | Redox Code |
+| `LithologyComments` | Lithology Comments |
+| `Granulo` / `Hardness` | Granulo / Hardness |
 
-The table is virtualized like Raw Litho's (only the visible rows plus
-`overscan` are rendered) and borrows its row height and index-column width.
-It scrolls horizontally inside its frame below `table.minWidth`.
+- Rows that share `FROM`, `TO`, `PRIORITY`, `usr` and `PROJECTCODE` form one
+  interval, in the API's order. Uploads by different logins stay separate rows.
+- A value is `VALUE`, or `COMMENT_VALUE` when `VALUE` is empty (comments). Values
+  are copied unchanged; `NULL` is an empty cell.
+- Litho From / To show at least two decimals, never rounded (`5` → `5.00`).
+- OM Facies and PY stay empty: the upload procedure does not store them.
+- A stored value without a Raw Litho column (another `NAME`, or a repeated
+  one) is not shown; the page says how many, so nothing disappears silently.
+- The status line shows intervals and stored values, and who stored them
+  (`usr`) from which file (`FileName`).
+
+## State across pages
+
+React Router unmounts a page when you leave it, so the viewer keeps its state
+in `databaseViewerStore.ts` (a small store read with `useSyncExternalStore`)
+for the browser session:
+
+- the selected drillhole, its Project and Campaign, the loaded records and
+  the table's scroll position are back when you return — **no new request**;
+- a request still running when you leave completes into the store;
+- choosing another drillhole aborts the previous request, so an older answer
+  can never replace a newer selection; **Retry** (after an error) asks again;
+- independent of Raw Litho; nothing is written to browser storage, so a page
+  reload starts empty.
 
 ## States
 
-| State | Status text | Table |
+| State | Status line | Table |
 | --- | --- | --- |
 | nothing selected | No drillhole selected | Select a drillhole to view its records. |
 | loading | Loading records… | Loading records… |
-| loaded | `N records` | the rows, or "No records are stored for this drillhole." |
+| loaded | `N intervals · M stored values` | the rows, or "No records are stored for this drillhole." |
 | error | Records unavailable + **Retry** | Unable to load the records. — plus the shared error toast (5 s) |
-
-**Stale results.** Each selection aborts the previous request
-(`AbortController`) and only the latest request may update the page, so a
-slow answer for an earlier drillhole can never replace the current one.
-Leaving the page cancels a request still in flight.
 
 ## Configuration
 
-`config.yaml`: `title`, `table.overscan`, `table.minWidth`. Parsed and
-validated once at load; a bad value fails start-up (and `npm test`) with the
-file and key in the error.
+`config.yaml`: `title`, `table.overscan`. Columns and table size come from
+`RawLitho/config.yaml`.

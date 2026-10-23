@@ -7,6 +7,8 @@ import {
 } from "../../services/rawLithoLookupConfig";
 import { REQUIRED_COLUMN_KEY_LIST } from "../RawLitho/constants";
 import {
+  findConditionalRuleIssues,
+  hasValue,
   isValidDepth,
   normalizeLookupCode,
 } from "../RawLitho/rawLithoValidation";
@@ -21,7 +23,8 @@ import { getDocumentRows, type UploadDocument } from "./uploadDataDocument";
  *              depth, a non-text value in a text field, a non-integer id or
  *              timestamp it cannot parse), or a Raw Litho rule the Raw Litho
  *              page also refuses (inverted range, duplicate interval, unknown
- *              lookup code — Raw Litho's Save is blocked by it).
+ *              lookup code, a broken conditional rule — Raw Litho's Save
+ *              is blocked by it).
  *   warning  — what Raw Litho tolerates in a saved export: a required field
  *              left empty, a missing campaign or timestamp, lookup codes that
  *              could not be checked because the lookup data is unavailable.
@@ -64,7 +67,7 @@ function label(field: RowField) {
 }
 
 function isBlank(value: unknown) {
-  return value === null || value === undefined || String(value).trim() === "";
+  return !hasValue(value);
 }
 
 /* Codes accepted per lookup field; null when the codes cannot be checked. */
@@ -193,6 +196,11 @@ function validateRow(
       message: "Litho From must be less than Litho To.",
     });
   }
+
+  // The same conditional rules as the Raw Litho page (rawLithoValidation.ts).
+  findConditionalRuleIssues(row).forEach(({ field, message }) => {
+    issues.push({ severity: "error", field, message });
+  });
 
   lookupCodes.forEach((codes, field) => {
     const value = row[field];

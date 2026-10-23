@@ -463,6 +463,8 @@ function UploadData() {
           onFileReject={(message) => showToast({ type: "warning", message })}
           selectedFileName={selectedFile?.name || ""}
           recordCount={rows.length}
+          onFileRemove={handleCancel}
+          isRemoveDisabled={isImporting}
         />
         <DatasetSummary summary={summary} />
 

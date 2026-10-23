@@ -33,32 +33,9 @@ export interface DataViewerResponse {
   records: DataViewerRecord[];
 }
 
-export type DataViewerColumnKey = keyof DataViewerRecord;
-
-/*
- * Table columns in the query's order, labelled with the database column names
- * so a value can be traced straight back to the table. `width` is relative
- * (see toPercentWidths). `depth` columns are shown with at least two decimals.
- */
-export const DATA_VIEWER_COLUMNS: readonly {
-  key: DataViewerColumnKey;
-  label: string;
-  width: number;
-  depth?: true;
-}[] = [
-  { key: "holeId", label: "HOLEID", width: 110 },
-  { key: "projectCode", label: "PROJECTCODE", width: 95 },
-  { key: "from", label: "FROM", width: 62, depth: true },
-  { key: "to", label: "TO", width: 62, depth: true },
-  { key: "priority", label: "PRIORITY", width: 64 },
-  { key: "name", label: "NAME", width: 125 },
-  { key: "value", label: "VALUE", width: 105 },
-  { key: "commentValue", label: "COMMENT_VALUE", width: 150 },
-  { key: "consistentCheck", label: "CONSISTENTCHECK", width: 110 },
-  { key: "usr", label: "usr", width: 110 },
-  { key: "fileName", label: "FileName", width: 120 },
-  { key: "pathName", label: "PathName", width: 130 },
-  { key: "createdAt", label: "Created_at", width: 140 },
-  { key: "modifiedAt", label: "Modified_at", width: 140 },
-  { key: "importedBy", label: "Imported_by", width: 110 },
+/* Every record property; the API client checks each is a plain value. */
+export const DATA_VIEWER_RECORD_KEYS: readonly (keyof DataViewerRecord)[] = [
+  "holeId", "projectCode", "from", "to", "priority", "name", "value",
+  "commentValue", "consistentCheck", "usr", "fileName", "pathName",
+  "createdAt", "modifiedAt", "importedBy",
 ];

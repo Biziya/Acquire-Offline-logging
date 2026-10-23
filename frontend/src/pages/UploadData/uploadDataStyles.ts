@@ -14,3 +14,7 @@ const BUTTON =
   "min-h-10 cursor-pointer rounded-[7px] border px-4 py-[9px] font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2563eb] disabled:cursor-not-allowed disabled:border-transparent disabled:bg-[#cbd5e1] disabled:text-[#64748b] disabled:opacity-80";
 export const BUTTON_SECONDARY = `${BUTTON} border-[#cbd5e1] bg-white text-[#27364d] enabled:hover:bg-[#f8fafc]`;
 export const BUTTON_PRIMARY = `${BUTTON} border-transparent bg-[#2563eb] text-white enabled:hover:bg-[#1d4ed8]`;
+// Small square "×" next to a value (Remove selected file); same focus ring and
+// disabled look as the buttons above.
+export const ICON_BUTTON =
+  "grid size-7 flex-none cursor-pointer place-items-center rounded-md border border-[#cbd5e1] bg-white p-0 text-[1.1rem] leading-none text-[#475569] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2563eb] enabled:hover:border-[#b42318] enabled:hover:bg-[#fef3f2] enabled:hover:text-[#b42318] disabled:cursor-not-allowed disabled:opacity-50";

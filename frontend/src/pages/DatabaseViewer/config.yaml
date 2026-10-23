@@ -2,12 +2,10 @@
 # Read once when the page module loads (config.ts); a bad value stops start-up
 # with the file and key in the error.
 #
-# The row height and index-column width come from RawLitho/config.yaml so both
-# tables look the same. The columns are the database columns
-# (databaseViewerTypes.ts).
+# The columns, labels, widths, row height and minimum width come from
+# RawLitho/config.yaml so both tables always look the same. Change them there.
 
 title: "Database Viewer"
 
 table:
   overscan: 12           # rows rendered above and below the visible window
-  minWidth: 1500         # px; below it the table scrolls inside its frame

@@ -30,7 +30,7 @@ http://localhost:7047/swagger
 | 2 | Table Constants | `GET /api/table-constants` | `ACQMN01` (`QV_VS_LOOKUP_RO`) | All nine Raw Litho lookup lists |
 | 3 | Upload Data | `POST /api/upload-data` | `ACQMN01_DEV` (procedure) | Store an exported lithology JSON |
 | 4 | Data Viewer | `GET /api/dataviewer?drillhole=…` | `ACQMN01_DEV` (`MyApps.CoreDescrData`) | Stored records of one drillhole |
-| 5 | Status | `GET /api/status` | — | Backend online check |
+| 5 | Status | `GET /api/status` | — | Backend online check; the verified Windows user with `?includeUser=true` |
 
 No other application route exists (Swagger is Development-only
 infrastructure). `ApiRoutesTests` fails if a route is added or one of the
@@ -188,20 +188,44 @@ WHERE [HOLEID] = @Drillhole;
 
 ## Status
 
-`GET /api/status` returns `{ "status": "online", "message": "Backend connection successful" }`.
+```text
+GET /api/status                    anonymous, polled by the sidebar every 5 s
+GET /api/status?includeUser=true   Windows Integrated Authentication
+```
+
+```json
+{ "status": "online", "message": "Backend connection successful" }
+{ "status": "online", "message": "Backend connection successful", "userName": "COMPANY\\bek" }
+```
 
 ## Identity (current user)
 
-`GET /api/currentuser` and the Windows Integrated Authentication behind it
-(`Microsoft.AspNetCore.Authentication.Negotiate`) were removed: no API needs
-authentication now. The frontend owns identity resolution
-(`frontend/src/services/currentUser.ts`), but a browser cannot read the
-Windows login and the app has no SSO provider, so it currently has **no
-verified user**: the sidebar shows "User not identified", Upload Data's
-Imported By shows "—", and `created_by` / `edited_by` are no longer set on new
-documents and edits. Restoring them needs a trusted identity source (for
-example an SSO token issued to the app, or an authenticated endpoint); a name
-typed or sent by the browser is never treated as an identity.
+A browser cannot read the Windows login, so the backend proves it, on the
+existing Status route (no sixth API): `GET /api/status?includeUser=true`
+answers an unauthenticated request with `401` + `WWW-Authenticate: Negotiate`;
+the browser then authenticates the signed-in Windows user automatically
+(Kerberos or NTLM, `Microsoft.AspNetCore.Authentication.Negotiate`) and the
+response adds `userName`:
+
+| Account | Windows reports | `userName` |
+| --- | --- | --- |
+| Domain | `COMPANY\bek` | `COMPANY\bek` |
+| Local | `DESKTOP-1\Bek` | `Bek` (this computer's name is dropped) |
+
+- Only a name proven by Windows is returned; nothing the client sends is
+  used. No credentials or other OS details are returned.
+- Nothing else requires authentication: plain `/api/status` and the other
+  four APIs stay anonymous.
+- The frontend asks once (`frontend/src/services/currentUser.ts`) and uses the
+  name for the sidebar, `created_by`, `edited_by` and Upload Data's
+  "Imported By". Without Windows credentials (another browser zone, a
+  non-Windows client) it shows "User not identified" — never a guess.
+- Browsers send Windows credentials automatically to `localhost` and Local
+  intranet sites; another host name must be in the Local intranet zone (or an
+  `AuthServerAllowlist` policy). Hosted in IIS: enable Windows Authentication
+  and keep Anonymous Authentication on.
+- Check from PowerShell on the same PC:
+  `Invoke-RestMethod 'http://localhost:7047/api/status?includeUser=true' -UseDefaultCredentials`.
 
 The database records the SQL login instead: the upload procedure stores
 `SUSER_NAME()` in `usr` (see below).

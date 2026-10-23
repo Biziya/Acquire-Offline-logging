@@ -1,6 +1,6 @@
 import { isRecord } from "../../types/validation";
 import {
-  DATA_VIEWER_COLUMNS,
+  DATA_VIEWER_RECORD_KEYS,
   type DataViewerRecord,
   type DataViewerResponse,
 } from "../../pages/DatabaseViewer/databaseViewerTypes";
@@ -22,7 +22,7 @@ function isCell(value: unknown) {
 function isDataViewerRecord(record: unknown): record is DataViewerRecord {
   return (
     isRecord(record) &&
-    DATA_VIEWER_COLUMNS.every((column) => isCell(record[column.key]))
+    DATA_VIEWER_RECORD_KEYS.every((key) => isCell(record[key]))
   );
 }
 

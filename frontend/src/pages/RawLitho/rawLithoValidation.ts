@@ -1,5 +1,6 @@
 import type {
   RawLithoRow,
+  RowField,
   RowId,
   RowIssue,
   LookupDefinition,
@@ -85,17 +86,104 @@ export const ROW_VALIDATION_ISSUES = Object.freeze({
   duplicateInterval: "duplicateInterval",
 });
 
-function isEmptyValue(value: unknown) {
-  return value === null || value === undefined || String(value).trim() === "";
+/*
+ * Whether a field holds a meaningful value — the one definition of "empty"
+ * for every rule. "0" and 0 are values; null, undefined and whitespace-only
+ * text are empty.
+ */
+export function hasValue(value: unknown): boolean {
+  return value !== null && value !== undefined && String(value).trim() !== "";
 }
 
 /* Required keys of `row` that are still empty, in table column order. */
 export function getMissingRequiredFields(row: RawLithoRow | undefined) {
   if (!row) return [...REQUIRED_COLUMN_KEY_LIST];
 
-  return REQUIRED_COLUMN_KEY_LIST.filter((fieldKey) =>
-    isEmptyValue(row[fieldKey]),
-  );
+  return REQUIRED_COLUMN_KEY_LIST.filter((fieldKey) => !hasValue(row[fieldKey]));
+}
+
+/*
+ * ---------------------------------------------------------------------------
+ * Conditional field rules
+ *
+ * Which attribute a row needs, or must leave empty, depending on its Litho and
+ * Redox codes. Codes are matched exactly (case-sensitive, surrounding spaces
+ * ignored). Checked on the final row values, so typing, choosing from a list,
+ * inserting, single and multi-cell paste and import all get the same result —
+ * a paste that sets Redox and OX together is judged on the combination.
+ * Nothing is ever changed or cleared automatically.
+ * ---------------------------------------------------------------------------
+ */
+
+export const CONDITIONAL_RULE_CODES = Object.freeze({
+  /* Rule 1: OM Facies is required when OM has a value or Litho is one of these. */
+  omFaciesLithoCodes: ["01M", "24M", "46M", "0-L", "26L", "L--"],
+  /* Rule 2: CA is required when Litho is one of these. */
+  caLithoCodes: ["0-C", "26C", "CA-"],
+  /* Rule 3: OX is required when Redox is one of these. */
+  oxRequiredRedoxCodes: ["O", "Y", "lY", "lGrB", "GnRd", "BrGn"],
+  /* Rule 4: OX must be empty when Redox is one of these. */
+  oxEmptyRedoxCodes: ["Bl", "dGn", "Gr", "WGr", "GrGn", "GnGr"],
+} as const);
+
+export const CONDITIONAL_RULE_MESSAGES = Object.freeze({
+  omFaciesRequired: "OM Facies is required for the selected OM or Litho value.",
+  caRequired: "CA is required for this Litho code.",
+  oxRequired: "OX is required for this Redox code.",
+  oxMustBeEmpty: "OX must be empty for this Redox code.",
+});
+
+export interface ConditionalRuleIssue {
+  /* The cell to mark: the one that must be filled in or emptied. */
+  field: "omFacies" | "ca" | "ox";
+  message: string;
+}
+
+function codeOf(value: unknown) {
+  return hasValue(value) ? String(value).trim() : "";
+}
+
+function isOneOf(value: unknown, codes: readonly string[]) {
+  return codes.includes(codeOf(value));
+}
+
+/* Every conditional rule `row` breaks; empty when it breaks none. Pure. */
+export function findConditionalRuleIssues(
+  row: Partial<Record<RowField, unknown>>,
+): ConditionalRuleIssue[] {
+  const issues: ConditionalRuleIssue[] = [];
+  const codes = CONDITIONAL_RULE_CODES;
+
+  if (
+    (hasValue(row.om) || isOneOf(row.lithoCode, codes.omFaciesLithoCodes)) &&
+    !hasValue(row.omFacies)
+  ) {
+    issues.push({ field: "omFacies", message: CONDITIONAL_RULE_MESSAGES.omFaciesRequired });
+  }
+
+  if (isOneOf(row.lithoCode, codes.caLithoCodes) && !hasValue(row.ca)) {
+    issues.push({ field: "ca", message: CONDITIONAL_RULE_MESSAGES.caRequired });
+  }
+
+  if (isOneOf(row.redoxCode, codes.oxRequiredRedoxCodes) && !hasValue(row.ox)) {
+    issues.push({ field: "ox", message: CONDITIONAL_RULE_MESSAGES.oxRequired });
+  }
+
+  if (isOneOf(row.redoxCode, codes.oxEmptyRedoxCodes) && hasValue(row.ox)) {
+    issues.push({ field: "ox", message: CONDITIONAL_RULE_MESSAGES.oxMustBeEmpty });
+  }
+
+  return issues;
+}
+
+/* The first broken rule in `rows` (table order), for a blocking warning. */
+export function findFirstConditionalRuleIssue(rows: readonly RawLithoRow[]) {
+  for (const [rowIndex, row] of rows.entries()) {
+    const [issue] = findConditionalRuleIssues(row);
+    if (issue) return { rowIndex, ...issue };
+  }
+
+  return null;
 }
 
 export function validateRequiredFields(row: RawLithoRow | undefined) {

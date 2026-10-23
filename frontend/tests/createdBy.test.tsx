@@ -1,5 +1,5 @@
 import { renderHook, waitFor, act } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { useRawLithoWorkspace } from "../src/pages/RawLitho/hooks/useRawLithoWorkspace";
 import {
   createRawLithoDocument,
@@ -57,8 +57,12 @@ describe("created_by metadata", () => {
     );
   });
 
-  it("gives no identity while no trusted identity provider exists", async () => {
+  it("gives no identity when the backend cannot verify one", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response("", { status: 401 }));
     await expect(getCurrentWindowsUser()).resolves.toBeNull();
+    fetchSpy.mockRestore();
   });
 });
 

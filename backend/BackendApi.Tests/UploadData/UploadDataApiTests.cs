@@ -12,13 +12,13 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace BackendApi.Tests.UploadData;
 
-public sealed class UploadDataApiTests : IClassFixture<WebApplicationFactory<Program>>
+public sealed class UploadDataApiTests : IClassFixture<ApiFactory>
 {
     private const string Route = "/api/upload-data";
 
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly ApiFactory _factory;
 
-    public UploadDataApiTests(WebApplicationFactory<Program> factory)
+    public UploadDataApiTests(ApiFactory factory)
     {
         _factory = factory;
     }

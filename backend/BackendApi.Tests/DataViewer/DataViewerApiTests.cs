@@ -10,13 +10,13 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace BackendApi.Tests.DataViewer;
 
-public sealed class DataViewerApiTests : IClassFixture<WebApplicationFactory<Program>>
+public sealed class DataViewerApiTests : IClassFixture<ApiFactory>
 {
     private const string Hole = "GTZO_0001_1";
 
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly ApiFactory _factory;
 
-    public DataViewerApiTests(WebApplicationFactory<Program> factory)
+    public DataViewerApiTests(ApiFactory factory)
     {
         _factory = factory;
     }

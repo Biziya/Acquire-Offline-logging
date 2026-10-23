@@ -5,11 +5,11 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace BackendApi.Tests;
 
-public sealed class ApiRoutesTests : IClassFixture<WebApplicationFactory<Program>>
+public sealed class ApiRoutesTests : IClassFixture<ApiFactory>
 {
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly ApiFactory _factory;
 
-    public ApiRoutesTests(WebApplicationFactory<Program> factory)
+    public ApiRoutesTests(ApiFactory factory)
     {
         _factory = factory;
     }

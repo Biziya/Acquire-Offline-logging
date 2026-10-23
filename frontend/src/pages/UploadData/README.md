@@ -101,7 +101,10 @@ drop on zone ─┘
 - **Choosing the same file again** still works: the file input is cleared after
   every pick.
 - **Loaded state:** once a file has parsed, the zone turns green and shows
-  "✓ JSON File Loaded", the file name, the record count and **Change File**.
+  "✓ JSON File Loaded", the file name with a **×** (Remove selected file), the
+  record count and **Change File**. × does what Cancel does — clears the file,
+  preview, validation, draft and upload state; the file on disk is untouched —
+  and is disabled while an upload runs. The same file can then be picked again.
   Change File opens the same picker, and dropping a file onto the zone still
   replaces it. An unreadable file returns the zone to its empty look and
   shows the error toast. **Cancel** restores the empty "Drag and drop" look. The zone is in the
@@ -116,7 +119,7 @@ These can be three different people, and none is ever guessed:
 | --- | --- | --- |
 | Created By | `created_by` in the selected JSON file (written by Raw Litho) | `—` — e.g. an older file |
 | Edited By | `edited_by` in the selected JSON file; replaced by the current user when a record is edited here | `—` |
-| Imported By | the verified signed-in user from `useCurrentUser()` — the person about to upload | `—` (today always: no verified user) |
+| Imported By | the signed-in Windows user from `useCurrentUser()` — the person about to upload | `—` |
 
 - Created By is never changed by this page.
 - An actual record edit (`handleEdit`) sets `edited_by` to the trusted current
@@ -126,9 +129,9 @@ These can be three different people, and none is ever guessed:
 - Both JSON fields live in the working document, so the IndexedDB draft
   restores them; Imported By is resolved again from the current user.
 
-**Imported By shows `—` while no verified user exists.** The frontend owns
-identity but has no trusted source since `GET /api/currentuser` was removed;
-see *currentUser.ts* in `src/services/README.md`.
+**Imported By shows `—` when the backend cannot verify the user.** The
+identity comes from `GET /api/status?includeUser=true` (Windows Integrated
+Authentication); see *currentUser.ts* in `src/services/README.md`.
 
 **No `imported_by` in the uploaded file.** Uploading never changes
 `created_by`, and `imported_by` is not added to the JSON. The stored procedure does
@@ -212,7 +215,7 @@ No new business rules are introduced:
 
 | Severity | Checks |
 | --- | --- |
-| error (blocks upload) | missing project / drillhole; `rows` missing or empty; a row that is not an object; non-whole-number id; empty or non-numeric depth; non-text value in a text field; invalid timestamp; Litho From ≥ Litho To (same rule as the backend); duplicate interval; unknown lookup code (when the lookup is loaded) |
+| error (blocks upload) | missing project / drillhole; `rows` missing or empty; a row that is not an object; non-whole-number id; empty or non-numeric depth; non-text value in a text field; invalid timestamp; Litho From ≥ Litho To (same rule as the backend); duplicate interval; unknown lookup code (when the lookup is loaded); a broken conditional rule (Raw Litho README, *Conditional rules*) |
 | warning | required field empty; campaign or timestamp missing; lookup data still loading or unavailable |
 
 Invalid and warning cells are highlighted, the status column shows ✓ / ! / ✕

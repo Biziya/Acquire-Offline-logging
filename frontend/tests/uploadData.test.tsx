@@ -353,6 +353,50 @@ describe("Upload Data creator and importer", () => {
   });
 });
 
+describe("Remove selected file", () => {
+  beforeEach(() => vi.mocked(importUploadData).mockClear());
+
+  const zone = () => within(screen.getByTestId("upload-drop-zone"));
+  const removeButton = () => screen.getByRole("button", { name: "Remove selected file" });
+
+  it("clears the file, preview and draft, then accepts the same file again", async () => {
+    const user = userEvent.setup();
+    const file = jsonFile(uploadDocument());
+    render(<UploadData />);
+    await loadFile(file);
+    expect(zone().getByText("upload.json")).toBeInTheDocument();
+
+    await user.click(removeButton());
+
+    expect(zone().queryByText("upload.json")).toBeNull();
+    expect(screen.queryByLabelText("Lithology Comments, record 1")).toBeNull();
+    expect(screen.getByText("Drag and drop your JSON file")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Upload to Database" })).toBeDisabled();
+    await waitFor(async () => expect(await readUploadDataDraft()).toBeNull());
+
+    // The same file can be chosen again and uploaded normally.
+    await loadFile(file);
+    await confirmImport(user);
+    expect(importUploadData).toHaveBeenCalledWith(file, expect.any(AbortSignal));
+  });
+
+  it("cannot remove the file while an upload is running", async () => {
+    const pending = deferred<{ message: string }>();
+    vi.mocked(importUploadData).mockReturnValueOnce(pending.promise);
+    const user = userEvent.setup();
+    render(<UploadData />);
+    await loadFile(jsonFile(uploadDocument()));
+
+    await confirmImport(user);
+    expect(removeButton()).toBeDisabled();
+    await user.click(removeButton());
+    expect(zone().getByText("upload.json")).toBeInTheDocument();
+
+    pending.resolve({ message: "Data uploaded successfully." });
+    await waitFor(() => expect(removeButton()).toBeEnabled());
+  });
+});
+
 describe("Upload Data draft persistence", () => {
   const CREATOR = "CORP\\creator";
   beforeEach(() => vi.mocked(importUploadData).mockClear());

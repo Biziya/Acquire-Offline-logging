@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   AddRowResult,
   Drillhole,
@@ -85,6 +85,30 @@ export function useRawLithoWorkspace({
     prepareSelection,
     flushPendingSaves,
   } = persistence;
+  /*
+   * Returning to the page restores the selected drillhole at once, before the
+   * drillhole list has loaded, so a new document is built without Project /
+   * Campaign. When the list arrives, fill those two from the selected hole's
+   * entry — only where empty (a file's own values win), only for the document
+   * still on screen (a newer selection is never overwritten). In memory only:
+   * the next edit saves it like any other change.
+   */
+  useEffect(() => {
+    const current = rawLithoDocument;
+    if (!draftKey || current.drillhole !== draftKey) return;
+
+    const record = drillholes.find((hole) => hole.holeId === draftKey);
+    if (!record) return;
+
+    const project = current.project || record.projectCode;
+    const campaign = current.campaign || record.campaign;
+    if (project === current.project && campaign === current.campaign) return;
+
+    const next = { ...current, project, campaign };
+    documentRef.current = next;
+    setDocument(next);
+  }, [draftKey, drillholes, rawLithoDocument]);
+
   const commitDocument = (lithoDocument: RawLithoDocument) => {
     if (!draftKey || !canEdit(draftKey) || lithoDocument === documentRef.current)
       return;

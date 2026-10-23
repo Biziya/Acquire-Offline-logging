@@ -207,6 +207,36 @@ Required columns show a red `*` in the header. An empty required cell gets the
 
 ---
 
+## Conditional rules
+
+Four rules decide which attribute a row needs, or must leave empty, from its
+Litho and Redox codes. They live in one place, `findConditionalRuleIssues` in
+`rawLithoValidation.ts`, which Upload Data uses too.
+
+| Rule | When | Then |
+| --- | --- | --- |
+| 1 | OM has a value, or Litho is `01M` `24M` `46M` `0-L` `26L` `L--` | OM Facies is required |
+| 2 | Litho is `0-C` `26C` `CA-` | CA is required |
+| 3 | Redox is `O` `Y` `lY` `lGrB` `GnRd` `BrGn` | OX is required |
+| 4 | Redox is `Bl` `dGn` `Gr` `WGr` `GrGn` `GnGr` | OX must be empty |
+
+- **Empty** has one definition, `hasValue`: `"0"` and `0` are values;
+  `null`, `undefined` and whitespace-only text are empty.
+- Codes match exactly (case-sensitive; surrounding spaces ignored).
+- **When.** Each row is checked on its current values whenever it renders, so
+  typing, choosing from a list, inserting a row, single and multi-cell paste
+  and import all behave the same, and a paste that sets Redox and OX together
+  is judged on the final combination. Only the rows on the page are checked
+  while editing; nothing scans the whole table per keystroke.
+- **Shown as** the cell that must change (OM Facies, CA or OX) in red
+  (`raw-litho-cell--rule`), the message as its tooltip. Fixing the value
+  clears it. Values are never changed or cleared automatically; copying
+  changes nothing.
+- **Save** (which also exports the final JSON) is blocked while any row breaks
+  a rule: a warning toast names the first row and rule. The draft keeps
+  autosaving with every edit intact. Upload Data treats a broken rule as a
+  blocking error.
+
 ## Row ordering
 
 Rows are always displayed and stored in **Litho From ascending** order,
@@ -923,9 +953,9 @@ the dataset:
 **When it is not set**
 - An existing or imported document without one (older files and drafts) keeps
   none; the current user is never filled in.
-- A document created and saved while no identity is available has none.
-  Today that is every new document: the app has no verified user since
-  `/api/currentuser` was removed (see `src/services/README.md`).
+- A document created and saved while no identity is available has none —
+  for example when the browser did not send Windows credentials to
+  `/api/status?includeUser=true` (see `src/services/README.md`).
 
 **Compatibility**
 - Older JSON files and IndexedDB drafts without the field load as before.
@@ -962,6 +992,15 @@ if IndexedDB saving fails, and the pending document is retained for retry.
 Pagehide flushing is best effort: a browser crash, forced termination or rejected
 storage writes cannot guarantee durable recovery. Concurrent browser tabs have
 independent queues; this migration does not implement cross-tab conflict resolution.
+
+### Project and Campaign after returning to the page
+
+Returning restores the selected drillhole at once, before the drillhole list
+has loaded, so a new document can start without Project / Campaign. When the
+list arrives, `useRawLithoWorkspace` fills those two from the selected hole's
+entry: only where they are empty (a file's own values win) and only for the
+document still on screen (a newer selection is never overwritten). In memory
+only; the next edit saves it like any other change.
 
 ## JSON import
 

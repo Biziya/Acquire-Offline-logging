@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   BUTTON_SECONDARY,
+  ICON_BUTTON,
   SECTION,
   SECTION_HEADING,
   SECTION_TITLE,
@@ -13,6 +14,10 @@ interface UploadFileSectionProps {
   /* Name of the successfully loaded file; empty before one is loaded. */
   selectedFileName: string;
   recordCount: number;
+  /* Clears the loaded file and everything built from it. */
+  onFileRemove: () => void;
+  /* True while an upload is running: the file cannot be removed then. */
+  isRemoveDisabled: boolean;
 }
 
 const recordFormat = new Intl.NumberFormat("en-US");
@@ -31,6 +36,8 @@ function UploadFileSection({
   onFileReject,
   selectedFileName,
   recordCount,
+  onFileRemove,
+  isRemoveDisabled,
 }: UploadFileSectionProps) {
   // A file only reaches `selectedFileName` once it has parsed successfully.
   const isLoaded = Boolean(selectedFileName);
@@ -146,8 +153,20 @@ function UploadFileSection({
             <strong className="text-[#166534]" role="status">
               JSON File Loaded
             </strong>
-            <span className="max-w-full font-semibold [overflow-wrap:anywhere] text-[#334155]">
-              {selectedFileName}
+            <span className="flex max-w-full items-center gap-2">
+              <span className="min-w-0 font-semibold [overflow-wrap:anywhere] text-[#334155]">
+                {selectedFileName}
+              </span>
+              <button
+                className={ICON_BUTTON}
+                type="button"
+                aria-label="Remove selected file"
+                title={isRemoveDisabled ? "Wait for the upload to finish" : "Remove selected file"}
+                disabled={isRemoveDisabled}
+                onClick={onFileRemove}
+              >
+                ×
+              </button>
             </span>
             <span className="text-[0.86rem] text-[#4b5563]">
               {recordFormat.format(recordCount)}{" "}

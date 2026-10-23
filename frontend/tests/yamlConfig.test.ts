@@ -27,7 +27,6 @@ describe("YAML page configuration", () => {
     expect(readDatabaseViewerConfig(databaseViewerText)).toEqual({
       title: "Database Viewer",
       overscan: 12,
-      minWidth: 1500,
     });
   });
 
@@ -75,11 +74,11 @@ describe("YAML page configuration", () => {
     ).toThrow(/lithologyComments\.width must be a whole number/);
   });
 
-  it("requires a whole-number Database Viewer table width", () => {
+  it("requires a whole-number Database Viewer overscan", () => {
     expect(() =>
       readDatabaseViewerConfig(
-        databaseViewerText.replace("minWidth: 1500", "minWidth: wide"),
+        databaseViewerText.replace("overscan: 12", "overscan: lots"),
       ),
-    ).toThrow(/table\.minWidth/);
+    ).toThrow(/table\.overscan/);
   });
 });

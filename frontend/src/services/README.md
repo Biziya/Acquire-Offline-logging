@@ -159,24 +159,37 @@ validation all pick it up.
 
 ## currentUser.ts
 
-`getCurrentWindowsUser()` is the one place the app asks who is signed in.
-Through `hooks/useCurrentUser.ts` it feeds the sidebar user name, Raw Litho's
+`getCurrentWindowsUser()` is the one place the app asks who is signed in
+(`Bek` for a local account, `COMPANY\bek` for a domain account). Through
+`hooks/useCurrentUser.ts` it feeds the sidebar user name, Raw Litho's
 `created_by` / `edited_by`, and Upload Data's "Edited By" stamp and
 "Imported By".
 
-**The frontend owns identity, and today has no verified one.** The backend's
-`GET /api/currentuser` (Windows Integrated Authentication) was removed with
-the move to five APIs. A browser cannot read the Windows login and the app
-has no SSO provider, so `getCurrentWindowsUser()` resolves `null` without any
-request. Every caller already handles that: the sidebar shows "User not
-identified", Imported By shows `—`, and `created_by` / `edited_by` are left
-unset (a file's existing values are kept). The hostname, user agent, a
-build-time user name, browser fingerprinting or anything typed in are never
-used.
+**How the name is obtained.** A browser cannot read the Windows login, so
+`getCurrentWindowsUser()` asks the backend: `GET /api/status?includeUser=true`
+with `credentials: "include"`. That variant of the Status route requires
+Windows Integrated Authentication (Negotiate: Kerberos or NTLM), so the
+browser proves the signed-in Windows user and the backend answers with
+`userName` (backend README, *Identity*). The plain status poll stays anonymous.
 
-**Adding a trusted provider later** (for example an SSO token issued to this
-app): resolve its verified name in `getCurrentWindowsUser()`; nothing else
-changes.
+A verified name is kept for the rest of the page load. An error status (401
+when the browser sent no Windows credentials), a body without `userName` or
+a network failure gives `null`, shown as "User not identified", and is not
+kept: `useCurrentUser()` asks again every 10 seconds until a name arrives,
+so starting the backend after the page fills in the name without a refresh.
+The hostname, user agent, a build-time user name, browser fingerprinting or
+anything typed in are never used.
+
+**Browser and deployment notes**
+- Edge and Chrome send Windows credentials to `localhost` automatically. A
+  backend on another host name must be in the browser's Local intranet zone
+  (or an `AuthServerAllowlist` policy), otherwise the browser asks for a login.
+- `npm run dev`: Vite proxies `/api/status` over a single kept-alive
+  connection (`vite.config.ts`), because NTLM authenticates a connection, not
+  a request. Dev-only; fine on a single-user PC.
+- Production should serve the frontend and `/api` from one origin
+  (`VITE_API_BASE_URL` empty). A cross-origin API would need its CORS policy
+  changed from `AllowAnyOrigin` to named origins with `AllowCredentials`.
 
 ## Caching strategy
 

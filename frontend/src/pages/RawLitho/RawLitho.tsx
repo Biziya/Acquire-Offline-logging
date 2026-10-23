@@ -16,7 +16,10 @@ import {
   exportRawLithoSnapshot,
   touchRawLithoDocument,
 } from "./rawLithoHelpers";
-import { hasInvalidLookupValues } from "./rawLithoValidation";
+import {
+  findFirstConditionalRuleIssue,
+  hasInvalidLookupValues,
+} from "./rawLithoValidation";
 import { rawLithoConfig } from "./config";
 import { OUTLINE_BUTTON, OUTLINE_BUTTON_NAVY } from "./rawLithoStyles";
 
@@ -90,6 +93,17 @@ function RawLitho() {
 
     if (hasInvalidLookupValues(rows, lookupData)) {
       showToast(TOAST_NOTIFICATIONS.invalidLookupValue);
+      return;
+    }
+
+    // Save exports the finished JSON, so every row must meet the conditional
+    // rules. The draft itself keeps autosaving, with every edit intact.
+    const ruleIssue = findFirstConditionalRuleIssue(rows);
+    if (ruleIssue) {
+      showToast({
+        type: "warning",
+        message: `Row ${ruleIssue.rowIndex + 1}: ${ruleIssue.message}`,
+      });
       return;
     }
 

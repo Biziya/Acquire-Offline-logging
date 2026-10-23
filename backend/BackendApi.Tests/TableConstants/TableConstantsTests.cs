@@ -8,11 +8,11 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace BackendApi.Tests.TableConstants;
 
-public sealed class TableConstantsTests : IClassFixture<WebApplicationFactory<Program>>
+public sealed class TableConstantsTests : IClassFixture<ApiFactory>
 {
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly ApiFactory _factory;
 
-    public TableConstantsTests(WebApplicationFactory<Program> factory)
+    public TableConstantsTests(ApiFactory factory)
     {
         _factory = factory;
     }

@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   BODY_CELL,
@@ -6,30 +6,32 @@ import {
   TABLE,
   TABLE_FRAME,
   bodyRowClass,
-  toPercentWidths,
 } from "../../components/dataTableStyles";
-// Appearance only: Raw Litho's row height and index-column width, so both
-// tables look the same. Nothing from Raw Litho's editing code is used.
+// Appearance only: the Raw Litho table's own column list (order, labels,
+// widths), row height, minimum width and "Ins" column, so the two tables
+// cannot drift apart. Nothing from Raw Litho's editing code is used.
 import { rawLithoConfig } from "../RawLitho/config";
-import {
-  DATA_VIEWER_COLUMNS,
-  type DataViewerRecord,
-  type DataViewerValue,
-} from "./databaseViewerTypes";
+import { INDEX_COLUMN_WIDTH, tableColumns } from "../RawLitho/constants";
+import { CELL_INPUT } from "../RawLitho/rawLithoStyles";
 import { databaseViewerConfig } from "./config";
+import type { DataViewerValue } from "./databaseViewerTypes";
+import type { DataViewerRow } from "./databaseViewerRows";
 
 interface DatabaseViewerTableProps {
-  records: readonly DataViewerRecord[];
+  rows: readonly DataViewerRow[];
   emptyMessage: string;
+  initialScrollTop: number;
+  onScroll: (scrollTop: number) => void;
 }
 
-const { rowHeight, indexColumnWidth } = rawLithoConfig;
-const { overscan, minWidth } = databaseViewerConfig;
+const { rowHeight, minWidth } = rawLithoConfig;
+const { overscan } = databaseViewerConfig;
 
-const [indexWidth, ...columnWidths] = toPercentWidths([
-  indexColumnWidth,
-  ...DATA_VIEWER_COLUMNS.map((column) => column.width),
-]);
+// Raw Litho's cell text: same size and alignment as its inputs, without the
+// input box. `truncate` keeps long values on one line (full text on hover).
+const CELL_TEXT = CELL_INPUT.split(" ")
+  .filter((name) => /^(text-|py-)/.test(name))
+  .join(" ");
 
 // At least two decimals, never rounded, no thousands separator: 5 → "5.00",
 // 12.125 → "12.125". Only how the stored number is written changes.
@@ -39,34 +41,52 @@ const depthFormat = new Intl.NumberFormat("en-US", {
   useGrouping: false,
 });
 
-/* The stored value as text. NULL is an empty cell; nothing is filled in. */
-function cellText(value: DataViewerValue, isDepth: boolean) {
+function depthText(value: DataViewerValue) {
   if (value === null) return "";
-  if (isDepth && typeof value === "number") return depthFormat.format(value);
-  return String(value);
+  return typeof value === "number" ? depthFormat.format(value) : String(value);
+}
+
+function cellText(row: DataViewerRow, key: string) {
+  if (key === "lithoFrom") return depthText(row.lithoFrom);
+  if (key === "lithoTo") return depthText(row.lithoTo);
+  return row.values[key as keyof DataViewerRow["values"]] ?? "";
 }
 
 /*
- * Read-only and virtualized like the Raw Litho table: only the rows in view
- * (plus `overscan`) are in the DOM, and two spacer rows stand in for the
- * rest, which keeps real <table> layout and the sticky header. Values are
- * plain text — there are no inputs. Rows are shown in the API's order
- * (FROM, TO, PRIORITY, NAME).
+ * Read-only and styled like the Raw Litho table — same frame, header, cells,
+ * zebra rows and hover — but virtualized: only the rows in view (plus
+ * `overscan`) are in the DOM, and two spacer rows stand in for the rest,
+ * which keeps real <table> layout and the sticky header. Values are plain
+ * text; there are no inputs.
  */
-function DatabaseViewerTable({ records, emptyMessage }: DatabaseViewerTableProps) {
+function DatabaseViewerTable({
+  rows,
+  emptyMessage,
+  initialScrollTop,
+  onScroll,
+}: DatabaseViewerTableProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const virtualizer = useVirtualizer({
-    count: records.length,
+    count: rows.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => rowHeight,
     overscan,
+    initialOffset: initialScrollTop,
+    getItemKey: (index) => rows[index]?.key ?? index,
   });
+
+  // Back to where the user was when the page was left.
+  useLayoutEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = initialScrollTop;
+    // Only on mount: later scrolling is the user's.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const items = virtualizer.getVirtualItems();
   const paddingTop = items[0]?.start ?? 0;
   const paddingBottom =
     virtualizer.getTotalSize() - (items[items.length - 1]?.end ?? 0);
-  const columnCount = DATA_VIEWER_COLUMNS.length + 1;
+  const columnCount = tableColumns.length + 1;
 
   return (
     <div
@@ -74,23 +94,24 @@ function DatabaseViewerTable({ records, emptyMessage }: DatabaseViewerTableProps
       className={TABLE_FRAME}
       tabIndex={0}
       role="region"
-      aria-label="Database records"
+      aria-label="Lithology records"
+      onScroll={(event) => onScroll(event.currentTarget.scrollTop)}
     >
       <table
         className={TABLE}
         style={{ minWidth }}
-        aria-rowcount={records.length + 1}
+        aria-rowcount={rows.length + 1}
       >
         <thead>
           <tr>
-            <th className={HEADER_CELL} style={{ width: indexWidth }}>
-              #
+            <th className={HEADER_CELL} style={{ width: INDEX_COLUMN_WIDTH }}>
+              Ins
             </th>
-            {DATA_VIEWER_COLUMNS.map((column, index) => (
+            {tableColumns.map((column) => (
               <th
                 key={column.key}
                 className={HEADER_CELL}
-                style={{ width: columnWidths[index] }}
+                style={{ width: column.width }}
               >
                 {column.label}
               </th>
@@ -106,8 +127,8 @@ function DatabaseViewerTable({ records, emptyMessage }: DatabaseViewerTableProps
           )}
 
           {items.map((item) => {
-            const record = records[item.index];
-            if (!record) return null;
+            const row = rows[item.index];
+            if (!row) return null;
 
             return (
               <tr
@@ -117,13 +138,13 @@ function DatabaseViewerTable({ records, emptyMessage }: DatabaseViewerTableProps
                 aria-rowindex={item.index + 2}
               >
                 <td className={BODY_CELL}>{item.index + 1}</td>
-                {DATA_VIEWER_COLUMNS.map((column) => {
-                  const text = cellText(record[column.key], Boolean(column.depth));
+                {tableColumns.map((column) => {
+                  const text = cellText(row, column.key);
 
                   return (
                     <td
                       key={column.key}
-                      className={`${BODY_CELL} truncate px-1 text-rl-text`}
+                      className={`${BODY_CELL} ${CELL_TEXT} truncate px-1`}
                       title={text || undefined}
                     >
                       {text}
@@ -142,7 +163,7 @@ function DatabaseViewerTable({ records, emptyMessage }: DatabaseViewerTableProps
         </tbody>
       </table>
 
-      {records.length === 0 && (
+      {rows.length === 0 && (
         <p className="m-0 p-6 text-center text-[0.85rem] text-rl-text-muted">
           {emptyMessage}
         </p>
