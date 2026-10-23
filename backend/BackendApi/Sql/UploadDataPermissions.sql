@@ -9,7 +9,8 @@
    raised inside procedure InsertUpdateCoreDescr_WellCAD
 
  What the application does (and only this):
-   connection  Data Source=BMNULAADB02; Initial Catalog=ACQMN01;
+   connection  Data Source=BMNULAADB02; database ACQMN01_DEV (UploadData:Database;
+               DefaultConnection's Initial Catalog ACQMN01 is used by the other APIs);
                SQL login userAcquire (appsettings.json / appsettings.Development.json;
                no environment, user-secrets or other overrides are configured)
    call        EXEC dbo.InsertUpdateCoreDescr_WellCAD
@@ -31,11 +32,9 @@
  PART A is READ-ONLY (SELECTs, EXECUTE AS LOGIN ... REVERT). PART B is
  commented out; nothing in it runs until a DBA chooses and executes it.
 
- This script targets ACQMN01: the configured database, and the database named
- in the latest error. Earlier logs named ACQMN01_DEV. If the team confirms
- ACQMN01_DEV as the destination instead, the application's connection string
- must change (not the procedure), and this script is run with every
- [ACQMN01] / N'ACQMN01' replaced by ACQMN01_DEV.
+ This script targets ACQMN01_DEV, the confirmed upload database. The 229 shown
+ above came from ACQMN01, before the upload was pointed at ACQMN01_DEV; an
+ earlier 229 from ACQMN01_DEV shows the same login was refused there too.
 ================================================================================
 */
 
@@ -52,7 +51,7 @@ FROM sys.databases AS db
 WHERE db.name IN (N'ACQMN01', N'ACQMN01_DEV');
 GO
 
-USE [ACQMN01];
+USE [ACQMN01_DEV];
 GO
 
 -- A1. The API's identity in this database (EXECUTE AS LOGIN reproduces it).
@@ -188,7 +187,7 @@ GO
 -- the usr column and uses in its duplicate-matching key.
 
 /* ---- B0. Only if A5 shows an explicit DENY -------------------------------
-USE [ACQMN01];
+USE [ACQMN01_DEV];
 REVOKE INSERT ON OBJECT::[MyApps].[CoreDescrData] FROM [<ApiUser from A5>];   -- removes a DENY INSERT
 -- or: ALTER ROLE [db_denydatawriter] DROP MEMBER [<ApiUser from A5>];
 ------------------------------------------------------------------------------ */
@@ -200,7 +199,7 @@ REVOKE INSERT ON OBJECT::[MyApps].[CoreDescrData] FROM [<ApiUser from A5>];   --
 -- Grant only what the procedure's Raw core import_JSON branch does: SELECT,
 -- INSERT, UPDATE (add DELETE only if its definition has one; repeat for any
 -- other table A4 lists that it writes).
-USE [ACQMN01];
+USE [ACQMN01_DEV];
 CREATE CERTIFICATE [UploadDataProcSigning]
     ENCRYPTION BY PASSWORD = N'<strong password>'
     WITH SUBJECT = N'Signs dbo.InsertUpdateCoreDescr_WellCAD (MyApps.CoreDescrData access)',
@@ -217,7 +216,7 @@ ADD SIGNATURE TO OBJECT::[dbo].[InsertUpdateCoreDescr_WellCAD]
 -- Makes dbo the owner of the MyApps schema, so every dbo procedure can reach
 -- every MyApps object without table permissions, and the current owner loses
 -- its implicit rights. Review all other users of the MyApps schema first.
-USE [ACQMN01];
+USE [ACQMN01_DEV];
 ALTER AUTHORIZATION ON SCHEMA::[MyApps] TO [dbo];
 -- (or, narrower, only this table:)
 -- ALTER AUTHORIZATION ON OBJECT::[MyApps].[CoreDescrData] TO SCHEMA OWNER;   -- if the table has its own owner
@@ -228,19 +227,19 @@ ALTER AUTHORIZATION ON SCHEMA::[MyApps] TO [dbo];
 -------------------------------------------------------------------------------
 /*
 SELECT HOLEID, PROJECTCODE, [FROM], [TO], PRIORITY, NAME, VALUE, COMMENT_VALUE, usr
-FROM [ACQMN01].[MyApps].[CoreDescrData]
+FROM [ACQMN01_DEV].[MyApps].[CoreDescrData]
 WHERE HOLEID = 'GTZO_0001_1'
 ORDER BY [FROM], [TO], NAME;
 
 -- Duplicate check: must return no rows after uploading the same file twice.
 SELECT HOLEID, PROJECTCODE, [FROM], [TO], PRIORITY, NAME, usr, COUNT(*) AS Copies
-FROM [ACQMN01].[MyApps].[CoreDescrData]
+FROM [ACQMN01_DEV].[MyApps].[CoreDescrData]
 WHERE HOLEID = 'GTZO_0001_1'
 GROUP BY HOLEID, PROJECTCODE, [FROM], [TO], PRIORITY, NAME, usr
 HAVING COUNT(*) > 1;
 
 -- Nothing else touched: other holes' row count unchanged before/after uploads.
 SELECT COUNT(*) AS OtherRows
-FROM [ACQMN01].[MyApps].[CoreDescrData]
+FROM [ACQMN01_DEV].[MyApps].[CoreDescrData]
 WHERE HOLEID <> 'GTZO_0001_1';
 */

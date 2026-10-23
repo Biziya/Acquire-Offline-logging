@@ -179,9 +179,25 @@ parameters, async calls and the request's cancellation token (command timeout
 | `@fileName` | `varchar(50)` | the uploaded file name (no path) |
 | `@str_json` | `nvarchar(max)` | the filtered JSON (step 4 above) |
 
-Every result set the procedure returns is read to the end so that an error
-raised by a later statement still fails the request. The API does not report
-inserted/updated counts: the procedure does not return them.
+The call runs in one `SqlTransaction`, like the SSMS test (`BEGIN TRAN` →
+`EXEC` → `COMMIT`):
+
+1. Open the connection and check it is on the configured upload database
+   (otherwise nothing runs).
+2. `BEGIN TRANSACTION`; log `DB_NAME()`, `SUSER_SNAME()` and `USER_NAME()`
+   (the SQL login is also what the procedure stores in `usr`).
+3. Execute the procedure once and read every result set it returns to the
+   end, so an error raised by a later statement still fails the request.
+4. `COMMIT` — not cancellable once the procedure has finished. Only then is
+   success returned.
+5. On any error: `ROLLBACK` if the transaction is still open (the procedure
+   uses `XACT_ABORT ON`, so SQL Server may already have rolled it back), log,
+   rethrow; the API returns a failure.
+
+The API does not report inserted/updated counts (the procedure does not
+return them) and does not read `CoreDescrData` to verify: under the security
+policy the login may only execute the procedure. Verify with Section G of
+`SQLTests/Test_UploadData_StoredProcedure.sql`.
 
 ### JSON → database mapping
 
@@ -272,14 +288,20 @@ client abandons cancels the database call.
 
 ### Database configuration
 
-The endpoint uses the existing `DefaultConnection`: `Data Source=BMNULAADB02;
-Initial Catalog=ACQMN01`, SQL login `userAcquire` (both appsettings files; no
-environment variable, user-secrets or other override is configured). The
-procedure therefore runs in **ACQMN01**, and the latest error confirms it
-writes `ACQMN01.MyApps.CoreDescrData`. Earlier logs named `ACQMN01_DEV`,
-which this configuration never pointed to. **Confirm the intended destination
-with the database team before any write test**; if it is `ACQMN01_DEV`, only
-the connection string's `Initial Catalog` changes.
+`DefaultConnection` (`Data Source=BMNULAADB02; Initial Catalog=ACQMN01;`
+SQL login `userAcquire`) is shared by every API. The upload uses the same
+server and login but its own database:
+
+```json
+"UploadData": { "Database": "ACQMN01_DEV" }
+```
+
+`UploadDataRepository` replaces only the `Initial Catalog` with this value
+(no second connection string, no credentials in code); the lookup APIs keep
+`ACQMN01`. Remove the setting to upload to `DefaultConnection`'s database.
+After opening, the repository checks the connection really is on that
+database and refuses to run otherwise, so an upload never lands silently in
+`ACQMN01`. Each upload logs server, database, SQL login and database user.
 
 Under the company security model the application login may only execute the
 procedure: it sends no INSERT/UPDATE/DELETE of its own and needs no table

@@ -28,7 +28,7 @@ SSMS → **File → Open → File…** → `backend/BackendApi/SQLTests/Test_Upl
 | Server name | `BMNULAADB02` |
 | Authentication | **SQL Server Authentication** |
 | Login | `userAcquire` (password from the team / `appsettings.json`; never paste it into tickets) |
-| Database the backend uses | `ACQMN01` (`Initial Catalog`) |
+| Database the upload uses | `ACQMN01_DEV` (`UploadData:Database`; other APIs use `ACQMN01`) |
 
 Permissions belong to a login. If you connect with Windows Authentication
 (your own account), the results describe **your** rights, not the backend's,
@@ -40,9 +40,10 @@ A DBA who does not know the password can instead uncomment
 
 **Choose the database** on the `USE` line at the top of the script:
 
-- `ACQMN01_DEV` (default): the approved development database.
-- `ACQMN01`: the database the backend actually connects to today, where the
-  current error happens. The test is still rollback-only.
+- `ACQMN01_DEV` (default): the approved development database, which the
+  upload API writes to.
+- `ACQMN01`: the database the other APIs use; the earlier 229 errors from
+  `ACQMN01` happened there. The test is still rollback-only.
 
 Every query in the script uses the database selected there.
 
@@ -174,7 +175,8 @@ Send:
 2. Section B grids: permissions, owners, `ExecuteAs`, `Signatures`.
 3. The full error grid (`FailedStep`, `ErrorNumber`, `ErrorMessage`,
    `ErrorProcedure`, `ErrorLine`, `DatabaseName`).
-4. Which database the API should write to: `ACQMN01` or `ACQMN01_DEV`.
+4. The API's own log line `Uploading drillhole … as SQL login …` (server,
+   database, login, database user) for comparison with Section A.
 
 Ask the DBA to review the approved procedure's ownership chain or execution
 security. The least-privilege fix is to **sign the procedure with a

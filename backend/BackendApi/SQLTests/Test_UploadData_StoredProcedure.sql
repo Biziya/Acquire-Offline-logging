@@ -16,14 +16,14 @@
  HOW TO RUN (see README.md in this folder)
    1. Connect with the SAME login as the backend (SQL Server Authentication,
       userAcquire) — or, as a DBA, uncomment EXECUTE AS LOGIN in Section A.
-   2. Check the USE line below. The backend connects to ACQMN01
-      (appsettings.json); the approved development database is ACQMN01_DEV.
+   2. Check the USE line below. The upload API writes to ACQMN01_DEV
+      (UploadData:Database); the other APIs use ACQMN01.
       Every query in this script uses the database selected here.
    3. Execute the whole script (F5). Read each result grid top to bottom.
 ================================================================================
 */
 
-USE [ACQMN01_DEV];   -- << ACQMN01 reproduces the backend exactly (still rollback-only)
+USE [ACQMN01_DEV];   -- << the upload API's database (UploadData:Database)
 GO
 
 -- Optional (DBA only): test as the backend's login without knowing its password.

@@ -25,9 +25,6 @@ public sealed class UploadDataController : ControllerBase
     private readonly ILogger<UploadDataController> _logger;
     private readonly long _maxFileSizeBytes;
 
-    // "server/catalog" of DefaultConnection, for logs only (never credentials).
-    private readonly string _database;
-
     public UploadDataController(
         IUploadDataRepository repository,
         IConfiguration configuration,
@@ -36,10 +33,6 @@ public sealed class UploadDataController : ControllerBase
         _repository = repository;
         _logger = logger;
         _maxFileSizeBytes = configuration.GetValue(MaxFileSizeKey, DefaultMaxFileSizeBytes);
-
-        var connection = new SqlConnectionStringBuilder(
-            configuration.GetConnectionString(BackendApi.Data.ConfigurationExtensions.DefaultConnectionName));
-        _database = $"{connection.DataSource}/{connection.InitialCatalog}";
     }
 
     /// <summary>
@@ -120,16 +113,16 @@ public sealed class UploadDataController : ControllerBase
         {
             // A database security setting, not a problem with the file. The
             // server's message names the denied object and its database; it
-            // holds no credentials and none of the uploaded JSON.
+            // holds no credentials and none of the uploaded JSON. The
+            // repository has already logged the server, database and SQL login.
             _logger.LogError(
                 exception,
                 "Upload of {FileName} for drillhole {Drillhole} blocked by SQL Server permissions: " +
-                "error {SqlErrorNumber} in procedure {Procedure} (connected database {Database}): {SqlMessage}",
+                "error {SqlErrorNumber} in procedure {Procedure}: {SqlMessage}",
                 fileName,
                 result.Drillhole,
                 denied.Number,
                 denied.Procedure,
-                _database,
                 denied.Message);
 
             return Failure(
