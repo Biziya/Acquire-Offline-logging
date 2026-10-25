@@ -49,4 +49,18 @@ public static class ConfigurationExtensions
 
         return builder.ConnectionString;
     }
+
+    /// <summary>
+    /// Server, database and login of a connection string, for logs: never the
+    /// password or the connection string itself.
+    /// </summary>
+    public static string DescribeConnection(string connectionString)
+    {
+        var builder = new SqlConnectionStringBuilder(connectionString);
+        var login = builder.IntegratedSecurity
+            ? $"Windows authentication as {Environment.UserDomainName}\\{Environment.UserName}"
+            : $"SQL login {builder.UserID}";
+
+        return $"{builder.DataSource}/{builder.InitialCatalog}, {login}";
+    }
 }

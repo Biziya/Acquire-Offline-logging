@@ -94,6 +94,32 @@ appsettings.Development.json  CoreDescrData:UseWindowsAuthentication  true    (d
   `userAcquire`, which needs the database fix in *Troubleshooting: error 229*.
   IIS runs in the `Production` environment, so `appsettings.Development.json`
   does not apply there; do not copy it over `appsettings.json`.
+  `ConnectionConfigurationTests` fails the build if `appsettings.json` ever
+  turns Windows authentication back on.
+- At startup the API logs the environment and the CoreDescrData connection
+  without the password, e.g.
+  `Environment Production; CoreDescrData connection: BMNULAADB02/ACQMN01, SQL login userAcquire`.
+  On IIS the log appears in the stdout log when `stdoutLogEnabled` is on in
+  `web.config`, or in the Windows Event Log. `Windows authentication as …` or
+  `Environment Development` there means the wrong settings are in effect.
+
+### Production password
+
+The password should not live in Git. On the server, set the whole connection
+string as an environment variable of the IIS site. It overrides
+`appsettings.json`, and a publish does not overwrite it (unlike `web.config`):
+
+```text
+IIS Manager → AcQuireBackend → Configuration Editor
+  section: system.webServer/aspNetCore   (From: ApplicationHost.config <location path='AcQuireBackend'>)
+  environmentVariables → Add
+    name:  ConnectionStrings__DefaultConnection
+    value: Data Source=BMNULAADB02;Initial Catalog=ACQMN01;User ID=userAcquire;Password=<from the DBA>;Encrypt=True;TrustServerCertificate=True;
+```
+
+Do not set `ASPNETCORE_ENVIRONMENT=Development` or
+`CoreDescrData__UseWindowsAuthentication=true` there. Recycle the app pool
+afterwards.
 
 ## Drillholes
 
@@ -554,6 +580,9 @@ database:
 
 - `ApiRoutesTests`: exactly the six routes of the five APIs; removed routes
   return `404`.
+- `ConnectionConfigurationTests`: `appsettings.json` (Production) uses the
+  SQL login `userAcquire` with encryption; Windows authentication on/off;
+  the logged description never contains the password.
 - `TableConstants/`: `FIELDNAME` to list grouping, response keys and item
   names, safe `500`.
 - `DataViewer/`: the drillhole list (filled, empty, safe `500`); NAME / VALUE

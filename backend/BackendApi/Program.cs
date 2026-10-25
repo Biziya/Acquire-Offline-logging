@@ -1,3 +1,4 @@
+using BackendApi.Data;
 using BackendApi.Repositories.DataViewer;
 using BackendApi.Repositories.Drillholes;
 using BackendApi.Repositories.TableConstants;
@@ -67,6 +68,21 @@ builder.Services.AddCors(options =>
 // ============================================
 
 var app = builder.Build();
+
+// Which login Upload Data and Data Viewer will use (no password is logged).
+// Under IIS, Windows authentication means the computer account, e.g.
+// BDOM\BMNDULAAS01$, which has no SQL login (error 18456).
+try
+{
+    app.Logger.LogInformation(
+        "Environment {Environment}; CoreDescrData connection: {Connection}",
+        app.Environment.EnvironmentName,
+        BackendApi.Data.ConfigurationExtensions.DescribeConnection(app.Configuration.GetCoreDescrDataConnectionString()));
+}
+catch (Exception exception) when (exception is InvalidOperationException or ArgumentException)
+{
+    app.Logger.LogError(exception, "The CoreDescrData connection string is missing or invalid.");
+}
 
 // ============================================
 // 6. Swagger
