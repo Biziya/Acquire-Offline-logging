@@ -28,8 +28,8 @@ http://localhost:7047/swagger
 | --- | --- | --- | --- | --- |
 | 1 | Drillholes | `GET /api/drillholes` | `ACQMN01` (`ZOOVCH_COLLAR_LIST`) | Every drillhole with Project and Campaign |
 | 2 | Table Constants | `GET /api/table-constants` | `ACQMN01` (`QV_VS_LOOKUP_RO`) | All nine Raw Litho lookup lists |
-| 3 | Upload Data | `POST /api/upload-data` | `ACQMN01_DEV` (procedure) | Store an exported lithology JSON |
-| 4 | Data Viewer | `GET /api/dataviewer?drillhole=…` | `ACQMN01_DEV` (`MyApps.CoreDescrData`) | Stored records of one drillhole |
+| 3 | Upload Data | `POST /api/upload-data` | `ACQMN01` (procedure) | Store an exported lithology JSON |
+| 4 | Data Viewer | `GET /api/dataviewer?drillhole=…` | `ACQMN01` (`MyApps.CoreDescrData`) | Stored records of one drillhole |
 | 5 | Status | `GET /api/status` | — | Backend online check; the verified Windows user with `?includeUser=true` |
 
 No other application route exists (Swagger is Development-only
@@ -67,15 +67,16 @@ Database access uses `Microsoft.Data.SqlClient` only, always parameterised.
 
 ```text
 appsettings.json              ConnectionStrings:DefaultConnection   Data Source=BMNULAADB02; Initial Catalog=ACQMN01; User ID=userAcquire; …
-appsettings.json              CoreDescrData:Database                ACQMN01_DEV
-appsettings.Development.json  CoreDescrData:UseWindowsAuthentication  true
+appsettings.json              CoreDescrData:UseWindowsAuthentication  false   (IIS: SQL login userAcquire)
+appsettings.Development.json  CoreDescrData:UseWindowsAuthentication  true    (dotnet run: your Windows account)
 ```
 
 - Drillholes and Table Constants use `DefaultConnection` as it is (`ACQMN01`,
   SQL login `userAcquire`).
 - Upload Data and Data Viewer work on `MyApps.CoreDescrData`. They use
-  `DefaultConnection` with only the database replaced by
-  `CoreDescrData:Database` (`ConfigurationExtensions.GetCoreDescrDataConnectionString`).
+  `DefaultConnection`, with the database replaced by `CoreDescrData:Database`
+  when that is set (unset: `ACQMN01`;
+  `ConfigurationExtensions.GetCoreDescrDataConnectionString`).
   No second connection string, no credentials in code.
 - With `CoreDescrData:UseWindowsAuthentication` (Development), those two
   connect with `Integrated Security=True` as the Windows account running the
@@ -86,6 +87,12 @@ appsettings.Development.json  CoreDescrData:UseWindowsAuthentication  true
   `EXECUTE` on `dbo.InsertUpdateCoreDescr_WellCAD` (Upload Data) and `SELECT`
   on `MyApps.CoreDescrData`, or an approved read-only view or procedure in its
   place (Data Viewer).
+- On IIS the app pool runs as `ApplicationPoolIdentity`, which reaches SQL
+  Server as the computer account `BDOM\BMNDULAAS01$` (no login: error 18456).
+  So `appsettings.json` keeps Windows authentication **off** and the API uses
+  `userAcquire`, which needs the database fix in *Troubleshooting: error 229*.
+  IIS runs in the `Production` environment, so `appsettings.Development.json`
+  does not apply there; do not copy it over `appsettings.json`.
 
 ## Drillholes
 
@@ -145,7 +152,7 @@ GET /api/dataviewer?drillhole=GTZO_0001_1
 ```
 
 Read-only. Drillhole = `HOLEID`. Reads `MyApps.CoreDescrData` in the
-`CoreDescrData:Database` (`ACQMN01_DEV`), parameterised, ordered by
+`CoreDescrData:Database` (unset: `ACQMN01`), parameterised, ordered by
 `[FROM], [TO], [PRIORITY], [NAME]`:
 
 ```sql
@@ -327,7 +334,7 @@ policy the login may only execute the procedure. Verify with Section G of
 ### JSON → database mapping
 
 The procedure's `Raw core import_JSON` branch writes to
-`[ACQMN01_DEV].[MyApps].[CoreDescrData]` (`HOLEID`, `PROJECTCODE`, `FROM`,
+`[ACQMN01].[MyApps].[CoreDescrData]` (`HOLEID`, `PROJECTCODE`, `FROM`,
 `TO`, `PRIORITY`, `NAME`, `VALUE`, `COMMENT_VALUE`, `CONSISTENTCHECK`, `usr`,
 `FileName`, `PathName`), one row per interval and attribute (`NAME`/`VALUE`):
 
@@ -412,9 +419,9 @@ client abandons cancels the database call.
 ### Database
 
 See *Database configuration* above: the upload uses the `CoreDescrData`
-connection (`ACQMN01_DEV`). After opening, the repository checks the
+connection (`ACQMN01`). After opening, the repository checks the
 connection really is on that database and refuses to run otherwise, so an
-upload never lands silently in `ACQMN01`. Each upload logs server, database,
+upload never lands silently in another database. Each upload logs server, database,
 SQL login and database user. Under the company security model the login may
 only execute the procedure: the API sends no INSERT/UPDATE/DELETE of its own.
 
@@ -447,7 +454,9 @@ that one table — the application login keeps `EXECUTE` only, which is exactly
 the approved model. Not proposed: `db_owner`, `db_datawriter`, table or
 schema grants to the application, cross-db chaining, `TRUSTWORTHY`, or
 `EXECUTE AS OWNER` (it would change `SUSER_NAME()`, i.e. the `usr` column
-and the duplicate-matching key).
+and the duplicate-matching key). If direct grants are approved anyway, the
+script's B3 grants `SELECT, INSERT, UPDATE` on that one table (not the whole
+`MyApps` schema).
 
 ### Known limitations of the procedure
 
