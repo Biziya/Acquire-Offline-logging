@@ -501,4 +501,5 @@ The requests in `BackendApi.http` can be used instead of Swagger.
 dotnet restore
 dotnet build
 dotnet test ../BackendApi.Tests
+dotnet publish -c Release -o release
 ```
