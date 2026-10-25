@@ -130,7 +130,7 @@ These can be three different people, and none is ever guessed:
   restores them; Imported By is resolved again from the current user.
 
 **Imported By shows `—` when the backend cannot verify the user.** The
-identity comes from `GET /api/status?includeUser=true` (Windows Integrated
+identity comes from `GET /api/whoami` (Windows Integrated
 Authentication); see *currentUser.ts* in `src/services/README.md`.
 
 **No `imported_by` in the uploaded file.** Uploading never changes

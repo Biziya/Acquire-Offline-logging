@@ -56,6 +56,9 @@ export async function importUploadData(
     response = await fetch(buildApiUrl("/api/upload-data"), {
       method: "POST",
       body: formData,
+      // The backend requires Windows authentication and records that user as
+      // the importer; the user name is never sent in the body.
+      credentials: "include",
       signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
     });
   } catch (error) {

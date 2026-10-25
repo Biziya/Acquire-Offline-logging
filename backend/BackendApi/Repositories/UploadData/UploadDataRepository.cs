@@ -14,7 +14,7 @@ public sealed class UploadDataRepository : IUploadDataRepository
     // @fileName varchar(50). The controller rejects longer values, so nothing
     // is silently truncated here.
     public const int HoleSize = 20;
-    private const int UserSize = 50;
+    public const int UserSize = 50;
     public const int FileNameSize = 50;
 
     // A whole drillhole is one call; allow more than the 30 s default.
@@ -53,7 +53,7 @@ public sealed class UploadDataRepository : IUploadDataRepository
 
         try
         {
-            await LogIdentityAsync(connection, transaction, request.Drillhole, cancellationToken);
+            await LogIdentityAsync(connection, transaction, request, cancellationToken);
 
             await using (var command = new SqlCommand(StoredProcedureName, connection, transaction)
             {
@@ -63,10 +63,10 @@ public sealed class UploadDataRepository : IUploadDataRepository
             {
                 command.Parameters.Add("@Action", SqlDbType.VarChar, 50).Value = ActionName;
                 command.Parameters.Add("@Hole", SqlDbType.VarChar, HoleSize).Value = request.Drillhole;
-                // NULL, as in the SSMS test: the procedure stores SUSER_NAME()
-                // (the connecting login) instead, and the API has no verified
-                // web user to send.
-                command.Parameters.Add("@usr", SqlDbType.VarChar, UserSize).Value = DBNull.Value;
+                // The verified Windows user. Stored in usr only once the
+                // procedure stops replacing @usr with SUSER_NAME() (the SQL
+                // login); see Sql/UploadDataUser.sql.
+                command.Parameters.Add("@usr", SqlDbType.VarChar, UserSize).Value = request.UserName;
                 command.Parameters.Add("@fileName", SqlDbType.VarChar, FileNameSize).Value = request.FileName;
                 command.Parameters.Add("@str_json", SqlDbType.NVarChar, -1).Value = request.Json;
 
@@ -118,12 +118,12 @@ public sealed class UploadDataRepository : IUploadDataRepository
         }
     }
 
-    // Records which database and SQL identity the procedure really runs under:
-    // SUSER_SNAME() is also what the procedure stores in the usr column.
+    // Records which database and SQL identity the procedure really runs under,
+    // next to the Windows user it uploads for.
     private async Task LogIdentityAsync(
         SqlConnection connection,
         SqlTransaction transaction,
-        string drillhole,
+        UploadDataRequest request,
         CancellationToken cancellationToken)
     {
         await using var command = new SqlCommand(
@@ -135,8 +135,9 @@ public sealed class UploadDataRepository : IUploadDataRepository
         if (await reader.ReadAsync(cancellationToken))
         {
             _logger.LogInformation(
-                "Uploading drillhole {Drillhole} to {Server}/{Database} as SQL login {SqlLogin} (database user {DatabaseUser}).",
-                drillhole,
+                "Uploading drillhole {Drillhole} for {WindowsUser} to {Server}/{Database} as SQL login {SqlLogin} (database user {DatabaseUser}).",
+                request.Drillhole,
+                request.UserName,
                 connection.DataSource,
                 reader.GetString(0),
                 reader.GetString(1),

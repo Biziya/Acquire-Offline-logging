@@ -9,11 +9,12 @@ import { isRecord } from "../types/validation";
  *   - "Imported By" on Upload Data and the user name in the sidebar.
  *
  * A browser cannot read the Windows login (JavaScript has no API for it), so
- * the backend proves it: GET /api/status?includeUser=true answers with a
- * Windows Integrated Authentication challenge (Negotiate: Kerberos or NTLM),
- * the browser authenticates the signed-in user automatically for localhost /
- * Local intranet sites, and the response carries `userName`. The plain status
- * poll (StatusIndicator) stays anonymous.
+ * the backend proves it: GET /api/whoami answers with a Windows Integrated
+ * Authentication challenge (Negotiate: Kerberos or NTLM), the browser
+ * authenticates the signed-in user automatically for localhost / Local
+ * intranet sites, and the response carries `userName`. It is the same user
+ * the backend records for an upload. The plain status poll (StatusIndicator)
+ * stays anonymous.
  *
  * An error status (e.g. 401 when the browser did not send Windows
  * credentials), a malformed body or a network failure gives null, and callers
@@ -21,7 +22,7 @@ import { isRecord } from "../types/validation";
  * Nothing is ever guessed — not the hostname, the user agent, a build-time
  * user name or anything the user types.
  */
-const CURRENT_USER_PATH = "/api/status?includeUser=true";
+const CURRENT_USER_PATH = "/api/whoami";
 const MAX_USER_NAME_LENGTH = 256;
 
 let request: Promise<string | null> | null = null;

@@ -12,6 +12,12 @@ public sealed class UploadDataRequest
     public required string FileName { get; init; }
 
     /// <summary>
+    /// The verified Windows user who uploads (never a value from the request
+    /// body), sent as <c>@usr</c>.
+    /// </summary>
+    public required string UserName { get; init; }
+
+    /// <summary>
     /// The validated upload reduced to the fields the procedure stores
     /// (see <c>UploadDataValidator</c>), sent as <c>@str_json</c>.
     /// </summary>
