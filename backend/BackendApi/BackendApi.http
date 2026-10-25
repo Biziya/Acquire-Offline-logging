@@ -16,7 +16,13 @@ Accept: application/json
 
 ###
 
-# Read-only: the stored CoreDescrData rows of one drillhole (HOLEID).
+# Read-only: every drillhole with stored CoreDescrData records.
+GET {{BackendApi_HostAddress}}/api/dataviewer/drillholes
+Accept: application/json
+
+###
+
+# Read-only: the stored intervals of one drillhole (HOLEID).
 GET {{BackendApi_HostAddress}}/api/dataviewer?drillhole=GTZO_0001_1
 Accept: application/json
 

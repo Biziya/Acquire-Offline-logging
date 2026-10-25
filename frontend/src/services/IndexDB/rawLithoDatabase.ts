@@ -90,6 +90,25 @@ export function readValue(
     store.get(key),
   );
 }
+/* Every key and value of a store, in key order, from one read transaction. */
+export async function readEntries(
+  storeName: string,
+): Promise<[IDBValidKey, unknown][]> {
+  const entries: [IDBValidKey, unknown][] = [];
+
+  await runTransaction(storeName, "readonly", (store) => {
+    const request = store.openCursor();
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) return;
+      entries.push([cursor.key, cursor.value]);
+      cursor.continue();
+    };
+    return request;
+  });
+
+  return entries;
+}
 // Serialize writes in invocation order, including database-open latency.
 let writeQueue: Promise<unknown> = Promise.resolve();
 function enqueue<T>(operation: () => Promise<T>): Promise<T> {

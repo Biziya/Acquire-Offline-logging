@@ -11,6 +11,7 @@ export function readUiConfig(text: string) {
     reader.integer(duration[type], `toast.duration.${type}`, 500);
 
   return {
+    appName: reader.string(reader.root.appName, "appName"),
     toastDuration: {
       error: durationOf("error"),
       warning: durationOf("warning"),

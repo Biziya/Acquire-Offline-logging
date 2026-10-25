@@ -22,11 +22,45 @@ public sealed class DataViewerApiTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task ReturnsTheDrillholeRecordsWithProjectAndCampaign()
+    public async Task ListsTheDrillholesWithStoredRecords()
+    {
+        var records = new FakeRecords { HoleIds = ["DH001", "DH002"] };
+
+        var response = await CreateClient(records, new FakeDrillholes()).GetAsync("/api/dataviewer/drillholes");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("[\"DH001\",\"DH002\"]", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task ListsNoDrillholesForAnEmptyTable()
+    {
+        var response = await CreateClient(new FakeRecords(), new FakeDrillholes()).GetAsync("/api/dataviewer/drillholes");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("[]", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task ReturnsASafeErrorWhenTheDrillholeListFails()
+    {
+        var records = new FakeRecords { Failure = new InvalidOperationException("Invalid object name 'MyApps.CoreDescrData'.") };
+
+        var response = await CreateClient(records, new FakeDrillholes()).GetAsync("/api/dataviewer/drillholes");
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        var text = await response.Content.ReadAsStringAsync();
+        Assert.Contains("Unable to retrieve drillholes.", text);
+        Assert.DoesNotContain("CoreDescrData", text);
+    }
+
+    [Fact]
+    public async Task ReturnsOneIntervalPerFromToWithProjectAndCampaign()
     {
         var records = new FakeRecords(
             Record("LithoFacies", "0--", from: 5.0m, to: 10.0m),
-            Record("Colour", "10G4/2", from: 5.0m, to: 10.0m));
+            Record("Colour", "10G4/2", from: 5.0m, to: 10.0m),
+            Record("LithoFacies", "SS", from: 10.0m, to: 12.5m));
         var drillholes = new FakeDrillholes(Collar("ZOOVCH", "2015"));
 
         var body = await GetOk(records, drillholes, Hole);
@@ -34,24 +68,19 @@ public sealed class DataViewerApiTests : IClassFixture<ApiFactory>
         Assert.Equal(Hole, body["drillhole"]!.GetValue<string>());
         Assert.Equal("ZOOVCH", body["project"]!.GetValue<string>());
         Assert.Equal("2015", body["campaign"]!.GetValue<string>());
-        Assert.Equal(2, body["totalRecords"]!.GetValue<int>());
+        Assert.Equal(2, body["totalIntervals"]!.GetValue<int>());
+        Assert.Equal(3, body["totalRecords"]!.GetValue<int>());
+        Assert.Equal(0, body["hiddenValues"]!.GetValue<int>());
+        Assert.Equal("[\"userAcquire\"]", body["storedBy"]!.ToJsonString());
+        Assert.Equal("[\"yashgaa.json\"]", body["fileNames"]!.ToJsonString());
 
-        var first = body["records"]![0]!.AsObject();
+        var first = body["intervals"]![0]!.AsObject();
         Assert.Equal(
-            ["holeId", "projectCode", "from", "to", "priority", "name", "value", "commentValue",
-             "consistentCheck", "usr", "fileName", "pathName", "createdAt", "modifiedAt", "importedBy"],
+            ["projectCode", "lithoFrom", "lithoTo", "priority", "usr", "values"],
             first.Select(property => property.Key));
-        Assert.Equal("LithoFacies", first["name"]!.GetValue<string>());
-        Assert.Equal("0--", first["value"]!.GetValue<string>());
-        Assert.Equal("5.0", first["from"]!.ToJsonString());      // number, as stored
-        Assert.Equal("1", first["priority"]!.ToJsonString());
-        Assert.Equal("\"2026-10-22T10:00:00\"", first["createdAt"]!.ToJsonString());
-
-        // Database NULLs stay null; nothing is filled in.
-        Assert.Null(first["commentValue"]);
-        Assert.Null(first["consistentCheck"]);
-        Assert.Null(first["fileName"]);
-        Assert.Null(first["importedBy"]);
+        Assert.Equal("5.0", first["lithoFrom"]!.ToJsonString());      // number, as stored
+        Assert.Equal("10.0", first["lithoTo"]!.ToJsonString());
+        Assert.Equal("{\"lithoCode\":\"0--\",\"colorCode\":\"10G4/2\"}", first["values"]!.ToJsonString());
 
         Assert.Equal([Hole], records.Requests);
         Assert.Equal([Hole], drillholes.Requests);
@@ -60,11 +89,16 @@ public sealed class DataViewerApiTests : IClassFixture<ApiFactory>
     [Fact]
     public async Task ReturnsAnEmptyResultForADrillholeWithoutRecords()
     {
-        var body = await GetOk(new FakeRecords(), new FakeDrillholes(Collar("ZOOVCH", "2015")), "UNKNOWN_HOLE");
+        var drillholes = new FakeDrillholes(Collar("ZOOVCH", "2015"));
 
-        Assert.Equal(0, body["totalRecords"]!.GetValue<int>());
-        Assert.Empty(body["records"]!.AsArray());
-        Assert.Equal("ZOOVCH", body["project"]!.GetValue<string>());
+        var body = await GetOk(new FakeRecords(), drillholes, "UNKNOWN_HOLE");
+
+        Assert.Equal(0, body["totalIntervals"]!.GetValue<int>());
+        Assert.Empty(body["intervals"]!.AsArray());
+        Assert.Empty(body["projects"]!.AsArray());
+        Assert.Null(body["project"]);
+        Assert.Null(body["campaign"]);
+        Assert.Empty(drillholes.Requests);    // nothing to look up
     }
 
     [Fact]
@@ -72,14 +106,14 @@ public sealed class DataViewerApiTests : IClassFixture<ApiFactory>
     {
         var body = await GetOk(new FakeRecords(Record("Colour", "RED")), new FakeDrillholes(), Hole);
 
-        Assert.Equal("ZOOVCH", body["project"]!.GetValue<string>());   // from the stored rows
+        Assert.Equal("ZOOVCH", body["project"]!.GetValue<string>());
         Assert.Null(body["campaign"]);
     }
 
     [Fact]
-    public async Task PicksTheDrillholeEntryMatchingTheStoredProject()
+    public async Task MatchesTheCampaignOnHoleIdAndProjectCode()
     {
-        var drillholes = new FakeDrillholes(Collar("OTHER", "2014"), Collar("ZOOVCH", "2015"));
+        var drillholes = new FakeDrillholes(Collar("OTHER", "2014"), Collar("zoovch ", "2015"));
 
         var body = await GetOk(new FakeRecords(Record("Colour", "RED")), drillholes, Hole);
 
@@ -88,7 +122,7 @@ public sealed class DataViewerApiTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task NeverGuessesBetweenConflictingDrillholeEntries()
+    public async Task NeverGuessesBetweenConflictingCampaigns()
     {
         var drillholes = new FakeDrillholes(Collar("ZOOVCH", "2015"), Collar("ZOOVCH", "2016"));
 
@@ -96,6 +130,37 @@ public sealed class DataViewerApiTests : IClassFixture<ApiFactory>
 
         Assert.Equal("ZOOVCH", body["project"]!.GetValue<string>());
         Assert.Null(body["campaign"]);
+    }
+
+    [Fact]
+    public async Task ListsEveryStoredProjectWithoutPickingOne()
+    {
+        var records = new FakeRecords(
+            Record("Colour", "RED"),
+            Record("Colour", "GY", project: "OTHER"));
+        var drillholes = new FakeDrillholes(Collar("ZOOVCH", "2015"), Collar("OTHER", "2014"));
+
+        var body = await GetOk(records, drillholes, Hole);
+
+        Assert.Null(body["project"]);
+        Assert.Null(body["campaign"]);
+        Assert.Equal(
+            "[{\"projectCode\":\"ZOOVCH\",\"campaign\":\"2015\"},{\"projectCode\":\"OTHER\",\"campaign\":\"2014\"}]",
+            body["projects"]!.ToJsonString());
+        Assert.Equal(2, body["totalIntervals"]!.GetValue<int>());   // one per project
+        Assert.Equal([Hole], drillholes.Requests);                  // one lookup, not one per project
+    }
+
+    [Fact]
+    public async Task StillShowsTheRecordsWhenTheCampaignLookupFails()
+    {
+        var drillholes = new FakeDrillholes { Failure = new InvalidOperationException("ZOOVCH_COLLAR_LIST unavailable") };
+
+        var body = await GetOk(new FakeRecords(Record("Colour", "RED")), drillholes, Hole);
+
+        Assert.Equal("ZOOVCH", body["project"]!.GetValue<string>());
+        Assert.Null(body["campaign"]);
+        Assert.Equal(1, body["totalIntervals"]!.GetValue<int>());
     }
 
     [Theory]
@@ -144,17 +209,22 @@ public sealed class DataViewerApiTests : IClassFixture<ApiFactory>
             }))
             .CreateClient();
 
-    private static DataViewerRecord Record(string name, string value, decimal from = 5.0m, decimal to = 10.0m) => new()
+    private static DataViewerRecord Record(
+        string name,
+        string value,
+        decimal from = 5.0m,
+        decimal to = 10.0m,
+        string project = "ZOOVCH") => new()
     {
         HoleId = Hole,
-        ProjectCode = "ZOOVCH",
+        ProjectCode = project,
         From = from,
         To = to,
         Priority = 1,
         Name = name,
         Value = value,
         Usr = "userAcquire",
-        CreatedAt = new DateTime(2026, 10, 22, 10, 0, 0)
+        FileName = "yashgaa.json"
     };
 
     private static DrillholeResponse Collar(string project, string campaign) =>
@@ -163,7 +233,13 @@ public sealed class DataViewerApiTests : IClassFixture<ApiFactory>
     private sealed class FakeRecords(params DataViewerRecord[] records) : IDataViewerRepository
     {
         public List<string> Requests { get; } = [];
+        public IReadOnlyList<string> HoleIds { get; init; } = [];
         public Exception? Failure { get; init; }
+
+        public Task<IReadOnlyList<string>> GetHoleIdsAsync(CancellationToken cancellationToken = default) =>
+            Failure is null
+                ? Task.FromResult(HoleIds)
+                : Task.FromException<IReadOnlyList<string>>(Failure);
 
         public Task<IReadOnlyList<DataViewerRecord>> GetByHoleIdAsync(string holeId, CancellationToken cancellationToken = default)
         {
@@ -177,6 +253,7 @@ public sealed class DataViewerApiTests : IClassFixture<ApiFactory>
     private sealed class FakeDrillholes(params DrillholeResponse[] collars) : IDrillholeRepository
     {
         public List<string> Requests { get; } = [];
+        public Exception? Failure { get; init; }
 
         public Task<IReadOnlyList<DrillholeResponse>> GetAllAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<DrillholeResponse>>(collars);
@@ -184,7 +261,9 @@ public sealed class DataViewerApiTests : IClassFixture<ApiFactory>
         public Task<IReadOnlyList<DrillholeResponse>> GetByHoleIdAsync(string holeId, CancellationToken cancellationToken = default)
         {
             Requests.Add(holeId);
-            return Task.FromResult<IReadOnlyList<DrillholeResponse>>(collars);
+            return Failure is null
+                ? Task.FromResult<IReadOnlyList<DrillholeResponse>>(collars)
+                : Task.FromException<IReadOnlyList<DrillholeResponse>>(Failure);
         }
     }
 }

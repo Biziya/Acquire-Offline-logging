@@ -1,16 +1,17 @@
 import type { Drillhole } from "../../types/domain";
 import DatabaseViewerTable from "./DatabaseViewerTable";
 import { databaseViewerConfig } from "./config";
+import type { DataViewerResponse } from "./databaseViewerTypes";
 import {
   dataViewerScroll,
   loadDataViewerRecords,
   useDataViewerState,
 } from "./databaseViewerStore";
+import { useDataViewerDrillholes } from "./useDataViewerDrillholes";
 import { useToast } from "../../hooks/useToast";
 import Toast from "../../components/Toast";
-// The Raw Litho drillhole selector and list, reused as they are.
+// The Raw Litho drillhole selector, reused as it is.
 import RawLithoFilters from "../RawLitho/RawLithoFilters";
-import { useDrillholes } from "../RawLitho/hooks/useDrillholes";
 import { OUTLINE_BUTTON, OUTLINE_BUTTON_NAVY } from "../RawLitho/rawLithoStyles";
 
 const { title } = databaseViewerConfig;
@@ -24,15 +25,32 @@ const EMPTY_MESSAGES = {
 } as const;
 
 /*
- * Read-only view of the records stored for one drillhole (GET /api/dataviewer,
- * filtered by HOLEID), with its Project and Campaign, laid out like the Raw
- * Litho table. Nothing is edited or written. The state lives in
+ * Project and Campaign as stored. A drillhole stored under several projects
+ * lists each one (with its campaign, "—" where unknown) instead of picking one.
+ */
+function shownDrillhole(data: DataViewerResponse): Drillhole {
+  const { projects } = data;
+
+  return {
+    holeId: data.drillhole,
+    projectCode: projects.map((project) => project.projectCode).join(", "),
+    campaign: projects.some((project) => project.campaign)
+      ? projects.map((project) => project.campaign ?? "—").join(", ")
+      : "",
+  };
+}
+
+/*
+ * Read-only view of the lithology stored in MyApps.CoreDescrData for one
+ * drillhole (GET /api/dataviewer), with its Project and Campaign, laid out
+ * like the Raw Litho table. The selector lists only drillholes that have
+ * stored records. Nothing is edited or written. The state lives in
  * databaseViewerStore, so leaving the page and coming back keeps the
  * drillhole, records and scroll position without a new request.
  */
 function DatabaseViewer() {
   const { toast, showToast, hideToast } = useToast();
-  const { drillholes, isLoading, error } = useDrillholes(showToast);
+  const { drillholes, isLoading, error } = useDataViewerDrillholes(showToast);
   const { holeId, view } = useDataViewerState();
 
   function loadRecords(nextHoleId: string) {
@@ -42,21 +60,13 @@ function DatabaseViewer() {
     });
   }
 
-  const loaded = view.status === "loaded" ? view : null;
-  // Project and Campaign as the Data Viewer API resolved them.
-  const shownDrillhole: Drillhole | null = loaded
-    ? {
-        holeId: loaded.data.drillhole,
-        projectCode: loaded.data.project ?? "",
-        campaign: loaded.data.campaign ?? "",
-      }
-    : null;
+  const loaded = view.status === "loaded" ? view.data : null;
 
   let recordStatus = "No drillhole selected";
   if (view.status === "loading") recordStatus = "Loading records…";
   else if (view.status === "error") recordStatus = "Records unavailable";
   else if (loaded)
-    recordStatus = `${numberFormat.format(loaded.table.rows.length)} intervals · ${numberFormat.format(loaded.data.totalRecords)} stored values`;
+    recordStatus = `${numberFormat.format(loaded.totalIntervals)} intervals · ${numberFormat.format(loaded.totalRecords)} stored values`;
 
   return (
     <section className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden">
@@ -67,7 +77,7 @@ function DatabaseViewer() {
       <RawLithoFilters
         drillholes={drillholes}
         selectedHoleId={holeId}
-        selectedDrillhole={shownDrillhole}
+        selectedDrillhole={loaded ? shownDrillhole(loaded) : null}
         isLoading={isLoading}
         error={error}
         onDrillholeChange={loadRecords}
@@ -80,16 +90,16 @@ function DatabaseViewer() {
         <p className="m-0 text-[0.8rem] text-rl-text-muted" aria-live="polite">
           {recordStatus}
         </p>
-        {loaded && loaded.table.storedBy.length > 0 && (
+        {loaded && loaded.storedBy.length > 0 && (
           <p className="m-0 text-[0.8rem] text-rl-text-muted">
-            Stored by {loaded.table.storedBy.join(", ")}
-            {loaded.table.fileNames.length > 0 &&
-              ` · File ${loaded.table.fileNames.join(", ")}`}
+            Stored by {loaded.storedBy.join(", ")}
+            {loaded.fileNames.length > 0 &&
+              ` · File ${loaded.fileNames.join(", ")}`}
           </p>
         )}
-        {loaded && loaded.table.hiddenValues > 0 && (
+        {loaded && loaded.hiddenValues > 0 && (
           <p className="m-0 text-[0.8rem] text-[#7a4b00]" role="note">
-            {numberFormat.format(loaded.table.hiddenValues)} stored values have no
+            {numberFormat.format(loaded.hiddenValues)} stored values have no
             Raw Litho column and are not shown
           </p>
         )}
@@ -107,7 +117,7 @@ function DatabaseViewer() {
       <DatabaseViewerTable
         // A new drillhole starts at the top of its records.
         key={holeId}
-        rows={loaded?.table.rows ?? []}
+        intervals={loaded?.intervals ?? []}
         emptyMessage={EMPTY_MESSAGES[view.status]}
         initialScrollTop={dataViewerScroll.get()}
         onScroll={dataViewerScroll.set}

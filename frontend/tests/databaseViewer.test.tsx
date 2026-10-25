@@ -3,51 +3,67 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import DatabaseViewer from "../src/pages/DatabaseViewer/DatabaseViewer";
 import type {
-  DataViewerRecord,
+  DataViewerInterval,
   DataViewerResponse,
 } from "../src/pages/DatabaseViewer/databaseViewerTypes";
-import { buildDataViewerTable } from "../src/pages/DatabaseViewer/databaseViewerRows";
 import { resetDataViewerState } from "../src/pages/DatabaseViewer/databaseViewerStore";
+import { resetDataViewerDrillholes } from "../src/pages/DatabaseViewer/useDataViewerDrillholes";
 import { INDEX_COLUMN_WIDTH, tableColumns } from "../src/pages/RawLitho/constants";
-import { getDataViewerRecords } from "../src/services/Api/dataViewerApi";
+import { getDrillholes } from "../src/services/Api/drillholeApi";
+import {
+  getDataViewerDrillholes,
+  getDataViewerRecords,
+} from "../src/services/Api/dataViewerApi";
 import { deferred } from "./deferred";
 import { stubDesktopViewport } from "./viewport";
 
+// Raw Litho's list must not be used here.
 vi.mock("../src/services/Api/drillholeApi", () => ({
-  getDrillholes: vi.fn(async () => [
-    { holeId: "GTZO_0001_1", projectCode: "ZOOVCH", campaign: "2015" },
-    { holeId: "GTZO_0002_1", projectCode: "ZOOVCH", campaign: "2016" },
-  ]),
+  getDrillholes: vi.fn(async () => [{ holeId: "NOT_STORED", projectCode: "P", campaign: "C" }]),
 }));
 vi.mock("../src/services/Api/dataViewerApi", () => ({
+  getDataViewerDrillholes: vi.fn(),
   getDataViewerRecords: vi.fn(),
 }));
 
 stubDesktopViewport();
 
-function record(name: string, value: string | null, overrides: Partial<DataViewerRecord> = {}): DataViewerRecord {
+function interval(
+  values: DataViewerInterval["values"],
+  overrides: Partial<DataViewerInterval> = {},
+): DataViewerInterval {
   return {
-    holeId: "GTZO_0001_1",
     projectCode: "ZOOVCH",
-    from: 5,
-    to: 10,
+    lithoFrom: 5,
+    lithoTo: 10,
     priority: 1,
-    name,
-    value,
-    commentValue: null,
-    consistentCheck: null,
     usr: "DOMAIN\\bsarangerel",
-    fileName: "yashgaa.json",
-    pathName: null,
-    createdAt: "2026-10-22T10:00:00",
-    modifiedAt: null,
-    importedBy: null,
+    values,
     ...overrides,
   };
 }
 
-function response(drillhole: string, records: DataViewerRecord[], campaign: string | null = "2015"): DataViewerResponse {
-  return { drillhole, project: "ZOOVCH", campaign, totalRecords: records.length, records };
+function response(
+  drillhole: string,
+  intervals: DataViewerInterval[],
+  campaign: string | null = "2015",
+  overrides: Partial<DataViewerResponse> = {},
+): DataViewerResponse {
+  const stored = intervals.length > 0;
+
+  return {
+    drillhole,
+    project: stored ? "ZOOVCH" : null,
+    campaign: stored ? campaign : null,
+    projects: stored ? [{ projectCode: "ZOOVCH", campaign }] : [],
+    totalIntervals: intervals.length,
+    totalRecords: intervals.reduce((sum, item) => sum + Object.keys(item.values).length, 0),
+    hiddenValues: 0,
+    storedBy: stored ? ["DOMAIN\\bsarangerel"] : [],
+    fileNames: stored ? ["yashgaa.json"] : [],
+    intervals,
+    ...overrides,
+  };
 }
 
 const rows = (container: HTMLElement) =>
@@ -66,38 +82,42 @@ async function chooseDrillhole(user: ReturnType<typeof userEvent.setup>, holeId:
   await user.click(screen.getByRole("option", { name: holeId }));
 }
 
-describe("Database Viewer rows", () => {
-  it("turns NAME / VALUE rows into one Raw Litho row per interval, values unchanged", () => {
-    const table = buildDataViewerTable([
-      record("LithoFacies", "0--"),
-      record("Colour", "10G4/2"),
-      record("RedoxFacies", "0042_MN1"),
-      record("LithologyComments", null, { commentValue: "Fine  sand" }),
-      record("OM", "0", { from: 10, to: 12.5 }),
-      record("WellCAD_Extra", "x"),                                          // no Raw Litho column
-      record("LithoFacies", "SS", { usr: "userAcquire" }),                   // another upload
-    ]);
-
-    expect(table.rows.map((row) => [row.lithoFrom, row.lithoTo, row.values])).toEqual([
-      [5, 10, { lithoCode: "0--", colorCode: "10G4/2", redoxCode: "0042_MN1", lithologyComments: "Fine  sand" }],
-      [10, 12.5, { om: "0" }],
-      [5, 10, { lithoCode: "SS" }],
-    ]);
-    expect(table.hiddenValues).toBe(1);
-    expect(table.storedBy).toEqual(["DOMAIN\\bsarangerel", "userAcquire"]);
-    expect(table.fileNames).toEqual(["yashgaa.json"]);
-  });
-});
-
 describe("Database Viewer page", () => {
   beforeEach(() => {
     vi.mocked(getDataViewerRecords).mockReset();
+    vi.mocked(getDataViewerDrillholes).mockReset();
+    vi.mocked(getDataViewerDrillholes).mockResolvedValue(["GTZO_0001_1", "GTZO_0002_1"]);
     resetDataViewerState();
+    resetDataViewerDrillholes();
+  });
+
+  it("offers exactly the drillholes stored in CoreDescrData", async () => {
+    const user = userEvent.setup();
+    render(<DatabaseViewer />);
+
+    const input = screen.getByRole("combobox", { name: "Drillhole" });
+    await waitFor(() => expect(input).toBeEnabled());
+    await user.click(input);
+
+    expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual([
+      "GTZO_0001_1",
+      "GTZO_0002_1",
+    ]);
+    expect(screen.queryByText("Recent Working Drillholes")).toBeNull();
+    expect(getDrillholes).not.toHaveBeenCalled();
+  });
+
+  it("reports a drillhole list that cannot be loaded", async () => {
+    vi.mocked(getDataViewerDrillholes).mockRejectedValue(new Error("HTTP 500"));
+    render(<DatabaseViewer />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Unable to load drillholes");
+    expect(screen.getByRole("combobox", { name: "Drillhole" })).toBeDisabled();
   });
 
   it("uses exactly the Raw Litho table's headers and widths", async () => {
     vi.mocked(getDataViewerRecords).mockResolvedValue(
-      response("GTZO_0001_1", [record("LithoFacies", "0--")]),
+      response("GTZO_0001_1", [interval({ lithoCode: "0--" })]),
     );
     const user = userEvent.setup();
     const { container } = render(<DatabaseViewer />);
@@ -119,12 +139,20 @@ describe("Database Viewer page", () => {
 
   it("shows each interval in the Raw Litho columns with Project and Campaign", async () => {
     vi.mocked(getDataViewerRecords).mockResolvedValue(
-      response("GTZO_0001_1", [
-        record("LithoFacies", "0--"),
-        record("Colour", "10G4/2"),
-        record("RedoxFacies", "0042_MN1"),
-        record("Mystery", "?"),
-      ]),
+      response(
+        "GTZO_0001_1",
+        [
+          interval({
+            lithoCode: "0--",
+            colorCode: "10G4/2",
+            redoxCode: "0042_MN1",
+            lithologyComments: "Fine  sand",
+            granulo: null,
+          }),
+        ],
+        "2015",
+        { totalRecords: 6, hiddenValues: 1 },
+      ),
     );
     const user = userEvent.setup();
     const { container } = render(<DatabaseViewer />);
@@ -132,7 +160,7 @@ describe("Database Viewer page", () => {
     expect(screen.getByText("No drillhole selected")).toBeInTheDocument();
     await chooseDrillhole(user, "GTZO_0001_1");
 
-    expect(await screen.findByText("1 intervals · 4 stored values")).toBeInTheDocument();
+    expect(await screen.findByText("1 intervals · 6 stored values")).toBeInTheDocument();
     expect(fieldValue("Project")).toHaveTextContent("ZOOVCH");
     expect(fieldValue("Campaign")).toHaveTextContent("2015");
     expect(screen.getByRole("note")).toHaveTextContent("1 stored values have no Raw Litho column");
@@ -151,8 +179,11 @@ describe("Database Viewer page", () => {
       lithoCode: "0--",
       colorCode: "10G4/2",
       redoxCode: "0042_MN1",
+      lithologyComments: "Fine  sand",
+      granulo: "",
       ca: "",
       omFacies: "",
+      py: "",
     });
 
     // Read-only: plain text cells only.
@@ -160,9 +191,34 @@ describe("Database Viewer page", () => {
     expect(table.querySelector("input, select, textarea, button")).toBeNull();
   });
 
+  it("lists every stored project instead of picking one", async () => {
+    vi.mocked(getDataViewerRecords).mockResolvedValue(
+      response(
+        "GTZO_0001_1",
+        [interval({ lithoCode: "SS" }), interval({ lithoCode: "CL" }, { projectCode: "OTHER" })],
+        null,
+        {
+          project: null,
+          campaign: null,
+          projects: [
+            { projectCode: "ZOOVCH", campaign: "2015" },
+            { projectCode: "OTHER", campaign: null },
+          ],
+        },
+      ),
+    );
+    const user = userEvent.setup();
+    render(<DatabaseViewer />);
+    await chooseDrillhole(user, "GTZO_0001_1");
+    await screen.findByText(/2 intervals/);
+
+    expect(fieldValue("Project")).toHaveTextContent("ZOOVCH, OTHER");
+    expect(fieldValue("Campaign")).toHaveTextContent("2015, —");
+  });
+
   it("keeps the drillhole, records and scroll position after leaving the page, without a new request", async () => {
     const many = Array.from({ length: 400 }, (_, index) =>
-      record("LithoFacies", `C${index}`, { from: index, to: index + 1 }),
+      interval({ lithoCode: `C${index}` }, { lithoFrom: index, lithoTo: index + 1 }),
     );
     vi.mocked(getDataViewerRecords).mockResolvedValue(response("GTZO_0001_1", many));
     const user = userEvent.setup();
@@ -173,9 +229,9 @@ describe("Database Viewer page", () => {
     const frame = screen.getByRole("region", { name: "Lithology records" });
     frame.scrollTop = 2800;
     frame.dispatchEvent(new Event("scroll"));
-    first.unmount();                                   // navigate away
+    first.unmount(); // navigate away
 
-    const { container } = render(<DatabaseViewer />);  // and back
+    const { container } = render(<DatabaseViewer />); // and back
     expect(screen.getByText(/400 intervals/)).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "Drillhole" })).toHaveValue("GTZO_0001_1");
     expect(fieldValue("Campaign")).toHaveTextContent("2015");
@@ -192,7 +248,7 @@ describe("Database Viewer page", () => {
     await chooseDrillhole(user, "GTZO_0001_1");
     first.unmount();
 
-    pending.resolve(response("GTZO_0001_1", [record("LithoFacies", "0--")]));
+    pending.resolve(response("GTZO_0001_1", [interval({ lithoCode: "0--" })]));
     render(<DatabaseViewer />);
 
     expect(await screen.findByText(/1 intervals/)).toBeInTheDocument();
@@ -213,9 +269,9 @@ describe("Database Viewer page", () => {
     await chooseDrillhole(user, "GTZO_0002_1");
     expect(olderSignal.aborted).toBe(true);
 
-    newer.resolve(response("GTZO_0002_1", [record("LithoFacies", "NEW", { holeId: "GTZO_0002_1" })], "2016"));
+    newer.resolve(response("GTZO_0002_1", [interval({ lithoCode: "NEW" })], "2016"));
     await screen.findByText(/1 intervals/);
-    older.resolve(response("GTZO_0001_1", [record("LithoFacies", "OLD")]));
+    older.resolve(response("GTZO_0001_1", [interval({ lithoCode: "OLD" })]));
 
     await waitFor(() => expect(fieldValue("Campaign")).toHaveTextContent("2016"));
     expect(rows(container)[0]).toHaveTextContent("NEW");
@@ -223,13 +279,14 @@ describe("Database Viewer page", () => {
   });
 
   it("treats a drillhole without stored records as an empty result", async () => {
-    vi.mocked(getDataViewerRecords).mockResolvedValue(response("GTZO_0001_1", [], null));
+    vi.mocked(getDataViewerRecords).mockResolvedValue(response("GTZO_0001_1", []));
     const user = userEvent.setup();
     render(<DatabaseViewer />);
 
     await chooseDrillhole(user, "GTZO_0001_1");
 
     expect(await screen.findByText("No records are stored for this drillhole.")).toBeInTheDocument();
+    expect(fieldValue("Project")).toHaveTextContent("—");
     expect(fieldValue("Campaign")).toHaveTextContent("—");
     expect(screen.queryByRole("alert")).toBeNull();
   });
@@ -237,7 +294,7 @@ describe("Database Viewer page", () => {
   it("reports a failed request with the shared error toast and can retry", async () => {
     vi.mocked(getDataViewerRecords)
       .mockRejectedValueOnce(new Error("Data Viewer request failed with HTTP 500."))
-      .mockResolvedValueOnce(response("GTZO_0001_1", [record("LithoFacies", "0--")]));
+      .mockResolvedValueOnce(response("GTZO_0001_1", [interval({ lithoCode: "0--" })]));
     const user = userEvent.setup();
     render(<DatabaseViewer />);
 

@@ -3,6 +3,7 @@ import { isRecord } from "../../types/validation";
 import {
   deleteValue,
   DRAFT_STORE,
+  readEntries,
   readValue,
   SESSION_STORE,
   writeValue,
@@ -33,6 +34,16 @@ export async function readRawLithoDraft(draftKey: string | null) {
   if (!draftKey) return null;
 
   return unwrapStoredDraft(await readValue(DRAFT_STORE, draftKey));
+}
+
+/* Every stored draft with its drillhole key. Read-only; nothing is changed. */
+export async function readRawLithoDrafts() {
+  const entries = await readEntries(DRAFT_STORE);
+
+  return entries.flatMap(([key, storedValue]) => {
+    const draftKey = buildRawLithoDraftKey(key);
+    return draftKey ? [{ draftKey, draft: unwrapStoredDraft(storedValue) }] : [];
+  });
 }
 
 export function writeRawLithoDraft(

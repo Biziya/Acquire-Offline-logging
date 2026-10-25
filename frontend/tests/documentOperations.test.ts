@@ -13,7 +13,11 @@ import {
   readRawLithoImport,
 } from "../src/pages/RawLitho/rawLithoHelpers";
 import { findDuplicateIntervalRowIds } from "../src/pages/RawLitho/rawLithoValidation";
-import { orderDrillholes } from "../src/pages/RawLitho/drillholeOrdering";
+import {
+  hasWorkingData,
+  orderDrillholes,
+  pickRecentWorkingHoleIds,
+} from "../src/pages/RawLitho/drillholeOrdering";
 
 const complete = () => ({
   ...createBlankDocument({ drillhole: "A" }),
@@ -140,14 +144,42 @@ describe("document operations", () => {
     });
     await expect(readRawLithoImport(invalid)).rejects.toThrow();
   });
-  it("puts three recent selections before the remaining newest-first drillholes", () => {
+  it("puts three recent drillholes before the remaining newest-first drillholes", () => {
     const holes = ["A", "B", "C", "D", "E"].map((holeId) => ({
       holeId,
       projectCode: "P",
       campaign: "C",
     }));
-    expect(
-      orderDrillholes(holes, ["B", "A", "C", "D"]).map((hole) => hole.holeId),
-    ).toEqual(["B", "A", "C", "E", "D"]);
+    const ordered = orderDrillholes(holes, ["B", "A", "C", "D"]);
+    expect(ordered.drillholes.map((hole) => hole.holeId)).toEqual(["B", "A", "C", "E", "D"]);
+    expect(ordered.recentCount).toBe(3);
+
+    // A recent hole missing from the list is skipped, never invented.
+    const missing = orderDrillholes(holes, ["X", "B"]);
+    expect(missing.drillholes.map((hole) => hole.holeId)).toEqual(["B", "E", "D", "C", "A"]);
+    expect(missing.recentCount).toBe(1);
+  });
+
+  it("promotes only drillholes with saved data, most recently worked on first", () => {
+    const drafts = new Map([
+      ["A", "2026-10-01T00:00:00.000Z"],
+      ["B", "2026-10-03T00:00:00.000Z"],
+      ["C", "2026-10-02T00:00:00.000Z"],
+      ["D", "2026-10-04T00:00:00.000Z"],
+    ]);
+
+    // Selection history first (X has no draft, so it does not count), then
+    // the other drafts by last edit; never more than three.
+    expect(pickRecentWorkingHoleIds(["X", "C", "A"], drafts)).toEqual(["C", "A", "D"]);
+    expect(pickRecentWorkingHoleIds([], drafts)).toEqual(["D", "B", "C"]);
+    expect(pickRecentWorkingHoleIds(["X", "Y"], new Map())).toEqual([]);
+  });
+
+  it("counts a draft as working data only when a row holds a value", () => {
+    expect(hasWorkingData(createBlankDocument({ drillhole: "A" }))).toBe(false);
+    expect(hasWorkingData({ rows: [{ ...createEmptyRow(1), lithoFrom: "  " }] })).toBe(false);
+    expect(hasWorkingData({ rows: [{ ...createEmptyRow(1), lithoCode: "SS" }] })).toBe(true);
+    expect(hasWorkingData(null)).toBe(false);
+    expect(hasWorkingData({ rows: "broken" })).toBe(false);
   });
 });

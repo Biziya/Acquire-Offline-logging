@@ -4,7 +4,7 @@ import type {
   ToastNotification,
 } from "../../../types/domain";
 import { isAbortError } from "../../../types/validation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getDrillholes } from "../../../services/Api/drillholeApi";
 import {
   readDrillholeCache,
@@ -18,7 +18,7 @@ import {
   addRecentHoleId,
   haveSameHoleIds,
   normalizeRecentHoleIds,
-  orderDrillholes,
+  SELECTION_HISTORY_LIMIT,
 } from "../drillholeOrdering";
 import { TOAST_NOTIFICATIONS } from "../constants";
 
@@ -48,9 +48,9 @@ async function readCachedRecords() {
 }
 
 /*
- * Loads the drillholes and hands them over in the order the selector shows:
- * the 3 most recently selected first, then the rest newest first. `drillholes`
- * is the ordered list — nothing downstream re-sorts it.
+ * Loads the drillholes (API order) and the selection history, most recent
+ * first. The selector's order is built from both, plus the saved drafts, by
+ * `orderDrillholes` (drillholeOrdering.ts).
  */
 export function useDrillholes(showToast: Notify) {
   const [drillholes, setDrillholes] = useState<Drillhole[]>([]);
@@ -126,10 +126,10 @@ export function useDrillholes(showToast: Notify) {
          * picked before it resolves is already in the ref and has to stay in
          * front of the stored ones.
          */
-        const normalizedHoleIds = normalizeRecentHoleIds([
-          ...recentHoleIdsRef.current,
-          ...storedHoleIds,
-        ]);
+        const normalizedHoleIds = normalizeRecentHoleIds(
+          [...recentHoleIdsRef.current, ...storedHoleIds],
+          SELECTION_HISTORY_LIMIT,
+        );
 
         recentHoleIdsRef.current = normalizedHoleIds;
         setRecentHoleIds(normalizedHoleIds);
@@ -151,7 +151,7 @@ export function useDrillholes(showToast: Notify) {
    */
   const rememberDrillholeSelection = useCallback((holeId: string) => {
     const currentHoleIds = recentHoleIdsRef.current;
-    const nextHoleIds = addRecentHoleId(currentHoleIds, holeId);
+    const nextHoleIds = addRecentHoleId(currentHoleIds, holeId, SELECTION_HISTORY_LIMIT);
 
     if (haveSameHoleIds(nextHoleIds, currentHoleIds)) return;
 
@@ -163,13 +163,9 @@ export function useDrillholes(showToast: Notify) {
     });
   }, []);
 
-  const orderedDrillholes = useMemo(
-    () => orderDrillholes(drillholes, recentHoleIds),
-    [drillholes, recentHoleIds],
-  );
-
   return {
-    drillholes: orderedDrillholes,
+    drillholes,
+    recentHoleIds,
     isLoading,
     error,
     rememberDrillholeSelection,

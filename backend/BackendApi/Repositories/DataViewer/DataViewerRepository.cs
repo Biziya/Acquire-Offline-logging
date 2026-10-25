@@ -10,7 +10,17 @@ public sealed class DataViewerRepository : IDataViewerRepository
     // HOLEID is written through @Hole varchar(20), so no stored value is longer.
     public const int HoleIdSize = 20;
 
-    private const string Query = """
+    private const string HoleIdsQuery = """
+        SELECT DISTINCT [HOLEID]
+        FROM [MyApps].[CoreDescrData]
+        WHERE [HOLEID] IS NOT NULL
+          AND LTRIM(RTRIM([HOLEID])) <> ''
+        ORDER BY [HOLEID];
+        """;
+
+    // Only the table's own columns; the interval order is FROM, TO, then the
+    // rest of the grouping key so each interval's rows are read together.
+    private const string RecordsQuery = """
         SELECT
             [HOLEID],
             [PROJECTCODE],
@@ -23,13 +33,10 @@ public sealed class DataViewerRepository : IDataViewerRepository
             [CONSISTENTCHECK],
             [usr],
             [FileName],
-            [PathName],
-            [Created_at],
-            [Modified_at],
-            [Imported_by]
+            [PathName]
         FROM [MyApps].[CoreDescrData]
         WHERE [HOLEID] = @Drillhole
-        ORDER BY [FROM], [TO], [PRIORITY], [NAME];
+        ORDER BY [FROM], [TO], [PRIORITY], [PROJECTCODE], [usr], [NAME];
         """;
 
     private readonly string _connectionString;
@@ -40,6 +47,24 @@ public sealed class DataViewerRepository : IDataViewerRepository
         _connectionString = configuration.GetCoreDescrDataConnectionString();
     }
 
+    public async Task<IReadOnlyList<string>> GetHoleIdsAsync(CancellationToken cancellationToken = default)
+    {
+        var holeIds = new List<string>();
+
+        await using var connection = new SqlConnection(_connectionString);
+        await using var command = new SqlCommand(HoleIdsQuery, connection);
+
+        await connection.OpenAsync(cancellationToken);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            holeIds.Add(reader.GetNullableString(0)!);
+        }
+
+        return holeIds;
+    }
+
     public async Task<IReadOnlyList<DataViewerRecord>> GetByHoleIdAsync(
         string holeId,
         CancellationToken cancellationToken = default)
@@ -47,7 +72,7 @@ public sealed class DataViewerRepository : IDataViewerRepository
         var records = new List<DataViewerRecord>();
 
         await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand(Query, connection);
+        await using var command = new SqlCommand(RecordsQuery, connection);
         command.Parameters.Add("@Drillhole", SqlDbType.VarChar, HoleIdSize).Value = holeId;
 
         await connection.OpenAsync(cancellationToken);
@@ -68,10 +93,7 @@ public sealed class DataViewerRepository : IDataViewerRepository
                 ConsistentCheck = reader.GetNullableValue(8),
                 Usr = reader.GetNullableString(9),
                 FileName = reader.GetNullableString(10),
-                PathName = reader.GetNullableString(11),
-                CreatedAt = reader.GetNullableValue(12),
-                ModifiedAt = reader.GetNullableValue(13),
-                ImportedBy = reader.GetNullableString(14)
+                PathName = reader.GetNullableString(11)
             });
         }
 

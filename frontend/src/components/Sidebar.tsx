@@ -2,27 +2,12 @@ import { useState } from "react";
 import { NavLink } from "react-router-dom";
 import StatusIndicator from "./StatusIndicator";
 import { useCurrentUser } from "../hooks/useCurrentUser";
+import { uiConfig } from "../config/uiConfig";
 
 const ICON = "size-[17px] shrink-0";
 // Neutral text while no trusted identity source exists (services/currentUser.ts).
 const NO_USER_LABEL = "User not identified";
 const LABEL = "whitespace-nowrap";
-
-function HomeIcon() {
-  return (
-    <svg
-      className={ICON}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      aria-hidden="true"
-    >
-      <path d="M3 11.5 12 4l9 7.5" />
-      <path d="M5.5 10.5V20h13v-9.5" />
-    </svg>
-  );
-}
 
 function RawLithoIcon() {
   return (
@@ -115,8 +100,8 @@ function Sidebar() {
         }`}
       >
         {!collapsed && (
-          <span className="overflow-hidden text-[0.7rem] font-semibold tracking-[0.04em] text-ellipsis whitespace-nowrap text-[#9ca3af] uppercase">
-            Navigation of WEB
+          <span className="overflow-hidden text-[0.78rem] font-semibold tracking-[0.04em] text-ellipsis whitespace-nowrap text-[#9ca3af]">
+            {uiConfig.appName}
           </span>
         )}
         <button
@@ -136,16 +121,7 @@ function Sidebar() {
         }`}
         aria-label="Main navigation"
       >
-        <NavLink
-          to="/"
-          end
-          className={linkClassName}
-          aria-label={collapsed ? "Home" : undefined}
-        >
-          <HomeIcon />
-          {!collapsed && <span className={LABEL}>Home</span>}
-        </NavLink>
-
+        {/* Home is hidden for now; "/" opens Raw Litho (App.tsx). */}
         <NavLink
           to="/raw-litho"
           className={linkClassName}

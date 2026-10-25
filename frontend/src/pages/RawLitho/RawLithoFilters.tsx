@@ -1,5 +1,5 @@
 import type { Drillhole } from "../../types/domain";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   FIELD,
   FIELD_CONTROL,
@@ -9,6 +9,11 @@ import {
 
 interface RawLithoFiltersProps {
   drillholes: Drillhole[];
+  /*
+   * The first `recentCount` drillholes are listed under "Recent Working
+   * Drillholes", the rest under "All Drillholes" (only while not searching).
+   */
+  recentCount?: number;
   selectedHoleId: string;
   selectedDrillhole: Drillhole | null;
   isLoading: boolean;
@@ -22,7 +27,9 @@ interface RawLithoFiltersProps {
 const SUGGESTION_LIMIT = 10;
 const SUGGESTION_LIST_ID = "drillhole-suggestion-list";
 
-const FIELD_ERROR = "max-w-[220px] text-[0.8rem] text-rl-danger";
+const GROUP_HEADING =
+  "px-2.5 pt-2 pb-1 text-[0.7rem] font-semibold tracking-[0.04em] text-rl-text-muted uppercase";
+const FIELD_ERROR ="max-w-[220px] text-[0.8rem] text-rl-danger";
 const CHEVRON = [
   "after:pointer-events-none after:absolute after:right-[11px] after:bottom-[11px]",
   "after:size-2 after:border-r-[1.6px] after:border-b-[1.6px] after:border-rl-text-muted",
@@ -52,6 +59,7 @@ function getMatchRank(holeId: string, normalizedQuery: string) {
 
 function RawLithoFilters({
   drillholes,
+  recentCount = 0,
   selectedHoleId,
   selectedDrillhole,
   isLoading,
@@ -175,6 +183,8 @@ function RawLithoFilters({
   }
 
   const showSuggestionList = isSuggestionListOpen && !isDisabled;
+  // Searching shows one ranked list; the groups are for browsing.
+  const isGrouped = recentCount > 0 && !query.trim();
   let validationMessageId;
 
   if (error) {
@@ -249,6 +259,20 @@ function RawLithoFilters({
             >
               {suggestions.length > 0 ? (
                 suggestions.map((drillhole, index) => (
+                  <Fragment key={drillhole.holeId}>
+                  {isGrouped && index === 0 && (
+                    <li className={GROUP_HEADING} role="presentation">
+                      Recent Working Drillholes
+                    </li>
+                  )}
+                  {isGrouped && index === recentCount && (
+                    <li
+                      className={`${GROUP_HEADING} mt-1 border-t border-rl-border`}
+                      role="presentation"
+                    >
+                      All Drillholes
+                    </li>
+                  )}
                   <li
                     id={`drillhole-option-${index}`}
                     className={`cursor-pointer rounded px-2.5 py-2 transition-colors duration-140 hover:bg-rl-navy-soft hover:text-rl-navy-dark${
@@ -256,7 +280,6 @@ function RawLithoFilters({
                         ? " raw-litho-suggestion--active bg-rl-navy-soft text-rl-navy-dark"
                         : ""
                     }`}
-                    key={drillhole.holeId}
                     role="option"
                     aria-selected={drillhole.holeId === selectedHoleId}
                     onMouseDown={(event) => {
@@ -266,6 +289,7 @@ function RawLithoFilters({
                   >
                     {drillhole.holeId}
                   </li>
+                  </Fragment>
                 ))
               ) : (
                 <li

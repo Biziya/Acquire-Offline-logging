@@ -2,6 +2,11 @@
 # stays in TypeScript. Read once when the module loads (uiConfig.ts); a bad
 # value stops start-up with the file and key in the error.
 
+# Application name: the sidebar heading and the browser tab title (main.tsx
+# sets document.title from it). index.html repeats it only for the moment
+# before the script runs; change both together.
+appName: "AcQuire WEB"
+
 toast:
   # How long each notification type stays on screen, in milliseconds. Every
   # page's toasts use these values; no page sets its own duration.

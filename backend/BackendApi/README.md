@@ -29,7 +29,8 @@ http://localhost:7047/swagger
 | 1 | Drillholes | `GET /api/drillholes` | `ACQMN01` (`ZOOVCH_COLLAR_LIST`) | Every drillhole with Project and Campaign |
 | 2 | Table Constants | `GET /api/table-constants` | `ACQMN01` (`QV_VS_LOOKUP_RO`) | All nine Raw Litho lookup lists |
 | 3 | Upload Data | `POST /api/upload-data` | `ACQMN01` (procedure) | Store an exported lithology JSON |
-| 4 | Data Viewer | `GET /api/dataviewer?drillhole=…` | `ACQMN01` (`MyApps.CoreDescrData`) | Stored records of one drillhole |
+| 4 | Data Viewer | `GET /api/dataviewer/drillholes` | `ACQMN01` (`MyApps.CoreDescrData`) | Drillholes that have stored records |
+|   |  | `GET /api/dataviewer?drillhole=…` | `ACQMN01` (`MyApps.CoreDescrData`) | Stored intervals of one drillhole |
 | 5 | Status | `GET /api/status` | — | Backend online check; the verified Windows user with `?includeUser=true` |
 
 No other application route exists (Swagger is Development-only
@@ -110,7 +111,8 @@ SELECT HOLEID, PROJECTCODE, RIGHT(PROSPECT, 4) AS CAMPAIGN FROM ZOOVCH_COLLAR_LI
 
 An empty result is `[]` with `200`. Database failures return `500` with
 `{ "error": "Unable to retrieve drillholes." }`. Data Viewer reuses the same
-query, filtered by `HOLEID` (`DrillholeRepository.GetByHoleIdAsync`).
+query, filtered by `HOLEID` (`DrillholeRepository.GetByHoleIdAsync`), for
+Campaign only; its drillhole selector uses `GET /api/dataviewer/drillholes`.
 
 ## Table Constants
 
@@ -147,51 +149,123 @@ Database failures return `500` with `{ "error": "Unable to retrieve table consta
 
 ## Data Viewer
 
+Read-only. Both routes read `MyApps.CoreDescrData` in the
+`CoreDescrData:Database` (unset: `ACQMN01`) through the same connection as
+Upload Data, with parameterised `SELECT`s only. Opening the Data Viewer never
+writes anything.
+
+```text
+Controllers/DataViewer/DataViewerController.cs     HTTP, Project / Campaign
+Repositories/DataViewer/DataViewerRepository.cs    the two SELECTs
+Repositories/DataViewer/DataViewerIntervals.cs     NAME / VALUE rows → intervals
+Models/DataViewer/DataViewerResponse.cs            response and row models
+```
+
+### Drillholes with stored records
+
+```text
+GET /api/dataviewer/drillholes
+```
+
+```sql
+SELECT DISTINCT [HOLEID]
+FROM [MyApps].[CoreDescrData]
+WHERE [HOLEID] IS NOT NULL
+  AND LTRIM(RTRIM([HOLEID])) <> ''
+ORDER BY [HOLEID];
+```
+
+```json
+[ "GTZO_0001_1", "GTZO_0002_1" ]
+```
+
+Empty table: `[]` with `200`. Database failure: `500
+{ "error": "Unable to retrieve drillholes." }`.
+
+### One drillhole
+
 ```text
 GET /api/dataviewer?drillhole=GTZO_0001_1
 ```
 
-Read-only. Drillhole = `HOLEID`. Reads `MyApps.CoreDescrData` in the
-`CoreDescrData:Database` (unset: `ACQMN01`), parameterised, ordered by
-`[FROM], [TO], [PRIORITY], [NAME]`:
-
 ```sql
 SELECT [HOLEID], [PROJECTCODE], [FROM], [TO], [PRIORITY], [NAME], [VALUE],
-       [COMMENT_VALUE], [CONSISTENTCHECK], [usr], [FileName], [PathName],
-       [Created_at], [Modified_at], [Imported_by]
+       [COMMENT_VALUE], [CONSISTENTCHECK], [usr], [FileName], [PathName]
 FROM [MyApps].[CoreDescrData]
-WHERE [HOLEID] = @Drillhole;
+WHERE [HOLEID] = @Drillhole            -- varchar(20)
+ORDER BY [FROM], [TO], [PRIORITY], [PROJECTCODE], [usr], [NAME];
 ```
+
+Only the selected drillhole's rows are read; then, if it has any, one more
+query for its Campaign (below). Two queries per request, whatever the number
+of intervals or projects.
 
 ```json
 {
   "drillhole": "GTZO_0001_1",
   "project": "ZOOVCH",
   "campaign": "2015",
-  "totalRecords": 1,
-  "records": [
-    { "holeId": "GTZO_0001_1", "projectCode": "ZOOVCH", "from": 5.0, "to": 10.0,
-      "priority": 1, "name": "LithoFacies", "value": "0--", "commentValue": null,
-      "consistentCheck": null, "usr": "DOMAIN\\user", "fileName": "yashgaa.json",
-      "pathName": null, "createdAt": "2026-10-22T10:00:00", "modifiedAt": null,
-      "importedBy": null }
+  "projects": [ { "projectCode": "ZOOVCH", "campaign": "2015" } ],
+  "totalIntervals": 1,
+  "totalRecords": 3,
+  "hiddenValues": 0,
+  "storedBy": [ "BDOM\user" ],
+  "fileNames": [ "yashgaa.json" ],
+  "intervals": [
+    { "projectCode": "ZOOVCH", "lithoFrom": 5.0, "lithoTo": 10.0, "priority": 1,
+      "usr": "BDOM\user",
+      "values": { "lithoCode": "0--", "colorCode": "10G4/2", "lithologyComments": "Fine sand" } }
   ]
 }
 ```
 
-- Values are returned as stored: numbers stay numbers, dates become ISO text,
-  `NULL` stays `null`. Nothing is filled in or converted.
-- **Project / Campaign** come from the Drillholes query for the same `HOLEID`
-  (Campaign is not in `CoreDescrData`; the two tables are in different
-  databases, so they are looked up, not joined). One entry: its values.
-  Several entries: the one whose project matches the stored rows'
-  `PROJECTCODE`; still ambiguous: `campaign` is `null` (logged, never guessed).
-  No entry: `project` from the stored rows if they agree on one, `campaign` `null`.
-- No stored rows: `200` with `"totalRecords": 0, "records": []`.
+**Intervals** (`DataViewerIntervals.Build`). The procedure stores one row per
+interval and attribute and matches rows on `HOLEID`, `PROJECTCODE`, `FROM`,
+`TO`, `PRIORITY`, `NAME`, `usr`. So rows sharing `PROJECTCODE`, `FROM`, `TO`,
+`PRIORITY` and `usr` are one interval; another priority or login is another
+row, never merged. `NAME` → Raw Litho field is the upload mapping read
+backwards (see *JSON → database mapping*; names compared case-insensitively):
+
+| `NAME` | `values` key | Value |
+| --- | --- | --- |
+| `LithoFacies` | `lithoCode` | `VALUE` |
+| `Colour` | `colorCode` | `VALUE` |
+| `RedoxFacies` | `redoxCode` | `VALUE` |
+| `CA` / `OM` / `OX` | `ca` / `om` / `ox` | `VALUE` |
+| `InternalStructure` | `sedim` | `VALUE` |
+| `Granulo` / `Hardness` | `granulo` / `hardness` | `VALUE` |
+| `LithologyComments` | `lithologyComments` | `COMMENT_VALUE`, or `VALUE` when that is empty |
+
+- `[FROM]` / `[TO]` are returned as `lithoFrom` / `lithoTo` in their SQL type
+  (no rounding); `5.0` and `5.00` are the same interval.
+- An attribute that is not stored is absent from `values`; `NULL` is `null`.
+  Nothing is filled in. `omFacies` and `py` are never present: the procedure
+  does not store them.
+- A row whose `NAME` has no Raw Litho field, or repeats one already placed in
+  the interval, is counted in `hiddenValues` instead of being dropped silently.
+- `totalRecords` is the number of `CoreDescrData` rows read.
+
+**Project / Campaign.** `projects` lists every distinct stored `PROJECTCODE`
+of the drillhole (trimmed, case-insensitive). Campaign is not in
+`CoreDescrData`: it comes from the Drillholes query (`ZOOVCH_COLLAR_LIST`,
+`RIGHT(PROSPECT, 4)`) for the same `HOLEID`, matched on `PROJECTCODE` too,
+because a `HOLEID` may belong to several projects. Exactly one campaign: it;
+none or several: `null` (several is logged). The lookup is not a SQL join
+because `CoreDescrData:Database` may point at another database. If the lookup
+itself fails, it is logged and Campaign is `null`; the records are still
+returned. `project` / `campaign` are filled only when there is exactly one
+project, otherwise `null` (the frontend then lists `projects`).
+
+- No stored rows: `200` with `"totalIntervals": 0`, `"intervals": []`,
+  `"projects": []`.
 - Missing or blank `drillhole`, or longer than 20 characters (`HOLEID` is
   written through `@Hole varchar(20)`): `400 { "error": "…" }`.
 - Database failure: `500 { "error": "Unable to retrieve drillhole records." }`;
   details are logged only.
+
+**Permissions.** These `SELECT`s run as the CoreDescrData connection's login
+(see *Database configuration*), which needs `SELECT` on
+`MyApps.CoreDescrData` (Upload Data only needs `EXECUTE` on the procedure).
 
 ## Status
 
@@ -478,12 +552,17 @@ Automated tests live in `../BackendApi.Tests` (xUnit), through the real
 ASP.NET Core pipeline with fake repositories; they never connect to a real
 database:
 
-- `ApiRoutesTests`: exactly the five routes; removed routes return `404`.
+- `ApiRoutesTests`: exactly the six routes of the five APIs; removed routes
+  return `404`.
 - `TableConstants/`: `FIELDNAME` to list grouping, response keys and item
   names, safe `500`.
-- `DataViewer/`: records and values as stored (NULLs kept), Project /
-  Campaign resolution (single, matching, ambiguous, missing), empty result,
-  `400` for a missing or too-long drillhole, safe `500`.
+- `DataViewer/`: the drillhole list (filled, empty, safe `500`); NAME / VALUE
+  rows → intervals (every mapped NAME, comments from `COMMENT_VALUE`,
+  priorities / projects / logins kept apart, depth scale, missing and NULL
+  values, unknown and repeated NAMEs counted); Project / Campaign matched on
+  HOLEID + PROJECTCODE (single, matching, conflicting, missing, several
+  projects, failed lookup); empty result, `400` for a missing or too-long
+  drillhole, safe `500`.
 - `UploadData/`: validation, filtering, one procedure call, error 229 and
   other SQL errors, an unreachable server.
 
@@ -500,7 +579,9 @@ Manual check against an approved development database:
 3. Upload the same file again → row count for that `HOLEID` unchanged.
 4. Change one value (e.g. a `lithoCode`), upload → that row's `VALUE` updated.
 
-5. `GET /api/dataviewer?drillhole=<HOLEID>` shows the stored rows.
+5. `GET /api/dataviewer/drillholes` lists the drillhole;
+   `GET /api/dataviewer?drillhole=<HOLEID>` shows one interval per uploaded
+   row, with the file's values.
 
 The requests in `BackendApi.http` can be used instead of Swagger.
 

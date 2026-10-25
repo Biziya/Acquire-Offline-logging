@@ -2,12 +2,11 @@ import { useSyncExternalStore } from "react";
 import { isAbortError } from "../../types/validation";
 import { getDataViewerRecords } from "../../services/Api/dataViewerApi";
 import type { DataViewerResponse } from "./databaseViewerTypes";
-import { buildDataViewerTable, type DataViewerTable } from "./databaseViewerRows";
 
 export type DataViewerView =
   | { status: "idle" }
   | { status: "loading" }
-  | { status: "loaded"; data: DataViewerResponse; table: DataViewerTable }
+  | { status: "loaded"; data: DataViewerResponse }
   | { status: "error" };
 
 export interface DataViewerState {
@@ -74,7 +73,7 @@ export async function loadDataViewerRecords(holeId: string): Promise<"loaded" | 
     const data = await getDataViewerRecords(holeId, current.signal);
     if (request !== current) return "superseded";
 
-    setState({ holeId, view: { status: "loaded", data, table: buildDataViewerTable(data.records) } });
+    setState({ holeId, view: { status: "loaded", data } });
     return "loaded";
   } catch (error) {
     if (request !== current || isAbortError(error)) return "superseded";

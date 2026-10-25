@@ -1,8 +1,8 @@
 import { isRecord } from "../../types/validation";
-import {
-  DATA_VIEWER_RECORD_KEYS,
-  type DataViewerRecord,
-  type DataViewerResponse,
+import type {
+  DataViewerInterval,
+  DataViewerProject,
+  DataViewerResponse,
 } from "../../pages/DatabaseViewer/databaseViewerTypes";
 import { buildApiUrl } from "./apiConfig";
 
@@ -19,10 +19,24 @@ function isCell(value: unknown) {
   );
 }
 
-function isDataViewerRecord(record: unknown): record is DataViewerRecord {
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+function isProject(value: unknown): value is DataViewerProject {
+  return isRecord(value) && typeof value.projectCode === "string" && isNullableString(value.campaign);
+}
+
+function isInterval(value: unknown): value is DataViewerInterval {
   return (
-    isRecord(record) &&
-    DATA_VIEWER_RECORD_KEYS.every((key) => isCell(record[key]))
+    isRecord(value) &&
+    isNullableString(value.projectCode) &&
+    isCell(value.lithoFrom) &&
+    isCell(value.lithoTo) &&
+    isCell(value.priority) &&
+    isNullableString(value.usr) &&
+    isRecord(value.values) &&
+    Object.values(value.values).every(isNullableString)
   );
 }
 
@@ -32,19 +46,20 @@ function isDataViewerResponse(body: unknown): body is DataViewerResponse {
     typeof body.drillhole === "string" &&
     isNullableString(body.project) &&
     isNullableString(body.campaign) &&
+    Array.isArray(body.projects) &&
+    body.projects.every(isProject) &&
+    typeof body.totalIntervals === "number" &&
     typeof body.totalRecords === "number" &&
-    Array.isArray(body.records) &&
-    body.records.every(isDataViewerRecord)
+    typeof body.hiddenValues === "number" &&
+    isStringArray(body.storedBy) &&
+    isStringArray(body.fileNames) &&
+    Array.isArray(body.intervals) &&
+    body.intervals.every(isInterval)
   );
 }
 
-/* Read-only: the stored records of one drillhole (HOLEID). */
-export async function getDataViewerRecords(
-  drillhole: string,
-  signal?: AbortSignal,
-): Promise<DataViewerResponse> {
-  const query = new URLSearchParams({ drillhole });
-  const response = await fetch(buildApiUrl(`/api/dataviewer?${query}`), {
+async function getJson(path: string, signal?: AbortSignal): Promise<unknown> {
+  const response = await fetch(buildApiUrl(path), {
     headers: { Accept: "application/json" },
     signal,
   });
@@ -53,7 +68,26 @@ export async function getDataViewerRecords(
     throw new Error(`Data Viewer request failed with HTTP ${response.status}.`);
   }
 
-  const body: unknown = await response.json();
+  return response.json();
+}
+
+/* Read-only: every drillhole with stored records (distinct CoreDescrData.HOLEID). */
+export async function getDataViewerDrillholes(signal?: AbortSignal): Promise<string[]> {
+  const body = await getJson("/api/dataviewer/drillholes", signal);
+  if (!isStringArray(body)) {
+    throw new Error("The Data Viewer API returned an invalid drillhole list.");
+  }
+
+  return body;
+}
+
+/* Read-only: the stored intervals of one drillhole (HOLEID). */
+export async function getDataViewerRecords(
+  drillhole: string,
+  signal?: AbortSignal,
+): Promise<DataViewerResponse> {
+  const query = new URLSearchParams({ drillhole });
+  const body = await getJson(`/api/dataviewer?${query}`, signal);
   if (!isDataViewerResponse(body)) {
     throw new Error("The Data Viewer API returned an invalid response.");
   }

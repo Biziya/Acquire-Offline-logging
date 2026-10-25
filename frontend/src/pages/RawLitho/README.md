@@ -27,7 +27,8 @@ read-only.
 ```text
 RawLitho/
 ├── hooks/
-│   ├── useDrillholes.ts            loads /api/drillholes, orders the list
+│   ├── useDrillholes.ts            loads /api/drillholes + the selection history
+│   ├── useWorkingDrillholes.ts     drillholes with saved IndexedDB working data
 │   ├── useRawLithoImport.ts        two-step JSON import (prepare → confirm)
 │   ├── useRawLithoLookups.ts       loads the 9 API lookups, cache-first
 │   ├── useRawLithoRowFocus.ts      row-id focus that survives reordering
@@ -116,13 +117,17 @@ LookupAutocomplete.tsx
 
 RawLithoFilters.tsx
 - drillhole search with ranked suggestions
-- renders the list in the order `useDrillholes` supplies; it does not re-sort
+- renders the list in the order it is given; it does not re-sort
+- `recentCount`: the first N are headed "Recent Working Drillholes", the
+  rest "All Drillholes" (headings only while the field is empty)
 - read-only Project and Campaign values
 
 drillholeOrdering.ts
 - the single owner of the drillhole selector's order
-- orderDrillholes(drillholes, recentHoleIds): 3 most recent, then newest first
-- addRecentHoleId(): records a selection, most recent first, capped at 3
+- orderDrillholes(drillholes, recentHoleIds): promoted holes, then newest first
+- pickRecentWorkingHoleIds(): up to 3 holes with saved data, most recent first
+- hasWorkingData(): whether a stored draft holds any value
+- addRecentHoleId(): records a selection, most recent first
 - sortDrillholesByNewestFirst(): the one place the newest-first rule lives
 - pure; no React, no DOM, no storage
 
@@ -852,8 +857,9 @@ the next visit.
 | `loadedKey` | `useRawLithoDraftPersistence` | Gate for `isPageEnabled` — the table stays disabled until the draft for the selected drillhole has loaded |
 | `isRestoringSession` | `useRawLithoDraftPersistence` | Suppresses the session write during the initial restore |
 | `isSaving` | `RawLitho.tsx` | Disables Save while it runs |
-| `drillholes`, `isLoading`, `error` | `useDrillholes` | Drillhole list, already in selector order |
-| `recentHoleIds` | `useDrillholes` | The 3 most recently selected drillholes, mirrored in `recentHoleIdsRef` so recording a selection does not rebuild the callback |
+| `drillholes`, `isLoading`, `error` | `useDrillholes` | Drillhole list in API order; `RawLitho.tsx` orders it for the selector |
+| `recentHoleIds` | `useDrillholes` | The selection history (up to 20, most recent first), mirrored in `recentHoleIdsRef` so recording a selection does not rebuild the callback |
+| `workingDrafts` | `useWorkingDrillholes` | Drillholes with saved working data → their draft's `modified_at` |
 | `lookupData`, `lookupStatus` | `useRawLithoLookups` | Dropdown records, per-field loading/error |
 | `pendingImport`, `isImporting` | `useRawLithoImport` | Parsed-but-unconfirmed import |
 | `toast` | `useToast` | The single active notification |
@@ -873,7 +879,7 @@ Database `raw-litho-db` v4, through `services/IndexDB/rawLithoDatabase.ts`.
 | --- | --- | --- |
 | `drafts` | drillhole id | the normalised document |
 | `session` | `"active-raw-litho-session"` | `{ drillhole, page, updatedAt }` |
-| `session` | `"recent-drillholes"` | `{ holeIds, updatedAt }` — the 3 most recently selected, most recent first |
+| `session` | `"recent-drillholes"` | `{ holeIds, updatedAt }` — the selection history (up to 20), most recent first |
 | `drillholeCache` | `"all-drillholes"` | `{ records, updatedAt }` |
 
 One record per drillhole, replaced on write. Rows are stored in Litho From
@@ -1061,13 +1067,15 @@ drillhole being edited.
 
 ## Drillhole list ordering
 
-The selector lists the holes the user is most likely to want, not the oldest
-ones in the database:
+The selector puts the drillholes the user is working on first, then every
+other drillhole:
 
 ```text
-Drillhole A            ← most recently selected
-Drillhole B            ← recently selected
-Drillhole C            ← recently selected
+RECENT WORKING DRILLHOLES
+DH001                  ← saved data, most recently worked on
+DH002
+DH003
+ALL DRILLHOLES         ← separator
 Drillhole 2026-09-09   ← newest of the rest
 Drillhole 2026-09-08
 ...
@@ -1075,16 +1083,27 @@ Drillhole 2026-09-08
 
 | Rule | Where |
 | --- | --- |
-| 3 most recently selected, most recent first | `orderDrillholes()` in `drillholeOrdering.ts` |
-| How many are kept | `RECENT_DRILLHOLE_LIMIT = 3` in `drillholeOrdering.ts` |
-| Then every remaining hole, newest first | `sortDrillholesByNewestFirst()` |
+| Only drillholes with saved data are "working" | `hasWorkingData()`: the IndexedDB draft has at least one row with a value. A blank document, or a selection alone, does not count |
+| Up to 3, most recently worked on first | `pickRecentWorkingHoleIds()`: the selection history order, then drafts not in it by latest `modified_at` |
+| How many are promoted | `RECENT_DRILLHOLE_LIMIT = 3`; the history keeps `SELECTION_HISTORY_LIMIT = 20` |
+| Then every other hole, newest first | `orderDrillholes()` + `sortDrillholesByNewestFirst()` |
+| A 4th, 5th… working drillhole | listed under All Drillholes; never hidden |
 | No hole appears twice | a promoted hole is filtered out of the newest-first part |
-| A remembered hole that no longer exists | skipped, and the list is simply shorter at the top |
+| A working hole not in `/api/drillholes` | skipped; the list only offers valid drillholes |
 
-`useDrillholes` returns the **already ordered** list, so `RawLithoFilters`
-renders it as-is. Typing still ranks by match quality (exact → prefix →
-substring, capped at 10), which deliberately overrides this order — a search is
-a search.
+`useWorkingDrillholes` reads the `drafts` store once when the page opens
+(read-only, one cursor), then follows the open document: once its draft has
+loaded, the drillhole joins the working set when it holds a value (autosave
+writes it within moments) and leaves when every value is cleared. Selecting,
+importing (recorded in the selection history like a selection) and editing
+therefore update the section at once. No draft is ever written or deleted by
+this.
+
+`RawLitho.tsx` builds the ordered list and passes it with `recentCount` to
+`RawLithoFilters`, which adds the two headings while the field is empty.
+Headings are not options: the keyboard moves over drillholes only. Typing
+ranks every drillhole by match quality (exact → prefix → substring, capped at
+10) as one list — a search is a search.
 
 **Newest first is the backend order reversed.** `/api/drillholes` returns the
 records oldest first and they carry no date field, so that is the only signal
@@ -1314,7 +1333,7 @@ handleSave   see "Save button" above
 | How do I accept a partly typed lookup code? | `→` or `←` — `acceptClosestMatch` in `LookupAutocomplete.tsx` |
 | Why doesn't `↓` move inside a dropdown? | By design — the vertical keys belong to the table, so `↓` can add a row from any cell |
 | Where is the drillhole list order decided? | `orderDrillholes()` in `drillholeOrdering.ts` — the only place |
-| How many recent drillholes are kept? | `RECENT_DRILLHOLE_LIMIT` in `drillholeOrdering.ts` |
+| How many working drillholes are promoted? | `RECENT_DRILLHOLE_LIMIT` in `drillholeOrdering.ts` |
 | Where do I change a toast message? | `TOAST_NOTIFICATIONS` in `constants.ts` |
 | How do I show a toast? | `showToast(TOAST_NOTIFICATIONS.<key>)` from `hooks/useToast.ts` |
 | Which handler confirms a removal? | `confirmRemoveLastRow` in `hooks/useRemoveRowConfirmation.ts` |
@@ -1353,7 +1372,7 @@ handleSave   see "Save button" above
 24. Type nonsense (`Zzz`) in a lookup cell and press `→` → nothing is inserted; the cell keeps the typed text and is flagged "Select a valid value" on blur.
 25. Focus a lookup cell that already has a value without typing → `←` / `→` still walk the caret through the text before leaving the cell.
 26. Confirm the untouched routes: type a full code and press `Enter`, then `Tab`, then click an option with the mouse; scroll the option list with the mouse wheel.
-27. Select drillholes A, then B, then C → reopen the list: C, B, A appear at the top, followed by the newest remaining holes, and none of the three is repeated further down. Select a fourth → it takes the front and A drops off. Reload the page and confirm the order survived.
+27. Select drillhole A without typing anything, clear the field and open the list → A is **not** under Recent Working Drillholes. Enter a value in A, B and C (in that order) → the list shows C, B, A under Recent Working Drillholes, then All Drillholes without them. Work in a fourth (D) → D takes the front, A moves to All Drillholes (still listed). Reload the page and confirm the same grouping; reopen A → its draft is restored.
 28. Navigate away and back → the same drillhole, rows, order and page are restored.
 29. Reload after a successful save → the last change and row order are intact. Pagehide flushing of pending edits is best effort.
 30. Clear the drillhole, import a JSON file whose rows are out of order, cancel the dialog → nothing changes; import again and confirm → the rows appear sorted.

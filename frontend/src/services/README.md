@@ -8,7 +8,7 @@ services/
 ├── Api/
 │   ├── apiConfig.ts              buildApiUrl — the only place a URL is built
 │   ├── backendStatus.ts          GET /api/status
-│   ├── dataViewerApi.ts          GET /api/dataviewer?drillhole=… (Database Viewer)
+│   ├── dataViewerApi.ts          GET /api/dataviewer/drillholes, /api/dataviewer?drillhole=… (Database Viewer)
 │   ├── drillholeApi.ts           GET /api/drillholes
 │   ├── rawLithoApi.ts            GET /api/table-constants (all 9 lookups)
 │   └── uploadData.ts             POST /api/upload-data
@@ -17,7 +17,7 @@ services/
 │   ├── rawLithoSaveQueue.ts      pending snapshots, serialized saves and retries
 │   ├── rawLithoDraftDb.ts        drafts + session stores
 │   ├── drillholeCacheDb.ts       drillholeCache store
-│   ├── recentDrillholesDb.ts     recently selected drillholes (session store)
+│   ├── recentDrillholesDb.ts     drillhole selection history (session store)
 │   ├── rawLithoLookupCacheDb.ts  separate raw-litho-lookup-cache-db
 │   ├── rawExtractionDraftDb.ts   raw-extraction-db (unrouted page)
 │   └── uploadDataDraftDb.ts      separate upload-data-db (Upload Data draft)
@@ -84,6 +84,7 @@ opening the database itself, so the schema is declared exactly once.
 
 ```text
 readValue(store, key)          → runTransaction("readonly")
+readEntries(store)             → runTransaction("readonly"), one cursor: [key, value][]
 writeValue(store, key, value)  → runTransaction("readwrite")
 deleteValue(store, key)        → runTransaction("readwrite")
 ```
@@ -99,6 +100,7 @@ blocked upgrade rejects rather than hanging.
 | --- | --- |
 | `buildRawLithoDraftKey(drillhole)` | Trims the id, returns `null` when blank — the "page disabled" signal |
 | `readRawLithoDraft(key)` | Reads a draft, unwrapping older `{ document }`, `{ snapshot }`, `{ draft }`, `{ value }` envelopes |
+| `readRawLithoDrafts()` | Every stored draft as `{ draftKey, draft }` (unwrapped), read-only — for Recent Working Drillholes |
 | `writeRawLithoDraft(key, lithoDocument)` | Replaces the draft; rejects without a key |
 | `deleteRawLithoDraft(key)` / `hasRawLithoDraft(key)` | Delete / existence check |
 | `readRawLithoSession()` / `writeRawLithoSession({ drillhole, page })` | The active drillhole and table page; writing a blank drillhole deletes the record |

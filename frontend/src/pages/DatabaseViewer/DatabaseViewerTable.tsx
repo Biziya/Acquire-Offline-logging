@@ -14,11 +14,14 @@ import { rawLithoConfig } from "../RawLitho/config";
 import { INDEX_COLUMN_WIDTH, tableColumns } from "../RawLitho/constants";
 import { CELL_INPUT } from "../RawLitho/rawLithoStyles";
 import { databaseViewerConfig } from "./config";
-import type { DataViewerValue } from "./databaseViewerTypes";
-import type { DataViewerRow } from "./databaseViewerRows";
+import {
+  intervalKey,
+  type DataViewerInterval,
+  type DataViewerValue,
+} from "./databaseViewerTypes";
 
 interface DatabaseViewerTableProps {
-  rows: readonly DataViewerRow[];
+  intervals: readonly DataViewerInterval[];
   emptyMessage: string;
   initialScrollTop: number;
   onScroll: (scrollTop: number) => void;
@@ -46,10 +49,10 @@ function depthText(value: DataViewerValue) {
   return typeof value === "number" ? depthFormat.format(value) : String(value);
 }
 
-function cellText(row: DataViewerRow, key: string) {
-  if (key === "lithoFrom") return depthText(row.lithoFrom);
-  if (key === "lithoTo") return depthText(row.lithoTo);
-  return row.values[key as keyof DataViewerRow["values"]] ?? "";
+function cellText(interval: DataViewerInterval, key: string) {
+  if (key === "lithoFrom") return depthText(interval.lithoFrom);
+  if (key === "lithoTo") return depthText(interval.lithoTo);
+  return interval.values[key as keyof DataViewerInterval["values"]] ?? "";
 }
 
 /*
@@ -60,19 +63,22 @@ function cellText(row: DataViewerRow, key: string) {
  * text; there are no inputs.
  */
 function DatabaseViewerTable({
-  rows,
+  intervals,
   emptyMessage,
   initialScrollTop,
   onScroll,
 }: DatabaseViewerTableProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const virtualizer = useVirtualizer({
-    count: rows.length,
+    count: intervals.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => rowHeight,
     overscan,
     initialOffset: initialScrollTop,
-    getItemKey: (index) => rows[index]?.key ?? index,
+    getItemKey: (index) => {
+      const interval = intervals[index];
+      return interval ? intervalKey(interval) : index;
+    },
   });
 
   // Back to where the user was when the page was left.
@@ -100,7 +106,7 @@ function DatabaseViewerTable({
       <table
         className={TABLE}
         style={{ minWidth }}
-        aria-rowcount={rows.length + 1}
+        aria-rowcount={intervals.length + 1}
       >
         <thead>
           <tr>
@@ -127,8 +133,8 @@ function DatabaseViewerTable({
           )}
 
           {items.map((item) => {
-            const row = rows[item.index];
-            if (!row) return null;
+            const interval = intervals[item.index];
+            if (!interval) return null;
 
             return (
               <tr
@@ -139,7 +145,7 @@ function DatabaseViewerTable({
               >
                 <td className={BODY_CELL}>{item.index + 1}</td>
                 {tableColumns.map((column) => {
-                  const text = cellText(row, column.key);
+                  const text = cellText(interval, column.key);
 
                   return (
                     <td
@@ -163,7 +169,7 @@ function DatabaseViewerTable({
         </tbody>
       </table>
 
-      {rows.length === 0 && (
+      {intervals.length === 0 && (
         <p className="m-0 p-6 text-center text-[0.85rem] text-rl-text-muted">
           {emptyMessage}
         </p>

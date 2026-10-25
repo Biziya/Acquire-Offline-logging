@@ -15,7 +15,7 @@ public sealed class ApiRoutesTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public void ExposesExactlyTheFiveApplicationEndpoints()
+    public void ExposesExactlyTheApplicationEndpoints()
     {
         var routes = _factory.Services
             .GetRequiredService<EndpointDataSource>()
@@ -30,6 +30,7 @@ public sealed class ApiRoutesTests : IClassFixture<ApiFactory>
         Assert.Equal(
             [
                 "GET /api/dataviewer",
+                "GET /api/dataviewer/drillholes",
                 "GET /api/drillholes",
                 "GET /api/status",
                 "GET /api/table-constants",

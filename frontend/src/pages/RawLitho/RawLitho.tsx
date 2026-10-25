@@ -1,10 +1,13 @@
 import { useCallback, useMemo, useState } from "react";
+import type { ImportResult } from "../../types/domain";
 import ConfirmDialog from "./ConfirmDialog";
 import RawLithoFilters from "./RawLithoFilters";
 import RawLithoTable from "./RawLithoTable";
 import Toast from "../../components/Toast";
 import { TOAST_NOTIFICATIONS } from "./constants";
 import { useDrillholes } from "./hooks/useDrillholes";
+import { useWorkingDrillholes } from "./hooks/useWorkingDrillholes";
+import { orderDrillholes, pickRecentWorkingHoleIds } from "./drillholeOrdering";
 import { useRawLithoImport } from "./hooks/useRawLithoImport";
 import { useRawLithoLookups } from "./hooks/useRawLithoLookups";
 import { useRawLithoWorkspace } from "./hooks/useRawLithoWorkspace";
@@ -25,7 +28,7 @@ import { OUTLINE_BUTTON, OUTLINE_BUTTON_NAVY } from "./rawLithoStyles";
 
 function RawLitho() {
   const { toast, showToast, hideToast } = useToast();
-  const { drillholes, isLoading, error, rememberDrillholeSelection } =
+  const { drillholes, recentHoleIds, isLoading, error, rememberDrillholeSelection } =
     useDrillholes(showToast);
   const { lookupData, lookupStatus } = useRawLithoLookups();
   // Null until a trusted Windows identity source exists (services/currentUser.ts).
@@ -41,12 +44,13 @@ function RawLitho() {
     totalPages,
     isPageEnabled,
     selectDrillhole,
+    applyImportedDocument,
   } = workspace;
 
   /*
-   * Selecting a drillhole both loads its draft and moves the hole to the front
-   * of the selector's recent list. Clearing the field (holeId "") is not a
-   * selection, so it is not remembered.
+   * Selecting a drillhole both loads its draft and records it in the selection
+   * history (which orders Recent Working Drillholes once it has saved data).
+   * Clearing the field (holeId "") is not a selection, so it is not remembered.
    */
   const handleDrillholeChange = useCallback(
     (holeId: string) => {
@@ -57,12 +61,33 @@ function RawLitho() {
     [rememberDrillholeSelection, selectDrillhole],
   );
 
+  // An imported drillhole is opened like a selected one, so it counts as
+  // recently worked on too.
+  const handleImported = useCallback(
+    (result: ImportResult) => {
+      applyImportedDocument(result);
+      rememberDrillholeSelection(result.document.drillhole);
+    },
+    [applyImportedDocument, rememberDrillholeSelection],
+  );
+
   const importer = useRawLithoImport({
     lookupData,
     selectionKey: selectedHoleId,
     showToast,
-    onImported: workspace.applyImportedDocument,
+    onImported: handleImported,
   });
+
+  // Recent Working Drillholes first, then All Drillholes (drillholeOrdering.ts).
+  const workingDrafts = useWorkingDrillholes(rawLithoDocument, isPageEnabled);
+  const selectorList = useMemo(
+    () =>
+      orderDrillholes(
+        drillholes,
+        pickRecentWorkingHoleIds(recentHoleIds, workingDrafts),
+      ),
+    [drillholes, recentHoleIds, workingDrafts],
+  );
 
   const removal = useRemoveRowConfirmation({
     onRemoveLastRow: workspace.removeLastRow,
@@ -190,7 +215,8 @@ function RawLitho() {
       </h1>
 
       <RawLithoFilters
-        drillholes={drillholes}
+        drillholes={selectorList.drillholes}
+        recentCount={selectorList.recentCount}
         selectedHoleId={selectedHoleId}
         selectedDrillhole={selectedDrillhole}
         isLoading={isLoading}

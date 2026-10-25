@@ -25,10 +25,10 @@ src/
 ├── other/           sample JSON documents, not imported by any code
 ├── pages/
 │   ├── RawLitho/    main feature (own README)
-│   ├── DatabaseViewer/  read-only mock-data viewer (own README)
+│   ├── DatabaseViewer/  read-only viewer of the stored CoreDescrData records (own README)
 │   ├── UploadData/  JSON review, edit and upload (own README)
 │   ├── future_pages/  11 empty placeholder files
-│   ├── Home.tsx
+│   ├── Home.tsx     hidden for now (no route, no sidebar link)
 │   └── RawExtraction.tsx   earlier page, no route
 ├── types/           shared domain types and runtime guards
 ├── hooks/
@@ -64,14 +64,23 @@ sidebar stays mounted while the route changes.
 ```text
 App
 ├── Sidebar                collapsible, NavLink-based, owns its collapsed state
+│   ├── heading            the application name, "AcQuire WEB" (config/ui.yaml appName)
 │   ├── user name          footer; user from useCurrentUser(), then a divider
 │   └── StatusIndicator    footer; polls GET /api/status every 5s (900ms timeout)
 └── main.page-content
     └── Routes
-        ├── /              Home
-        ├── /raw-litho     RawLitho
-        └── /upload-data   UploadData
+        ├── /raw-litho        RawLitho
+        ├── /database-viewer  DatabaseViewer
+        ├── /upload-data      UploadData
+        └── * (incl. /)       → redirect to /raw-litho
 ```
+
+The application name lives in `config/ui.yaml` (`appName`): the sidebar
+heading reads it and `main.tsx` sets `document.title` from it. `index.html`
+repeats it as the static `<title>` shown before the script runs.
+
+Home is hidden for now: no sidebar link and no route. `pages/Home.tsx` is kept
+for later; to bring it back, add its route and `NavLink` again.
 
 The sidebar footer shows, left-aligned, the signed-in Windows user
 (`Bek` for a local account, `COMPANY\bek` for a domain account; truncated
@@ -93,7 +102,7 @@ and the draft loader in `useRawLithoDraftPersistence` ignores stale load results
 
 | Route | Component | Notes |
 | --- | --- | --- |
-| `/` | `pages/Home.tsx` | Placeholder heading. The file carries a TODO asking for requirements. |
+| `/`, unknown | — | Redirects to `/raw-litho` (Home is hidden; `pages/Home.tsx` is kept, unrouted) |
 | `/raw-litho` | `pages/RawLitho/RawLitho.tsx` | The main feature. [README](pages/RawLitho/README.md) |
 | `/database-viewer` | `pages/DatabaseViewer/DatabaseViewer.tsx` | Read-only stored records of one drillhole (`GET /api/dataviewer`). [README](pages/DatabaseViewer/README.md) |
 | `/upload-data` | `pages/UploadData/UploadData.tsx` | [README](pages/UploadData/README.md) |
