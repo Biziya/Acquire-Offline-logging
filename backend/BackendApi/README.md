@@ -247,7 +247,7 @@ Windows user automatically (Kerberos or NTLM,
   Authentication (they are locked in `applicationHost.config` by default, so
   `web.config` cannot set them); the generated `web.config` already forwards
   the Windows token (`forwardWindowsAuthToken` defaults to `true`).
-- CORS (`Program.cs`) uses `WithOrigins(Cors:AllowedOrigins)` +
+- CORS (`Program.cs`) allows only `http://10.27.27.140:5174` (hardcoded; `Cors:AllowedOrigins` in appsettings.json is not used) +
   `AllowCredentials()`; the frontend sends `credentials: "include"` on
   `/api/whoami` and the upload.
 - Check from PowerShell on the same PC:
