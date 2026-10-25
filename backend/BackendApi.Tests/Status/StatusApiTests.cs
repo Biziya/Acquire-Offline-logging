@@ -47,28 +47,6 @@ public sealed class StatusApiTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task WhoAmIChallengesARequestWithoutWindowsCredentials()
-    {
-        var response = await _factory.CreateClient().GetAsync("/api/whoami");
-
-        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-    }
-
-    [Fact]
-    public async Task WhoAmIReturnsOnlyTheVerifiedWindowsUser()
-    {
-        var request = new HttpRequestMessage(HttpMethod.Get, "/api/whoami");
-        request.Headers.Add(TestAuthHandler.UserHeader, "BDOM\\jsmith");
-
-        var response = await _factory.CreateClient().SendAsync(request);
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal(
-            "{\"userName\":\"BDOM\\\\jsmith\"}",
-            await response.Content.ReadAsStringAsync());
-    }
-
-    [Fact]
     public async Task DropsTheComputerNameOfALocalAccount()
     {
         var request = new HttpRequestMessage(HttpMethod.Get, "/api/status?includeUser=true");

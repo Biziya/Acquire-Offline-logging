@@ -22,16 +22,15 @@ Swagger UI is available in Development at:
 http://localhost:7047/swagger
 ```
 
-## The six APIs
+## The five APIs
 
 | # | API | Method and route | Database | Purpose |
 | --- | --- | --- | --- | --- |
 | 1 | Drillholes | `GET /api/drillholes` | `ACQMN01` (`ZOOVCH_COLLAR_LIST`) | Every drillhole with Project and Campaign |
 | 2 | Table Constants | `GET /api/table-constants` | `ACQMN01` (`QV_VS_LOOKUP_RO`) | All nine Raw Litho lookup lists |
-| 3 | Upload Data | `POST /api/upload-data` | `ACQMN01` (procedure) | Store an exported lithology JSON (Windows login required) |
+| 3 | Upload Data | `POST /api/upload-data` | `ACQMN01` (procedure) | Store an exported lithology JSON |
 | 4 | Data Viewer | `GET /api/dataviewer?drillhole=…` | `ACQMN01` (`MyApps.CoreDescrData`) | Stored records of one drillhole |
 | 5 | Status | `GET /api/status` | — | Backend online check; the verified Windows user with `?includeUser=true` |
-| 6 | Who am I | `GET /api/whoami` | — | The verified Windows user (the uploader recorded by Upload Data) |
 
 No other application route exists (Swagger is Development-only
 infrastructure). `ApiRoutesTests` fails if a route is added or one of the
@@ -208,17 +207,12 @@ GET /api/status?includeUser=true   Windows Integrated Authentication
 
 ## Identity (current user)
 
-```text
-GET /api/whoami   →   { "userName": "BDOM\\jsmith" }
-```
-
-A browser cannot read the Windows login, so the backend proves it:
-`GET /api/whoami` (and `GET /api/status?includeUser=true`, which adds the same
-`userName` to the status) answers an unauthenticated request with `401` +
-`WWW-Authenticate: Negotiate`; the browser then authenticates the signed-in
-Windows user automatically (Kerberos or NTLM,
-`Microsoft.AspNetCore.Authentication.Negotiate`). Both use
-`Controllers/WindowsUser.cs`, as does Upload Data for the user it records:
+A browser cannot read the Windows login, so the backend proves it, on the
+existing Status route (no sixth API): `GET /api/status?includeUser=true`
+answers an unauthenticated request with `401` + `WWW-Authenticate: Negotiate`;
+the browser then authenticates the signed-in Windows user automatically
+(Kerberos or NTLM, `Microsoft.AspNetCore.Authentication.Negotiate`) and the
+response adds `userName`:
 
 | Account | Windows reports | `userName` |
 | --- | --- | --- |
@@ -227,34 +221,21 @@ Windows user automatically (Kerberos or NTLM,
 
 - Only a name proven by Windows is returned; nothing the client sends is
   used. No credentials or other OS details are returned.
-- Upload Data requires it (`[Authorize]`: `401` without a Windows login).
-  Plain `/api/status`, Drillholes, Table Constants and Data Viewer stay
-  anonymous.
-- The frontend asks `/api/whoami` once (`frontend/src/services/currentUser.ts`) and uses the
+- Nothing else requires authentication: plain `/api/status` and the other
+  four APIs stay anonymous.
+- The frontend asks once (`frontend/src/services/currentUser.ts`) and uses the
   name for the sidebar, `created_by`, `edited_by` and Upload Data's
   "Imported By". Without Windows credentials (another browser zone, a
   non-Windows client) it shows "User not identified" — never a guess.
 - Browsers send Windows credentials automatically to `localhost` and Local
   intranet sites; another host name must be in the Local intranet zone (or an
-  `AuthServerAllowlist` policy). Users on PCs that are not domain-joined get
-  a login prompt instead.
-- Hosted in IIS (site `AcQuireBackend`): **enable Windows Authentication and
-  keep Anonymous Authentication on**. The Negotiate handler then hands the
-  challenge to IIS; endpoints that need a user challenge for it, and CORS
-  preflight (`OPTIONS`, always sent without credentials) and the anonymous
-  endpoints keep working. Disabling Anonymous would make IIS reject those with
-  `401` before the app sees them. Both settings are in IIS Manager →
-  Authentication (they are locked in `applicationHost.config` by default, so
-  `web.config` cannot set them); the generated `web.config` already forwards
-  the Windows token (`forwardWindowsAuthToken` defaults to `true`).
-- CORS (`Program.cs`) allows only `http://10.27.27.140:5174` (hardcoded; `Cors:AllowedOrigins` in appsettings.json is not used) +
-  `AllowCredentials()`; the frontend sends `credentials: "include"` on
-  `/api/whoami` and the upload.
+  `AuthServerAllowlist` policy). Hosted in IIS: enable Windows Authentication
+  and keep Anonymous Authentication on.
 - Check from PowerShell on the same PC:
-  `Invoke-RestMethod 'http://localhost:7047/api/whoami' -UseDefaultCredentials`.
+  `Invoke-RestMethod 'http://localhost:7047/api/status?includeUser=true' -UseDefaultCredentials`.
 
-The SQL connection itself still uses the SQL login `userAcquire`; the Windows
-user is only passed to the upload procedure as `@usr` (see below).
+The database records the SQL login instead: the upload procedure stores
+`SUSER_NAME()` in `usr` (see below).
 
 ## Upload Data endpoint
 
@@ -326,7 +307,7 @@ parameters, async calls and the request's cancellation token (command timeout
 | --- | --- | --- |
 | `@Action` | `varchar(50)` | `'Raw core import_JSON'` |
 | `@Hole` | `varchar(20)` | the JSON `drillhole` |
-| `@usr` | `varchar(50)` | the verified Windows user, e.g. `BDOM\jsmith` (see below) |
+| `@usr` | `varchar(50)` | the authenticated web user, or `NULL` (see below) |
 | `@fileName` | `varchar(50)` | the uploaded file name (no path) |
 | `@str_json` | `nvarchar(max)` | the filtered JSON (step 4 above) |
 
@@ -335,8 +316,8 @@ The call runs in one `SqlTransaction`, like the SSMS test (`BEGIN TRAN` →
 
 1. Open the connection and check it is on the configured upload database
    (otherwise nothing runs).
-2. `BEGIN TRANSACTION`; log the Windows user, `DB_NAME()`, `SUSER_SNAME()`
-   and `USER_NAME()`.
+2. `BEGIN TRANSACTION`; log `DB_NAME()`, `SUSER_SNAME()` and `USER_NAME()`
+   (the SQL login is also what the procedure stores in `usr`).
 3. Execute the procedure once and read every result set it returns to the
    end, so an error raised by a later statement still fails the request.
 4. `COMMIT` — not cancellable once the procedure has finished. Only then is
@@ -384,17 +365,17 @@ sent; storing them would need a procedure change.
 
 ### SQL user (`usr`) behaviour
 
-The API sends the verified Windows user (`HttpContext.User`, never a value
-from the request) as `@usr`, the same name `/api/whoami` returns and the
-frontend shows as "Imported By". A name longer than 50 characters is rejected
-with `400` rather than truncated.
+The procedure starts with `SELECT @usr = SUSER_NAME();`, which **replaces**
+whatever `@usr` the API sends. The `usr` column therefore holds the SQL Server
+login of the connection (with the current `DefaultConnection`, the SQL login
+`userAcquire`), not the Windows user shown as "Imported By" in the frontend.
 
-**Until the procedure is changed, `usr` still holds `userAcquire`:** it
-starts with `SELECT @usr = SUSER_NAME();`, which replaces the value sent.
-`Sql/UploadDataUser.sql` has the one-line change for the DBA
-(`SET @usr = COALESCE(NULLIF(LTRIM(RTRIM(@usr)), ''), SUSER_NAME());`, so a
-call without `@usr`, like the SSMS test, still records the login), checks of
-the `usr` column, and a verification query.
+The API sends `@usr = NULL`, as the working SSMS test did: there is no verified
+web user to send, and the procedure ignores the value anyway. Recording the
+real importer would need both a procedure change (use `@usr` instead of
+`SUSER_NAME()`) and an authenticated, verified identity in the API. Neither is
+done here. All five endpoints are anonymous: anyone who can reach the API can
+upload.
 
 ### Duplicates and updates
 
@@ -402,9 +383,8 @@ There is no duplicate detection in the API. The procedure matches existing
 rows on `HOLEID`, `PROJECTCODE`, `FROM`, `TO`, `PRIORITY`, `NAME` and `usr`:
 uploading the same file again updates those rows instead of adding new ones,
 and a changed value updates the matching row. Because `usr` is part of the key,
-once the procedure stores the Windows user, the same drillhole uploaded by a
-*different* user creates a second set of rows, and a re-upload of a drillhole
-first stored as `userAcquire` does too. The API never deletes rows.
+the same file uploaded under a *different* SQL login creates a second set of
+rows. The API never deletes rows.
 
 ### Responses
 
@@ -498,7 +478,7 @@ Automated tests live in `../BackendApi.Tests` (xUnit), through the real
 ASP.NET Core pipeline with fake repositories; they never connect to a real
 database:
 
-- `ApiRoutesTests`: exactly the six routes; removed routes return `404`.
+- `ApiRoutesTests`: exactly the five routes; removed routes return `404`.
 - `TableConstants/`: `FIELDNAME` to list grouping, response keys and item
   names, safe `500`.
 - `DataViewer/`: records and values as stored (NULLs kept), Project /

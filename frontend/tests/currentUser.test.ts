@@ -16,14 +16,14 @@ function respond(status: number, body: unknown) {
 describe("current Windows user", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it("reads the verified name from /api/whoami, once", async () => {
+  it("reads the verified name from /api/status?includeUser=true, once", async () => {
     const fetchSpy = respond(200, { status: "online", message: "ok", userName: " CORP\\jdoe " });
     const getUser = await loadGetUser();
 
     await expect(getUser()).resolves.toBe("CORP\\jdoe");
     await expect(getUser()).resolves.toBe("CORP\\jdoe");
     expect(fetchSpy).toHaveBeenCalledTimes(1);
-    expect(fetchSpy.mock.calls[0]?.[0]).toBe("/api/whoami");
+    expect(fetchSpy.mock.calls[0]?.[0]).toBe("/api/status?includeUser=true");
     expect(fetchSpy.mock.calls[0]?.[1]).toMatchObject({ credentials: "include" });
   });
 

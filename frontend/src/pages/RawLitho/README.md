@@ -955,7 +955,7 @@ the dataset:
   none; the current user is never filled in.
 - A document created and saved while no identity is available has none —
   for example when the browser did not send Windows credentials to
-  `/api/whoami` (see `src/services/README.md`).
+  `/api/status?includeUser=true` (see `src/services/README.md`).
 
 **Compatibility**
 - Older JSON files and IndexedDB drafts without the field load as before.

@@ -166,8 +166,8 @@ validation all pick it up.
 "Imported By".
 
 **How the name is obtained.** A browser cannot read the Windows login, so
-`getCurrentWindowsUser()` asks the backend: `GET /api/whoami`
-with `credentials: "include"`. That route requires
+`getCurrentWindowsUser()` asks the backend: `GET /api/status?includeUser=true`
+with `credentials: "include"`. That variant of the Status route requires
 Windows Integrated Authentication (Negotiate: Kerberos or NTLM), so the
 browser proves the signed-in Windows user and the backend answers with
 `userName` (backend README, *Identity*). The plain status poll stays anonymous.

@@ -15,7 +15,7 @@ public sealed class ApiRoutesTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public void ExposesExactlyTheSixApplicationEndpoints()
+    public void ExposesExactlyTheFiveApplicationEndpoints()
     {
         var routes = _factory.Services
             .GetRequiredService<EndpointDataSource>()
@@ -33,7 +33,6 @@ public sealed class ApiRoutesTests : IClassFixture<ApiFactory>
                 "GET /api/drillholes",
                 "GET /api/status",
                 "GET /api/table-constants",
-                "GET /api/whoami",
                 "POST /api/upload-data"
             ],
             routes);
