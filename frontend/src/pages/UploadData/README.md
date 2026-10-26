@@ -136,11 +136,22 @@ Authentication); see *currentUser.ts* in `src/services/README.md`.
 **No `imported_by` in the uploaded file.** Uploading never changes
 `created_by`, and `imported_by` is not added to the JSON. The stored procedure does
 not read such a field, so the file would look as if it recorded the importer
-when nothing was stored. The database `usr` column is not the importer either:
-the procedure sets it to `SUSER_NAME()`, the SQL Server login of the backend's
-connection (see the backend README, *SQL user behaviour*). The upload API is
-anonymous. Unknown fields such as `created_by` are ignored by the server, so
-they never break an upload.
+when nothing was stored. The importer is recorded by the backend instead: the
+upload requires Windows sign-in, and the verified user (not anything in the
+file) is sent to the procedure as `@usr`, which SQL Server checks against the
+uploaders' AD group (backend README, *Uploader identity and authorization*).
+Unknown fields such as `created_by` are ignored by the server, so they never
+break an upload.
+
+**Upload results shown in the toast:**
+
+| Response | Toast |
+| --- | --- |
+| 200 | the backend's message, e.g. "Data uploaded successfully." |
+| 400 | the validation message and the first row error |
+| 401 | "Windows sign-in required: your account could not be verified." |
+| 403 | "`<user>` is not authorized to upload data. Contact the database administrator." |
+| 500 | "Database upload failed." (or the permissions message) — never database details |
 
 ## Scrolling
 

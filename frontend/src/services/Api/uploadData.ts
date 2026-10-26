@@ -56,6 +56,9 @@ export async function importUploadData(
     response = await fetch(buildApiUrl("/api/upload-data"), {
       method: "POST",
       body: formData,
+      // The backend requires Windows authentication and takes the uploader
+      // from it; no user name is ever sent in the body.
+      credentials: "include",
       signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
     });
   } catch (error) {
@@ -73,6 +76,12 @@ export async function importUploadData(
   }
 
   const body = await readResponseBody(response);
+
+  // 401 carries no body: the browser did not prove a Windows user. A 403
+  // (SQL Server did not authorize the user) has its own message below.
+  if (response.status === 401) {
+    throw new Error("Windows sign-in required: your account could not be verified.");
+  }
 
   if (!response.ok) {
     throw new Error(getErrorMessage(body));

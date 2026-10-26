@@ -43,6 +43,7 @@ public sealed class UploadDataApiTests : IClassFixture<ApiFactory>
         Assert.Equal(TestDocuments.ValidStoredProcedureJson, call.Json);
         Assert.Equal("GTZO_0001_1", call.Drillhole);
         Assert.Equal("upload.json", call.FileName);
+        Assert.Equal(@"BDOM\jsmith", call.UserName);
     }
 
     [Fact]
@@ -206,11 +207,76 @@ public sealed class UploadDataApiTests : IClassFixture<ApiFactory>
         Assert.DoesNotContain("127.0.0.1", await response.Content.ReadAsStringAsync());
     }
 
-    // A null repository keeps the real UploadDataRepository.
+    [Fact]
+    public async Task RejectsAnAnonymousUploadWithoutCallingTheDatabase()
+    {
+        var repository = new FakeUploadDataRepository();
+        var client = CreateClient(repository);
+        client.DefaultRequestHeaders.Remove(TestAuthHandler.UserHeader);
+
+        var response = await client.PostAsync(Route, FileContent(TestDocuments.Valid().ToJsonString()));
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Empty(repository.Calls);
+    }
+
+    [Fact]
+    public async Task SendsTheVerifiedWindowsUserNotANameFromTheRequest()
+    {
+        var repository = new FakeUploadDataRepository();
+        var client = CreateClient(repository);
+        client.DefaultRequestHeaders.Remove(TestAuthHandler.UserHeader);
+        client.DefaultRequestHeaders.Add(TestAuthHandler.UserHeader, @"BDOM\adoe");
+        var document = TestDocuments.Valid();
+        document["created_by"] = @"BDOM\someoneelse";
+        document["edited_by"] = @"BDOM\someoneelse";
+        var content = FileContent(document.ToJsonString());
+        content.Add(new StringContent(@"BDOM\someoneelse"), "usr");
+        content.Add(new StringContent(@"BDOM\someoneelse"), "userName");
+
+        var response = await client.PostAsync(Route, content);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(@"BDOM\adoe", Assert.Single(repository.Calls).UserName);
+    }
+
+    [Fact]
+    public async Task ReportsAUserSqlServerDoesNotAuthorizeAs403()
+    {
+        var repository = new FakeUploadDataRepository
+        {
+            Failure = new UploadNotAuthorizedException(@"BDOM\jsmith", new InvalidOperationException("51001"))
+        };
+
+        var response = await CreateClient(repository).PostAsync(Route, FileContent(TestDocuments.Valid().ToJsonString()));
+
+        await AssertFailure(
+            response,
+            HttpStatusCode.Forbidden,
+            @"BDOM\jsmith is not authorized to upload data. Contact the database administrator.");
+    }
+
+    [Fact]
+    public async Task RejectsAWindowsUserLongerThanTheUserParameter()
+    {
+        var repository = new FakeUploadDataRepository();
+        var client = CreateClient(repository);
+        client.DefaultRequestHeaders.Remove(TestAuthHandler.UserHeader);
+        client.DefaultRequestHeaders.Add(TestAuthHandler.UserHeader, "BDOM\\" + new string('a', 46));
+
+        var response = await client.PostAsync(Route, FileContent(TestDocuments.Valid().ToJsonString()));
+
+        await AssertFailure(response, HttpStatusCode.BadRequest, "Windows user name must be 50 characters or fewer.");
+        Assert.Empty(repository.Calls);
+    }
+
+    // A null repository keeps the real UploadDataRepository. The client is
+    // signed in as BDOM\jsmith.
     private HttpClient CreateClient(
         FakeUploadDataRepository? repository,
-        params (string Key, string Value)[] settings) =>
-        _factory
+        params (string Key, string Value)[] settings)
+    {
+        var client = _factory
             .WithWebHostBuilder(builder =>
             {
                 foreach (var (key, value) in settings)
@@ -225,6 +291,10 @@ public sealed class UploadDataApiTests : IClassFixture<ApiFactory>
                 }
             })
             .CreateClient();
+
+        client.DefaultRequestHeaders.Add(TestAuthHandler.UserHeader, @"BDOM\jsmith");
+        return client;
+    }
 
     private static MultipartFormDataContent FileContent(string json, string fileName = "upload.json")
     {

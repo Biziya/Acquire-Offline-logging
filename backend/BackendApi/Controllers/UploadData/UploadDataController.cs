@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using BackendApi.Models.UploadData;
 using BackendApi.Repositories.UploadData;
+using Microsoft.AspNetCore.Authentication.Negotiate;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
 
@@ -43,12 +44,29 @@ public sealed class UploadDataController : ControllerBase
     [Consumes("multipart/form-data")]
     [ProducesResponseType<UploadDataResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<UploadDataResponse>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<UploadDataResponse>(StatusCodes.Status403Forbidden)]
     [ProducesResponseType<UploadDataResponse>(StatusCodes.Status413PayloadTooLarge)]
     [ProducesResponseType<UploadDataResponse>(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<UploadDataResponse>> UploadAsync(
         IFormFile? file,
         CancellationToken cancellationToken)
     {
+        // The uploader is the Windows user Negotiate (Kerberos/NTLM) verified,
+        // as "DOMAIN\user" — never a name from the file or the form. Anonymous:
+        // 401 + WWW-Authenticate: Negotiate, and the database is not called.
+        if (User.Identity is not { IsAuthenticated: true, Name: { Length: > 0 } userName })
+        {
+            return Challenge(NegotiateDefaults.AuthenticationScheme);
+        }
+
+        if (userName.Length > UploadDataRepository.UserSize)
+        {
+            return Failure(
+                StatusCodes.Status400BadRequest,
+                $"Windows user name must be {UploadDataRepository.UserSize} characters or fewer.");
+        }
+
         if (file is null || file.Length == 0)
         {
             return Failure(StatusCodes.Status400BadRequest, "No file was uploaded.");
@@ -104,9 +122,24 @@ public sealed class UploadDataController : ControllerBase
                 {
                     Drillhole = result.Drillhole,
                     FileName = fileName,
+                    UserName = userName,
                     Json = result.StoredProcedureJson
                 },
                 cancellationToken);
+        }
+        catch (UploadNotAuthorizedException exception)
+        {
+            // SQL Server's decision: nothing was inserted (rolled back).
+            _logger.LogWarning(
+                exception,
+                "Upload of {FileName} for drillhole {Drillhole} refused: SQL Server did not authorize {WindowsUser}.",
+                fileName,
+                result.Drillhole,
+                exception.UserName);
+
+            return Failure(
+                StatusCodes.Status403Forbidden,
+                $"{exception.UserName} is not authorized to upload data. Contact the database administrator.");
         }
         catch (SqlException exception) when (FindPermissionError(exception) is { } denied)
         {

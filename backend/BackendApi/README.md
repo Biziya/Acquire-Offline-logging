@@ -321,8 +321,8 @@ response adds `userName`:
 
 - Only a name proven by Windows is returned; nothing the client sends is
   used. No credentials or other OS details are returned.
-- Nothing else requires authentication: plain `/api/status` and the other
-  four APIs stay anonymous.
+- Besides this, only `POST /api/upload-data` requires authentication (it takes
+  the uploader from it); plain `/api/status` and the other APIs stay anonymous.
 - The frontend asks once (`frontend/src/services/currentUser.ts`) and uses the
   name for the sidebar, `created_by`, `edited_by` and Upload Data's
   "Imported By". Without Windows credentials (another browser zone, a
@@ -334,8 +334,8 @@ response adds `userName`:
 - Check from PowerShell on the same PC:
   `Invoke-RestMethod 'http://localhost:7047/api/status?includeUser=true' -UseDefaultCredentials`.
 
-The database records the SQL login instead: the upload procedure stores
-`SUSER_NAME()` in `usr` (see below).
+Upload Data sends the same verified user to the procedure as `@usr`; see
+*Uploader identity and authorization* below.
 
 ## Upload Data endpoint
 
@@ -407,7 +407,7 @@ parameters, async calls and the request's cancellation token (command timeout
 | --- | --- | --- |
 | `@Action` | `varchar(50)` | `'Raw core import_JSON'` |
 | `@Hole` | `varchar(20)` | the JSON `drillhole` |
-| `@usr` | `varchar(50)` | the authenticated web user, or `NULL` (see below) |
+| `@usr` | `varchar(50)` | the verified Windows user (`DOMAIN\user`), see *Uploader identity* |
 | `@fileName` | `varchar(50)` | the uploaded file name (no path) |
 | `@str_json` | `nvarchar(max)` | the filtered JSON (step 4 above) |
 
@@ -416,8 +416,8 @@ The call runs in one `SqlTransaction`, like the SSMS test (`BEGIN TRAN` →
 
 1. Open the connection and check it is on the configured upload database
    (otherwise nothing runs).
-2. `BEGIN TRANSACTION`; log `DB_NAME()`, `SUSER_SNAME()` and `USER_NAME()`
-   (the SQL login is also what the procedure stores in `usr`).
+2. `BEGIN TRANSACTION`; log the Windows user, `DB_NAME()`, `SUSER_SNAME()` and `USER_NAME()`
+   (the SQL login the procedure runs as).
 3. Execute the procedure once and read every result set it returns to the
    end, so an error raised by a later statement still fails the request.
 4. `COMMIT` — not cancellable once the procedure has finished. Only then is
@@ -463,19 +463,41 @@ but **filtered out** of `@str_json`. The procedure's `OPENJSON` also reads `py`
 and `omFacies`, but its raw-import INSERT never stores them, so they are not
 sent; storing them would need a procedure change.
 
-### SQL user (`usr`) behaviour
+### Uploader identity and authorization (`usr`)
 
-The procedure starts with `SELECT @usr = SUSER_NAME();`, which **replaces**
-whatever `@usr` the API sends. The `usr` column therefore holds the SQL Server
-login of the connection (with the current `DefaultConnection`, the SQL login
-`userAcquire`), not the Windows user shown as "Imported By" in the frontend.
+```text
+browser ──Negotiate (Kerberos/NTLM)──▶ API: User.Identity.Name = "BDOM\jsmith"
+API ──SQL login userAcquire──▶ EXEC … @usr = 'BDOM\jsmith'
+procedure: is BDOM\jsmith in the uploaders' AD group?  no → THROW 51001 (nothing inserted)
+                                                       yes → insert/update, usr = 'BDOM\jsmith'
+```
 
-The API sends `@usr = NULL`, as the working SSMS test did: there is no verified
-web user to send, and the procedure ignores the value anyway. Recording the
-real importer would need both a procedure change (use `@usr` instead of
-`SUSER_NAME()`) and an authenticated, verified identity in the API. Neither is
-done here. All five endpoints are anonymous: anyone who can reach the API can
-upload.
+- `POST /api/upload-data` requires Windows Integrated Authentication. An
+  anonymous request gets `401` + `WWW-Authenticate: Negotiate` and the
+  database is not called. The other endpoints stay anonymous.
+- `@usr` is the full verified `DOMAIN\user` (a local account keeps its
+  computer name). `created_by` / `edited_by` in the file, or any form field,
+  are never used as the uploader.
+- The decision is SQL Server's: the procedure checks `@usr` against the
+  uploaders' AD group (`xp_logininfo`) and raises error **51001** when the
+  user is not a member. The API rolls back and answers `403`
+  "`<user>` is not authorized to upload data. Contact the database
+  administrator." Other SQL errors stay `500` without details.
+- The SQL connection stays `userAcquire`: no impersonation, no delegation.
+  SQL Server therefore trusts the API to pass the verified name; keep the
+  `userAcquire` password out of Git (see *Production password*).
+
+**Database side (not applied by this repository):**
+`Sql/UploadDataUserAuthorization.sql` holds the read-only checks, the
+procedure change (stop `SELECT @usr = SUSER_NAME();`, add the group check),
+the `xp_logininfo` grant and development-only tests. Until a DBA applies it,
+the procedure still replaces `@usr` with `SUSER_NAME()` (`usr` =
+`userAcquire`) and authorizes everyone the API lets through.
+
+**Careful with `usr` in the match key:** once `usr` is the real user,
+re-uploading a drillhole stored under `userAcquire` adds rows instead of
+updating them (see *Duplicates and updates*). The script lists those
+drillholes; what to do with them is a decision for the data owners.
 
 ### Duplicates and updates
 
@@ -560,7 +582,7 @@ script's B3 grants `SELECT, INSERT, UPDATE` on that one table (not the whole
 
 ### Known limitations of the procedure
 
-- `usr` is always `SUSER_NAME()` (see above).
+- Until `Sql/UploadDataUserAuthorization.sql` is applied, `usr` is `SUSER_NAME()` and no group is checked (see above).
 - Not every JSON field is stored (see the mapping).
 - No inserted/updated counts are returned.
 - Column sizes of `CoreDescrData` (e.g. `PROJECTCODE`, `VALUE`) and the
@@ -593,7 +615,9 @@ database:
   projects, failed lookup); empty result, `400` for a missing or too-long
   drillhole, safe `500`.
 - `UploadData/`: validation, filtering, one procedure call, error 229 and
-  other SQL errors, an unreachable server.
+  other SQL errors, an unreachable server; anonymous upload → 401 without a
+  database call, the verified user (not `created_by`, `edited_by` or a form
+  field) sent as `@usr`, error 51001 → 403, an over-long user name → 400.
 
 ```bash
 dotnet test ../BackendApi.Tests

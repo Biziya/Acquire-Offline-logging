@@ -148,6 +148,7 @@ describe("external response validation", () => {
       count: 2,
     });
     expect(fetch.mock.calls[0]?.[0]).toBe("/api/upload-data");
+    expect(fetch.mock.calls[0]?.[1]?.credentials).toBe("include");
     const body: unknown = fetch.mock.calls[0]?.[1]?.body;
     if (!(body instanceof FormData)) throw new Error("Expected multipart form data.");
     const uploadedFile = body.get("file");
@@ -187,6 +188,32 @@ describe("external response validation", () => {
     );
     await expect(importUploadData(file)).rejects.toThrow("Database upload failed.");
     await expect(importUploadData(file)).rejects.toThrow(/^Upload failed$/);
+  });
+
+  it("reports a missing Windows sign-in and a user SQL Server did not authorize", async () => {
+    const file = new File(["{}"], "data.json", { type: "application/json" });
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(new Response(null, { status: 401 }))
+        .mockResolvedValueOnce(
+          Response.json(
+            {
+              success: false,
+              message: "BDOM\\jsmith is not authorized to upload data. Contact the database administrator.",
+            },
+            { status: 403 },
+          ),
+        ),
+    );
+
+    await expect(importUploadData(file)).rejects.toThrow(
+      "Windows sign-in required: your account could not be verified.",
+    );
+    await expect(importUploadData(file)).rejects.toThrow(
+      "BDOM\\jsmith is not authorized to upload data. Contact the database administrator.",
+    );
   });
 
   it("reports a request that runs past the timeout", async () => {

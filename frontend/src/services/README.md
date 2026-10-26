@@ -69,7 +69,11 @@ Anything else throws, which the indicator treats as offline.
 ### `uploadData.ts`
 
 `importUploadData(file, signal)` POSTs `multipart/form-data` with the file under
-the field name `file`. Network failures become
+the field name `file`, with `credentials: "include"`: the backend takes the
+uploader from Windows authentication, and no user name is sent. A `401`
+becomes "Windows sign-in required: your account could not be verified."; a
+`403` (SQL Server did not authorize the user) shows the backend's message.
+Network failures become
 "Server unavailable"; `AbortError` is re-thrown
 untouched. Error text is read from `detail`, `message`, or `title`, or from a
 plain-text body, falling back to "Upload failed".
