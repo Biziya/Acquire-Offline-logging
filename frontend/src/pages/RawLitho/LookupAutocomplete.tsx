@@ -5,7 +5,6 @@ import {
   handleCellNavigation,
   isClearCellRequest,
   markKeyAsHandled,
-  moveFocusHorizontally,
 } from "./tableNavigation";
 import { CELL_INPUT } from "./rawLithoStyles";
 
@@ -33,10 +32,6 @@ const MENU_ITEM =
 const MENU_STATUS = "text-[0.8rem] text-rl-text-muted";
 const CELL_ERROR =
   "absolute top-[calc(100%+2px)] left-1 z-10 rounded-[3px] bg-[#fdf0ef] px-[5px] py-0.5 text-[0.7rem] whitespace-nowrap text-rl-danger";
-
-function hasModifier(event: React.KeyboardEvent<HTMLInputElement>) {
-  return event.altKey || event.ctrlKey || event.metaKey || event.shiftKey;
-}
 
 function normalize(value: unknown) {
   return value === null || value === undefined
@@ -75,26 +70,8 @@ function LookupAutocomplete({
   const validationId = `${instanceId}-validation`;
   const loadErrorId = `${instanceId}-load-error`;
   const inputRef = useRef<HTMLInputElement>(null);
-  const skipNextEmptyValueSync = useRef(false);
-  /*
-   * True from the first keystroke until the value settles. It is what separates
-   * "searching the list" from "sitting in a cell that already has a value":
-   * a filled cell only accepts the highlighted match on ArrowLeft / ArrowRight
-   * while searching; otherwise those keys move the caret.
-   */
-  const isSearching = useRef(false);
-  /*
-   * Set while a fast accept is moving focus out of the cell. Moving focus fires
-   * `blur` synchronously, before React has re-rendered with the accepted value,
-   * so `finishEditing` would still see the partial query and flag it invalid.
-   */
-  const isAcceptingMatch = useRef(false);
-  /*
-   * Set when Delete empties the cell. The list reopens on every value, but the
-   * user asked for an empty cell, so leaving it must not refill it with the
-   * first suggestion. Typing or refocusing ends it.
-   */
-  const wasCleared = useRef(false);
+  // null: table navigation; a list index: explicit option selection (F2).
+  const [optionIndex, setOptionIndex] = useState<number | null>(null);
   const [query, setQuery] = useState(() => toInputValue(value));
   const [isOpen, setIsOpen] = useState(false);
   const [showAllOptions, setShowAllOptions] = useState(false);
@@ -127,9 +104,9 @@ function LookupAutocomplete({
   const suggestions = useMemo(() => {
     const normalizedQuery = normalize(query);
 
-    if (showAllOptions || !normalizedQuery) return options;
+    if (showAllOptions || !normalizedQuery) return [{ code: "" }, ...options];
 
-    return options
+    const matches = options
       .map((option) => ({
         option,
         rank: getMatchRank(option.code, normalizedQuery),
@@ -142,28 +119,21 @@ function LookupAutocomplete({
       )
       .slice(0, MATCH_LIMIT)
       .map(({ option }) => option);
+    return [{ code: "" }, ...matches];
   }, [options, query, showAllOptions]);
 
-  /*
-   * The list is ranked exact match → prefix match → substring match, so the
-   * closest match is the first entry while filtering. On focus the full list
-   * highlights the current value, so Enter preserves an existing selection.
-   */
-  const selectedIndex = showAllOptions && exactOption
-    ? suggestions.indexOf(exactOption)
-    : -1;
-  const highlightedIndex = suggestions.length === 0 ? -1 : Math.max(0, selectedIndex);
+  // Empty stays first; Enter confirms the closest typed match.
+  const selectedIndex = exactOption ? suggestions.indexOf(exactOption) : -1;
+  const defaultIndex = showAllOptions || !query.trim()
+    ? Math.max(0, selectedIndex)
+    : suggestions.length > 1 ? 1 : -1;
+  const highlightedIndex = optionIndex ?? defaultIndex;
   const highlightedSuggestion = suggestions[highlightedIndex] ?? null;
 
   const isDisabled = !isPageEnabled || (!isLoading && options.length === 0);
   const showSuggestions = isOpen && isPageEnabled;
 
   useEffect(() => {
-    if (skipNextEmptyValueSync.current && toInputValue(value) === "") {
-      skipNextEmptyValueSync.current = false;
-      return;
-    }
-
     setQuery(toInputValue(value));
     setShowInvalidSelection(false);
   }, [value]);
@@ -219,7 +189,7 @@ function LookupAutocomplete({
   }
 
   function selectSuggestion(suggestion: { code: string }) {
-    isSearching.current = false;
+    setOptionIndex(null);
     setQuery(suggestion.code);
     setIsOpen(false);
     setShowInvalidSelection(false);
@@ -236,22 +206,18 @@ function LookupAutocomplete({
       return;
     }
 
-    isSearching.current = true;
+    setOptionIndex(null);
     setShowAllOptions(false);
-    wasCleared.current = false;
     setQuery(nextQuery);
     openDropdown();
     setShowInvalidSelection(false);
 
-    if (value && normalize(nextQuery) !== normalize(value)) {
-      skipNextEmptyValueSync.current = true;
-      commitValue("");
-    }
+    // Clearing is explicit; a new non-empty code stays a draft until confirmed.
+    if (nextQuery === "") commitValue("");
   }
 
   function clearCellValue() {
-    isSearching.current = false;
-    wasCleared.current = true;
+    setOptionIndex(null);
     setQuery("");
     setShowInvalidSelection(false);
     openDropdown();
@@ -259,84 +225,17 @@ function LookupAutocomplete({
   }
 
   function finishEditing() {
-    if (isAcceptingMatch.current) {
-      isAcceptingMatch.current = false;
-      return;
-    }
-
-    if (!query.trim()) {
-      setQuery("");
-      commitValue("");
-      setShowInvalidSelection(false);
-    } else if (exactOption) {
-      setQuery(exactOption.code);
-      commitValue(exactOption.code);
-      setShowInvalidSelection(false);
-    } else {
-      setShowInvalidSelection(true);
-    }
-
-    isSearching.current = false;
+    // Retain unmatched text for validation, but never commit on blur.
+    const invalid = Boolean(query.trim() && !exactOption);
+    setShowInvalidSelection(invalid);
+    if (!invalid) setQuery(toInputValue(value));
+    setOptionIndex(null);
     setIsOpen(false);
   }
 
-  /*
-   * Fast accept. While the open list highlights a suggestion, ArrowRight /
-   * ArrowLeft / Tab / Shift + Tab take it, close the list and move one cell
-   * right / left, so a code never has to be finished by hand.
-   *
-   * The highlight decides, not whether anything was typed: an empty cell whose
-   * open list highlights "Unknown" accepts "Unknown". The one exception is a
-   * cell that already holds a value and has not been typed into — it is left
-   * to `handleCellNavigation`, which keeps the ordinary caret-edge behaviour
-   * for reading and editing an existing value.
-   *
-   * It only fires when there is something valid to accept, so a query with no
-   * match can never write a wrong value into the cell.
-   */
-  function acceptClosestMatch(event: React.KeyboardEvent<HTMLInputElement>) {
-    const isTab = event.key === "Tab";
-
-    if (isTab ? event.altKey || event.ctrlKey || event.metaKey : hasModifier(event))
-      return false;
-    if (!showSuggestions || !highlightedSuggestion) return false;
-    if (!isSearching.current && (query.trim() || wasCleared.current))
-      return false;
-
-    selectSuggestion(highlightedSuggestion);
-    isAcceptingMatch.current = true;
-
-    /*
-     * Tab keeps its own route after accepting: the next / previous cell on this
-     * page, or — when there is none — the event bubbles on to the table, which
-     * crosses the page or appends a row (Tab only, never Shift + Tab). Either can
-     * move focus synchronously, before React re-renders with the accepted
-     * value, so blurs are ignored until this keydown has been dispatched.
-     */
-    if (isTab) {
-      queueMicrotask(() => {
-        isAcceptingMatch.current = false;
-      });
-      handleCellNavigation(event);
-      return true;
-    }
-
-    event.preventDefault();
-    markKeyAsHandled(event);
-    const hasMoved = moveFocusHorizontally(
-      event.currentTarget,
-      event.key === "ArrowRight" ? 1 : -1,
-    );
-
-    // No neighbouring cell: focus stayed, so no blur was skipped.
-    if (!hasMoved) isAcceptingMatch.current = false;
-
-    return true;
-  }
-
   function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
-    // In particular, Alt + Tab belongs entirely to Windows.
-    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    // Alt + Tab belongs entirely to Windows; modified editing keys stay native.
+    if (event.altKey || event.ctrlKey || event.metaKey || event.nativeEvent.isComposing) return;
 
     if (isClearCellRequest(event)) {
       event.preventDefault();
@@ -345,49 +244,44 @@ function LookupAutocomplete({
     }
 
     if (event.key === "Escape") {
-      isSearching.current = false;
+      setOptionIndex(null);
       setQuery(toInputValue(value));
       setShowInvalidSelection(false);
       setIsOpen(false);
       return;
     }
 
-    // Tab / Shift + Tab accept the highlighted match like ArrowRight / ArrowLeft.
-    // With nothing to accept they settle the value exactly as before, then move
-    // through the shared table navigation.
-    if (event.key === "Tab") {
-      if (acceptClosestMatch(event)) return;
-
-      finishEditing();
-      handleCellNavigation(event);
+    if (event.key === "F2") {
+      event.preventDefault();
+      markKeyAsHandled(event);
+      openDropdown();
+      setOptionIndex(Math.max(0, highlightedIndex));
       return;
     }
 
-    if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
-      if (acceptClosestMatch(event)) return;
-
-      handleCellNavigation(event);
+    // F2 explicitly switches vertical arrows from table to option navigation.
+    if (optionIndex !== null && !event.shiftKey &&
+        (event.key === "ArrowUp" || event.key === "ArrowDown")) {
+      event.preventDefault();
+      markKeyAsHandled(event);
+      setOptionIndex(Math.max(0, Math.min(suggestions.length - 1,
+        optionIndex + (event.key === "ArrowDown" ? 1 : -1))));
       return;
     }
 
-    /*
-     * ArrowUp / ArrowDown never walk the suggestion list — that list is a mouse
-     * and mouse-wheel surface. The vertical keys belong to the table:
-     *   1. a row exists above / below → focus moves one cell vertically,
-     *   2. otherwise the event bubbles unhandled, so ArrowDown on the last row
-     *      reaches `handleTableKeyDown` and appends a row.
-     */
-    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-      handleCellNavigation(event);
-      return;
-    }
-
-    if (event.key === "Enter" && isOpen) {
-      if (highlightedSuggestion) {
-        event.preventDefault();
-        selectSuggestion(highlightedSuggestion);
+    if (event.key === "Enter") {
+      event.preventDefault();
+      markKeyAsHandled(event);
+      if (isOpen && highlightedSuggestion) selectSuggestion(highlightedSuggestion);
+      else if (!isOpen) {
+        openDropdown();
+        setOptionIndex(Math.max(0, defaultIndex));
       }
+      return;
     }
+
+    // Navigation never accepts a highlighted option or changes the value.
+    handleCellNavigation(event);
   }
 
   let placeholder = "";
@@ -398,10 +292,10 @@ function LookupAutocomplete({
   else if (options.length === 0) placeholder = "No values";
 
   function handleFocus() {
-    isSearching.current = false;
-    wasCleared.current = false;
-    isAcceptingMatch.current = false;
+    setOptionIndex(null);
 
+    setQuery(toInputValue(value));
+    setShowInvalidSelection(false);
     setShowAllOptions(true);
     openDropdown();
   }
@@ -436,11 +330,11 @@ function LookupAutocomplete({
                 selectSuggestion(suggestion);
               }}
             >
-              {suggestion.code}
+              {suggestion.code || "Empty / No value"}
             </li>
           ))}
 
-          {!isLoading && suggestions.length === 0 && (
+          {!isLoading && suggestions.length === 1 && Boolean(query.trim()) && !showAllOptions && (
             <li
               className={`${MENU_ITEM} text-rl-text-muted`}
               role="option"
@@ -477,10 +371,11 @@ function LookupAutocomplete({
         disabled={isDisabled}
         aria-label={`${lookup.label}, row ${rowIndex + 1}`}
         aria-autocomplete="list"
+        aria-description="Enter confirms a choice. F2 then Up or Down selects options; Escape cancels. Tab and arrows navigate cells."
         aria-expanded={showSuggestions}
         aria-controls={suggestionListId}
         aria-activedescendant={
-          highlightedSuggestion
+          showSuggestions && highlightedSuggestion
             ? `${suggestionListId}-option-${highlightedIndex}`
             : undefined
         }

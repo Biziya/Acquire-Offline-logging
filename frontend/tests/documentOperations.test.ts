@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createEmptyRow } from "../src/pages/RawLitho/constants";
 import {
   addDocumentRow,
@@ -10,6 +10,7 @@ import {
 } from "../src/pages/RawLitho/rawLithoDocumentOperations";
 import {
   normalizeRawLithoDocument,
+  exportRawLithoSnapshot,
   readRawLithoImport,
 } from "../src/pages/RawLitho/rawLithoHelpers";
 import { findDuplicateIntervalRowIds } from "../src/pages/RawLitho/rawLithoValidation";
@@ -34,6 +35,38 @@ const complete = () => ({
   ],
 });
 describe("document operations", () => {
+  it("exports normalized comments from legacy records while preserving internal and trailing spaces", async () => {
+    const document = complete();
+    document.rows[0]!.lithologyComments = " \t  Fine  sandstone ";
+    document.rows[0]!.lithologicalDescription = "  unchanged ";
+    let exported: Blob | undefined;
+    vi.stubGlobal("URL", {
+      createObjectURL: (blob: Blob) => { exported = blob; return "blob:test"; },
+      revokeObjectURL: vi.fn(),
+    });
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    try {
+      exportRawLithoSnapshot(document);
+      const json = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsText(exported!);
+      });
+      expect(JSON.parse(json).rows[0]).toMatchObject({
+        lithologyComments: "Fine  sandstone ", lithologicalDescription: "  unchanged ",
+      });
+      expect(document.rows[0]!.lithologyComments).toBe(" \t  Fine  sandstone ");
+    } finally {
+      click.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("normalizes whitespace-only comment edits to empty without changing the document", () => {
+    const document = complete();
+    expect(editRow(document, "legacy-id", "lithologyComments", " \t ")).toBe(document);
+  });
   it("requires all five required fields and focuses the first missing field", () => {
     let document = createBlankDocument();
     for (const field of [

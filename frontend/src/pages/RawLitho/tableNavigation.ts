@@ -104,25 +104,11 @@ function moveVertically(cell: HTMLTableCellElement, step: number) {
   return false;
 }
 
-/*
- * Moves focus to the neighbouring cell without asking whether the caret is
- * free to leave. Used by the lookup cell after it has accepted a suggestion:
- * the value is settled, so the caret position no longer matters.
- */
-export function moveFocusHorizontally(
+export function canLeaveCell(
   element: EventTarget | null,
   step: number,
+  allowWholeValueSelection = false,
 ) {
-  const cell = element instanceof Element ? element.closest("td") : null;
-
-  if (!cell) {
-    return false;
-  }
-
-  return moveHorizontally(cell, step);
-}
-
-export function canLeaveCell(element: EventTarget | null, step: number) {
   if (!(
     element instanceof HTMLInputElement ||
     element instanceof HTMLTextAreaElement
@@ -140,9 +126,11 @@ export function canLeaveCell(element: EventTarget | null, step: number) {
     return true;
   }
 
-  if (selectionStart === null || selectionStart !== selectionEnd) {
-    return selectionStart === null;
-  }
+  if (selectionStart === null) return true;
+  // Table navigation selects the destination's whole value. That selection
+  // must allow the next arrow to move immediately, without collapsing it first.
+  if (selectionStart !== selectionEnd)
+    return allowWholeValueSelection && selectionStart === 0 && selectionEnd === element.value.length;
 
   return step < 0
     ? selectionStart === 0
@@ -214,7 +202,7 @@ export function getHorizontalStep(event: TableKeyEvent) {
   const step =
     event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
 
-  return step !== 0 && canLeaveCell(event.target, step) ? step : 0;
+  return step !== 0 && canLeaveCell(event.target, step, true) ? step : 0;
 }
 
 /*

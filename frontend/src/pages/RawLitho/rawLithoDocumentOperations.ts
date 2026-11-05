@@ -12,6 +12,7 @@ import { createEmptyRow, createRowFromPrevious } from "./constants";
 import {
   createRawLithoDocument,
   getNextRowId,
+  normalizeFieldValue,
   touchRawLithoDocument,
 } from "./rawLithoHelpers";
 import {
@@ -35,6 +36,7 @@ export function editRow(
   field: RowField,
   value: string,
 ): RawLithoDocument {
+  value = normalizeFieldValue(field, value);
   if (!lithoDocument.rows.some((row) => row.id === rowId && row[field] !== value))
     return lithoDocument;
   return touchRawLithoDocument(lithoDocument, {

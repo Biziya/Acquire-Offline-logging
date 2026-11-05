@@ -2,6 +2,7 @@ import type { LookupData, RawLithoRow, RowField } from "../../types/domain";
 import { RAW_LITHO_LOOKUP_BY_FIELD } from "../../services/rawLithoLookupConfig";
 import { COMMENT_FIELD_KEYS, tableColumns } from "./constants";
 import { isValidDepth, normalizeLookupCode } from "./rawLithoValidation";
+import { normalizeFieldValue } from "./rawLithoHelpers";
 import {
   getColumnKeyFromElement,
   getRowIdFromElement,
@@ -145,7 +146,7 @@ function isEditableColumn(columnKey: RowField, lookupData: LookupData) {
  * The value a pasted text becomes in `columnKey`, or null when the cell would
  * reject it. Lookup codes are matched case-insensitively and stored with the
  * lookup's own spelling, as picking a suggestion would. Comments are kept
- * verbatim; codes and depths are trimmed.
+ * with internal/trailing spaces intact; codes and depths are trimmed.
  */
 function toCellValue(columnKey: RowField, text: string, lookupData: LookupData) {
   const lookup = RAW_LITHO_LOOKUP_BY_FIELD[columnKey];
@@ -161,7 +162,7 @@ function toCellValue(columnKey: RowField, text: string, lookupData: LookupData) 
     return typeof match === "string" ? match.trim() : null;
   }
 
-  if (COMMENT_FIELD_KEYS.has(columnKey)) return text;
+  if (COMMENT_FIELD_KEYS.has(columnKey)) return normalizeFieldValue(columnKey, text);
 
   const value = text.trim();
   const isNumber = tableColumns.some(

@@ -49,8 +49,8 @@ export const ROW_COPY_FIELD_KEYS = Object.freeze<RowField[]>([
   "ox",
 ]);
 
-// Free-text fields keep exactly what the user typed, including leading,
-// trailing and repeated spaces. Codes and depths are still trimmed on load.
+// Free-text fields retain trailing and repeated spaces. Lithology Comments
+// additionally removes leading whitespace in the shared field normalizer.
 export const COMMENT_FIELD_KEYS = new Set<RowField>([
   "lithologyComments",
   "lithologicalDescription",

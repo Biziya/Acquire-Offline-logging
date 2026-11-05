@@ -46,9 +46,9 @@ function normalizeText(value: unknown) {
   return "";
 }
 
-function normalizeFieldValue(fieldKey: RowField, value: unknown) {
+export function normalizeFieldValue(fieldKey: RowField, value: unknown) {
   if (COMMENT_FIELD_KEYS.has(fieldKey) && typeof value === "string") {
-    return value;
+    return fieldKey === "lithologyComments" ? value.trimStart() : value;
   }
 
   return normalizeText(value);

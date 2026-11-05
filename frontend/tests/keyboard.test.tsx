@@ -71,147 +71,93 @@ function AutocompleteHarness({
 }
 describe("autocomplete and focus", () => {
   it.each([
-    ["ArrowRight", "After"],
-    ["ArrowLeft", "Before"],
-  ])("accepts a partial match with %s and focuses %s", async (key, label) => {
+    ["{Tab}", "After"], ["{Shift>}{Tab}{/Shift}", "Before"],
+    ["{ArrowRight}", "After"], ["{ArrowLeft}", "Before"],
+  ])("preserves empty values on %s", async (keys, label) => {
+    const user = userEvent.setup();
+    const change = vi.fn();
+    render(<AutocompleteHarness onChange={change} />);
+    const input = screen.getByRole("combobox");
+    await user.click(input);
+    expect(screen.getAllByRole("option")[0]).toHaveTextContent("Empty / No value");
+    await user.keyboard(keys);
+    expect(input).toHaveValue("");
+    expect(change).not.toHaveBeenCalled();
+    expect(screen.getByLabelText(label)).toHaveFocus();
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["{Tab}", "After"], ["{Shift>}{Tab}{/Shift}", "Before"],
+    ["{End}{ArrowRight}", "After"], ["{Home}{ArrowLeft}", "Before"],
+  ])("does not confirm a typed match on navigation %s", async (keys, label) => {
     const user = userEvent.setup();
     const change = vi.fn();
     render(<AutocompleteHarness onChange={change} />);
     const input = screen.getByRole("combobox");
     await user.type(input, "Unk");
-    expect(screen.getByRole("option", { name: "Unknown" })).toHaveClass(
-      "raw-litho-lookup-suggestion--active",
-    );
-    await user.keyboard(`{${key}}`);
-    expect(input).toHaveValue("Unknown");
-    expect(change).toHaveBeenLastCalledWith("Unknown");
+    expect(screen.getByRole("option", { name: "Unknown" })).toHaveClass("raw-litho-lookup-suggestion--active");
+    await user.keyboard(keys);
+    expect(change).not.toHaveBeenCalled();
     expect(screen.getByLabelText(label)).toHaveFocus();
-    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
-    expect(input).toHaveAttribute("aria-invalid", "false");
   });
-  it.each([
-    [false, "After"],
-    [true, "Before"],
-  ])(
-    "accepts a partial match with Tab (shift: %s) and focuses %s",
-    async (shift, label) => {
-      const user = userEvent.setup();
-      const change = vi.fn();
-      render(<AutocompleteHarness onChange={change} />);
-      const input = screen.getByRole("combobox");
-      await user.type(input, "Unk");
-      await user.tab({ shift });
-      expect(input).toHaveValue("Unknown");
-      expect(change).toHaveBeenLastCalledWith("Unknown");
-      expect(screen.getByLabelText(label)).toHaveFocus();
-      expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
-      expect(input).toHaveAttribute("aria-invalid", "false");
-    },
-  );
-  it.each([
-    ["{Tab}", "After"],
-    ["{Shift>}{Tab}{/Shift}", "Before"],
-    ["{ArrowRight}", "After"],
-    ["{ArrowLeft}", "Before"],
-  ])(
-    "accepts the highlighted suggestion of an empty cell with %s and focuses %s",
-    async (keys, label) => {
-      const user = userEvent.setup();
-      const change = vi.fn();
-      render(<AutocompleteHarness onChange={change} />);
-      const input = screen.getByRole("combobox");
-      await user.click(input);
-      expect(input).toHaveValue("");
-      expect(screen.getByRole("option", { name: "Unknown" })).toHaveClass(
-        "raw-litho-lookup-suggestion--active",
-      );
 
-      await user.keyboard(keys);
-      expect(input).toHaveValue("Unknown");
-      expect(change).toHaveBeenCalledTimes(1);
-      expect(change).toHaveBeenLastCalledWith("Unknown");
-      expect(screen.getByLabelText(label)).toHaveFocus();
-      expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
-      expect(input).toHaveAttribute("aria-invalid", "false");
-    },
-  );
-  it("keeps an existing value and leaves a cleared cell empty", async () => {
+  it("confirms the closest match with Enter and allows selecting empty with the mouse", async () => {
     const user = userEvent.setup();
     const change = vi.fn();
     render(<AutocompleteHarness onChange={change} />);
     const input = screen.getByRole("combobox");
-    await user.type(input, "Other{Enter}");
-    change.mockClear();
-
-    // Clicked into a filled cell: the list is open, but the value stays.
+    await user.type(input, "Unk{Enter}");
+    expect(input).toHaveValue("Unknown");
+    expect(change).toHaveBeenLastCalledWith("Unknown");
     await user.click(screen.getByLabelText("Before"));
     await user.click(input);
-    expect(screen.getByRole("listbox")).toBeInTheDocument();
-    await user.keyboard("{End}{ArrowRight}");
-    expect(input).toHaveValue("Other");
-    expect(screen.getByLabelText("After")).toHaveFocus();
-    expect(change).not.toHaveBeenCalled();
-
-    // Delete empties the cell; leaving it must not refill it.
-    await user.click(input);
-    await user.keyboard("{End}{Delete}");
-    expect(change).toHaveBeenLastCalledWith("");
-    await user.tab();
+    await user.click(screen.getByRole("option", { name: "Empty / No value" }));
     expect(input).toHaveValue("");
     expect(change).toHaveBeenLastCalledWith("");
   });
-  it("Tab never commits an unmatched query and leaves an untouched value alone", async () => {
+
+  it("only browses options after F2 and only commits on Enter", async () => {
     const user = userEvent.setup();
     const change = vi.fn();
     render(<AutocompleteHarness onChange={change} />);
     const input = screen.getByRole("combobox");
-    await user.type(input, "ZZZ");
-    await user.tab();
-    expect(change).not.toHaveBeenCalled();
-    expect(input).toHaveAttribute("aria-invalid", "true");
-
-    await user.clear(input);
-    await user.type(input, "Other{Enter}");
-    change.mockClear();
-    await user.click(screen.getByLabelText("Before"));
-    await user.tab();
+    await user.click(input);
+    await user.keyboard("{F2}{ArrowDown}{ArrowDown}");
     expect(input).toHaveFocus();
+    expect(change).not.toHaveBeenCalled();
+    expect(screen.getByRole("option", { name: "Other" })).toHaveClass("raw-litho-lookup-suggestion--active");
     await user.tab();
     expect(change).not.toHaveBeenCalled();
-    expect(input).toHaveValue("Other");
-    expect(screen.getByLabelText("After")).toHaveFocus();
+    await user.click(input);
+    await user.keyboard("{F2}{ArrowDown}{Enter}");
+    expect(change).toHaveBeenLastCalledWith("Unknown");
+    await user.keyboard("{F2}{ArrowUp}{Enter}");
+    expect(change).toHaveBeenLastCalledWith("");
   });
-  it("preserves Enter, Tab, and mouse selection", async () => {
-    const user = userEvent.setup();
-    const { unmount } = render(<AutocompleteHarness />);
-    await user.type(screen.getByRole("combobox"), "Unk{Enter}");
-    expect(screen.getByRole("combobox")).toHaveValue("Unknown");
-    unmount();
-    const second = render(<AutocompleteHarness />);
-    await user.type(screen.getByRole("combobox"), "Unknown");
-    await user.tab();
-    expect(screen.getByLabelText("After")).toHaveFocus();
-    expect(screen.getByRole("combobox")).toHaveValue("Unknown");
-    second.unmount();
-    render(<AutocompleteHarness />);
-    await user.click(screen.getByRole("combobox"));
-    await user.click(screen.getByRole("option", { name: "Other" }));
-    expect(screen.getByRole("combobox")).toHaveValue("Other");
-  });
-  it("does not accept an unmatched query or change dropdown selection with vertical arrows", async () => {
+
+  it("retains an existing value when a different draft is left unconfirmed", async () => {
     const user = userEvent.setup();
     const change = vi.fn();
     render(<AutocompleteHarness onChange={change} />);
-    await user.type(screen.getByRole("combobox"), "ZZZ");
-    await user.keyboard("{ArrowRight}");
+    const input = screen.getByRole("combobox");
+    await user.type(input, "Unknown{Enter}");
+    change.mockClear();
+    await user.keyboard("{Control>}a{/Control}Other");
+    await user.tab();
+    expect(input).toHaveValue("Unknown");
     expect(change).not.toHaveBeenCalled();
-    await user.clear(screen.getByRole("combobox"));
-    await user.type(screen.getByRole("combobox"), "Unk");
-    await user.keyboard("{ArrowDown}{ArrowUp}");
+  });
+
+  it("does not commit unmatched text and preserves validation", async () => {
+    const user = userEvent.setup();
+    const change = vi.fn();
+    render(<AutocompleteHarness onChange={change} />);
+    const input = screen.getByRole("combobox");
+    await user.type(input, "ZZZ{Enter}");
+    await user.tab();
     expect(change).not.toHaveBeenCalled();
-    expect(screen.getByRole("option", { name: "Unknown" })).toHaveClass(
-      "raw-litho-lookup-suggestion--active",
-    );
+    expect(input).toHaveAttribute("aria-invalid", "true");
   });
   it("can focus a restored string row ID containing selector punctuation", () => {
     const id = 'row-"quoted"';
@@ -366,6 +312,66 @@ const pageRows = (count: number) =>
   );
 
 describe("Tab navigation", () => {
+  it("moves through consecutive filled cells and rows with one arrow per move", async () => {
+    const user = await table(pageRows(2));
+    await user.click(cell("Litho To (m), row 1"));
+    await user.tab();
+    expect(cell("Litho Code, row 1")).toHaveFocus();
+    await user.keyboard("{ArrowRight}");
+    expect(cell("Colour, row 1")).toHaveFocus();
+    await user.keyboard("{ArrowDown}");
+    expect(cell("Colour, row 2")).toHaveFocus();
+    await user.keyboard("{ArrowLeft}");
+    expect(cell("Litho Code, row 2")).toHaveFocus();
+    await user.keyboard("{ArrowUp}");
+    expect(cell("Litho Code, row 1")).toHaveFocus();
+    expect(screen.getAllByRole("listbox")).toHaveLength(1);
+    await waitFor(async () => expect(await storedRows()).toEqual(pageRows(2)));
+  });
+
+  it("keeps optional local dropdowns empty through Tab and arrow navigation", async () => {
+    const user = await table(pageRows(2));
+    await user.click(cell("Lithology Comments, row 1"));
+    await user.tab();
+    expect(cell("Granulo, row 1")).toHaveFocus();
+    await user.keyboard("{ArrowRight}");
+    expect(cell("Hardness, row 1")).toHaveFocus();
+    await user.keyboard("{ArrowDown}");
+    expect(cell("Hardness, row 2")).toHaveFocus();
+    await user.keyboard("{ArrowLeft}");
+    expect(cell("Granulo, row 2")).toHaveFocus();
+    await user.tab({ shift: true });
+    expect(cell("Lithology Comments, row 2")).toHaveFocus();
+    await waitFor(async () => expect(await storedRows()).toEqual(pageRows(2)));
+  });
+
+  it("keeps normal caret editing and partial text selections inside a text cell", async () => {
+    const user = await table([{ ...validRow("r0", 0, 10), lithologyComments: "Fine sand" }]);
+    const input = cell("Lithology Comments, row 1") as HTMLInputElement;
+    await user.click(input);
+    input.setSelectionRange(2, 2);
+    expect(fireEvent.keyDown(input, { key: "ArrowRight" })).toBe(true);
+    expect(input).toHaveFocus();
+    input.setSelectionRange(1, 4);
+    expect(fireEvent.keyDown(input, { key: "ArrowLeft" })).toBe(true);
+    expect(input).toHaveFocus();
+    input.select();
+    fireEvent.keyDown(input, { key: "ArrowRight" });
+    expect(cell("Granulo, row 1")).toHaveFocus();
+  });
+
+  it("does not create a row while browsing options, and validates an explicitly cleared required value", async () => {
+    const user = await table();
+    await user.click(cell("Litho Code, row 1"));
+    await user.keyboard("{F2}{ArrowDown}");
+    expect(cell("Litho Code, row 1")).toHaveFocus();
+    expect(screen.queryByLabelText("Litho From (m), row 2")).toBeNull();
+    await user.click(screen.getByRole("option", { name: "Empty / No value" }));
+    expect(cell("Litho Code, row 1")).toHaveValue("");
+    await user.keyboard("{F4}");
+    expect(screen.queryByLabelText("Litho From (m), row 2")).toBeNull();
+    expect(toast).toHaveBeenCalledWith(TOAST_NOTIFICATIONS.missingRequiredFields);
+  });
   it("moves like the arrows, wraps rows, and appends only a valid row", async () => {
     const user = await table(pageRows(2));
     await user.click(cell("Litho From (m), row 1"));
@@ -398,17 +404,17 @@ describe("Tab navigation", () => {
     );
   });
 
-  it("Tab and Shift + Tab accept a partial lookup match in the table and keep it", async () => {
+  it("Enter confirms partial lookup matches before table navigation", async () => {
     const user = await table([
       { ...validRow("r0", 0, 10), lithoCode: "", colorCode: "" },
     ]);
     await user.click(cell("Litho Code, row 1"));
-    await user.keyboard("Unk");
+    await user.keyboard("Unk{Enter}");
     await user.tab();
     expect(cell("Litho Code, row 1")).toHaveValue("Unknown");
     expect(cell("Colour, row 1")).toHaveFocus();
 
-    await user.keyboard("unk");
+    await user.keyboard("unk{Enter}");
     await user.tab({ shift: true });
     expect(cell("Colour, row 1")).toHaveValue("Unknown");
     expect(cell("Litho Code, row 1")).toHaveFocus();
@@ -421,10 +427,10 @@ describe("Tab navigation", () => {
     );
   });
 
-  it("Tab from the last lookup cell accepts the match before creating the next row", async () => {
+  it("Tab from an explicitly confirmed last lookup cell creates the next row", async () => {
     const user = await table();
     await user.click(cell("Hardness, row 1"));
-    await user.keyboard("7");
+    await user.keyboard("7{Enter}");
     await user.tab();
     await waitFor(() => expect(cell("Litho From (m), row 2")).toHaveFocus());
     expect(cell("Hardness, row 1")).toHaveValue("7");
@@ -446,24 +452,37 @@ describe("Tab navigation", () => {
 });
 
 describe("comment cells", () => {
-  it("keeps typed spaces through editing and autosave", async () => {
+  it("rejects initial spaces and normalizes pasted leading or whitespace-only text", async () => {
+    const user = await table();
+    const input = cell("Lithology Comments, row 1");
+    await user.click(input);
+    await user.keyboard("   ");
+    expect(input).toHaveValue("");
+    await user.paste("   Clay  with sand ");
+    expect(input).toHaveValue("Clay  with sand ");
+    await user.clear(input);
+    await user.paste("   ");
+    expect(input).toHaveValue("");
+    await waitFor(async () => expect((await storedRows())?.[0]?.lithologyComments).toBe(""));
+  });
+  it("removes leading whitespace and keeps internal spaces through autosave", async () => {
     const user = await table();
     const comment = cell("Lithology Comments, row 1");
     await user.click(comment);
     await user.keyboard(" Fine  grained sandstone ");
-    expect(comment).toHaveValue(" Fine  grained sandstone ");
+    expect(comment).toHaveValue("Fine  grained sandstone ");
     await waitFor(async () =>
       expect(
         (await storedRows())?.[0]?.lithologyComments,
-      ).toBe(" Fine  grained sandstone "),
+      ).toBe("Fine  grained sandstone "),
     );
   });
 
-  it("keeps comment spaces on import while still trimming codes", () => {
+  it("normalizes leading comment whitespace on import while still trimming codes", () => {
     const imported = normalizeRawLithoDocument({
       rows: [{ id: 1, lithoCode: " SST ", lithologyComments: "  a  b  " }],
     });
-    expect(imported.rows[0]?.lithologyComments).toBe("  a  b  ");
+    expect(imported.rows[0]?.lithologyComments).toBe("a  b  ");
     expect(imported.rows[0]?.lithoCode).toBe("SST");
   });
 });

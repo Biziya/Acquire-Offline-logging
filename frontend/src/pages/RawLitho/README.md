@@ -108,12 +108,12 @@ hooks/useRemoveRowConfirmation.ts
 
 LookupAutocomplete.tsx
 - combobox for the 11 lookup columns; filters, ranks and limits suggestions
-- highlights the closest match while typing; ArrowRight / ArrowLeft accept it
-  and move to the next / previous cell
+- highlights the closest match while typing; Enter or a mouse click confirms it
+- always lists an empty choice first; navigation never commits a suggestion
 - validates on blur: a non-matching value is flagged, not silently kept
 - closes sibling dropdowns via a window CustomEvent
 - renders the menu in a portal so the table's scroll container cannot clip it
-- never takes ArrowUp / ArrowDown: the list is a mouse and mouse-wheel surface
+- F2 enters option-selection mode; Up / Down browse, Enter confirms, Escape cancels
 
 RawLithoFilters.tsx
 - drillhole search with ranked suggestions
@@ -156,8 +156,6 @@ hooks/useRawLithoRowFocus.ts
 
 tableNavigation.ts
 - arrow-key cell navigation and Delete-to-clear detection
-- moveFocusHorizontally(): an unconditional one-cell move, used by the lookup
-  cell once it has accepted a suggestion
 - the "key already handled" marker shared by cell and table handlers
 - focusCellInRow(tbody, rowId, columnKey) and the row/column lookups it needs
 - hasLostFocus(): tells a dropped caret apart from a deliberate move
@@ -670,17 +668,18 @@ which stays swallowed.
 
 | Key | Behaviour |
 | --- | --- |
-| `←` / `→` | Move to the previous / next editable cell, but only when the caret is at the edge of the current value, so normal text editing still works. Disabled cells are skipped, the end of a row continues on the next row (and the start on the previous row), and the edge of a page continues on the adjacent page. |
-| `Tab` / `Shift`+`Tab` | Exactly like `→` / `←`, except that they always leave the cell regardless of the caret. In a lookup cell the value is settled by `finishEditing()` first, as before. `Shift`+`Tab` from the very first cell leaves the table normally. |
-| `←` / `→` / `Tab` / `Shift`+`Tab` in a lookup cell with an open dropdown (typed or empty) | Accept the highlighted suggestion, close the dropdown and move one cell left / right. See *Fast accept* below. |
-| `↑` / `↓` | Move one cell vertically in the same column. On `number` inputs the default spinner behaviour is suppressed. Never moves the highlight inside a dropdown. |
+| `←` / `→` | Move to the previous / next editable cell, when the whole cell value is selected or the caret is at the edge of the current value, so normal text editing still works. Disabled cells are skipped, the end of a row continues on the next row (and the start on the previous row), and the edge of a page continues on the adjacent page. |
+| `Tab` / `Shift`+`Tab` | Exactly like `→` / `←`, except that they always leave the cell regardless of the caret. Leaving a lookup cell never confirms a highlighted suggestion. `Shift`+`Tab` from the very first cell leaves the table normally. |
+| `←` / `→` / `Tab` / `Shift`+`Tab` in a lookup cell with an open dropdown (typed or empty) | Move focus without changing the committed value. Empty cells remain empty. |
+| `↑` / `↓` | Move one cell vertically in the same column. On `number` inputs the default spinner behaviour is suppressed. After F2 in a lookup cell, these keys browse options instead. |
 | `↓` on the last row | No cell below, so the table creates the next row and focuses it — from a lookup cell as well as a plain one. |
 | `Tab` from the last cell of the last row | Creates the next row and focuses its first cell. |
 | `Enter` | In a Litho From / Litho To cell, commits the value and reorders the rows without leaving the cell. |
 | `Delete` | Clears the cell when the whole value is selected, the caret is at the end, or the cell is already empty. Otherwise the browser default applies. |
 | `Escape` (lookup cell) | Reverts the typed text and closes the dropdown. |
 | `Escape` (any cell) | Also clears the Ctrl + click cell selection. |
-| `Space` | Never intercepted — it types a space in every cell. |
+| `Space` | Types normally; leading whitespace in Lithology Comments is removed by the shared normalizer. |
+| `F2` (lookup cell) | Enters option-selection mode: Up/Down browse, Enter confirms, Escape cancels. |
 
 All four horizontal keys share one mechanism: `getHorizontalStep(event)` in
 `tableNavigation.ts` turns the key into `+1`, `-1` or `0`. The cell handler
@@ -693,15 +692,12 @@ reaches row creation.
 
 ### Comment cells
 
-`lithologyComments` (and the hidden `lithologicalDescription`) are listed in
-`COMMENT_FIELD_KEYS` in `constants.ts`. Their text is stored exactly as typed:
-leading, trailing and repeated spaces survive editing, autosave, IndexedDB
-restore, JSON import and JSON export. Every edit is re-normalised by
-`touchRawLithoDocument`, which used to `trim()` every field and so deleted a
-space as soon as it was typed at the end of a word; `normalizeFieldValue` in
-`rawLithoHelpers.ts` now skips trimming for comment fields only. Codes and
-depths are still trimmed on load. Validation can still treat whitespace-only
-text as empty where a rule requires it.
+`normalizeFieldValue` in `rawLithoHelpers.ts` removes leading whitespace
+from `lithologyComments` with `trimStart()`. Whitespace-only comments become
+empty, while internal and trailing spaces remain intact. This same normalizer
+runs for manual edits, single/multi-cell paste, imported/restored documents,
+autosave, and JSON export. The hidden `lithologicalDescription` retains its
+existing behavior. Codes and depths remain trimmed on load.
 
 ### Cell selection, copy and paste
 
@@ -752,52 +748,26 @@ Accepted pastes keep row ids and whole row objects, are re-sorted by
 `sortRowsByLithoFrom()`, and are autosaved to IndexedDB through the normal
 `commitDocument` path.
 
-### Fast accept: `→` / `←` / `Tab` / `Shift`+`Tab` in a lookup cell
+### Lookup selection and navigation
 
-Typing filters the list and the closest match is highlighted automatically
-(ranked exact → prefix → substring, so an exact match always wins). An empty
-cell whose dropdown is open highlights the first value. `→`, `←`, `Tab` and
-`Shift`+`Tab` all take the highlighted suggestion through the same
-`acceptClosestMatch` — there is no second matching algorithm. **The highlight
-decides, not whether anything was typed:**
+Every editable lookup opens its full list on focus with `Empty / No value`
+first. That choice commits `""`; it is not a placeholder or a default code.
+Typing filters and ranks non-empty matches by exact, prefix, then substring.
+The empty choice remains available while filtering. Enter confirms the closest
+match, and clicking an option explicitly commits that choice.
 
-```text
-type "Unk" → "Unknown" is highlighted          (partly typed)
-click an empty cell → "Unknown" is highlighted (nothing typed)
-  →  commit "Unknown", close the dropdown, focus the NEXT cell
-  ←  commit "Unknown", close the dropdown, focus the PREVIOUS cell
-  Tab        same as →
-  Shift+Tab  same as ←
-```
+Tab, Shift+Tab, and arrows never accept a highlighted suggestion. Unconfirmed
+text remains a draft; leaving it does not overwrite the committed value. A
+non-matching draft is flagged on blur. Empty required cells remain editable
+and fail the existing validation when adding/saving as before.
 
-`Tab` keeps its own route after accepting: the next / previous cell on the
-page, otherwise the table crosses the page or — `Tab` only, never
-`Shift`+`Tab` — appends a row after the usual validation. The accepted value
-is committed before focus moves, so row creation sees it.
-
-Three guards keep it out of the way of everything else:
-
-- **Nothing valid to accept** — the dropdown is closed (e.g. focus arrived by
-  keyboard navigation), or no option matches — and the key falls through to
-  ordinary cell navigation. A wrong value is never written.
-- **The cell already holds a value the user has not typed into**
-  (`isSearching` is false and the text is not empty) and `←` / `→` keep their
-  caret-edge behaviour, so an existing value can still be read and edited;
-  `Tab` / `Shift`+`Tab` simply move on without touching the value.
-- **The cell was just emptied with `Delete`** (`wasCleared`). The dropdown
-  reopens on every value, but the user asked for an empty cell, so leaving it
-  does not refill it. Typing or refocusing ends this state.
-
-Before this fix the first guard also required typed text (`query.trim()`) and
-`isSearching`, so an empty cell with an open, highlighted list let focus move
-on and left the cell empty.
-
-The full-value routes are untouched: type the whole code and press `Enter` or
-`Tab` (an exact match ranks first, so it is kept), or click an option.
-
-Accepting moves focus, which fires `blur` before React has re-rendered with the
-new value, so `finishEditing` would still see the partial text and flag it
-invalid. `isAcceptingMatch` makes that one blur a no-op.
+The default is table navigation. F2 explicitly enters option-selection mode:
+Up/Down move the highlight without committing; Enter confirms, Escape cancels,
+and Tab exits to the adjacent cell without accepting the highlight. After
+selection or refocus the input returns to table navigation. On keyboard entry,
+the whole cell value is selected, so the next horizontal arrow moves in one
+press. A click/caret inside text or a partial selection retains ordinary text
+editing. Alt+Tab is never intercepted.
 
 ### How ArrowDown reaches the table
 
@@ -806,20 +776,11 @@ first. Cell handlers call `markKeyAsHandled(event)` once they have used a key,
 and `handleTableKeyDown` skips any event where `isKeyAlreadyHandled(event)` is
 true.
 
-The dropdown does not use the vertical keys at all — suggestions are picked with
-the mouse, the mouse wheel (the menu scrolls at `max-height: 220px`), `Enter`,
-or fast accept. So `↓` in a lookup cell behaves exactly as it does in a plain
-cell:
-
-1. **A row exists below** → focus moves down one cell.
-2. **Otherwise (last row)** → the event bubbles unhandled and the table creates
-   a row, subject to the usual required-field and duplicate-interval checks.
-
-`Tab` in a lookup cell first accepts the highlighted match (fast accept) or, with
-nothing to accept, settles the value through `finishEditing()` before the table
-considers creating a row. Leaving a lookup cell with unmatched text still
-commits nothing — only an exact match commits on blur — so a required
-lookup cell left half-typed blocks row creation with the usual warning.
+In table-navigation mode, vertical arrows go directly to the adjacent row.
+If no row exists below, ArrowDown bubbles to the table's existing row-creation
+handler. In explicit F2 option-selection mode, the dropdown marks vertical
+keys handled so they cannot also create rows. Tab never commits a suggestion;
+row creation validates the values that were explicitly confirmed.
 
 Only the last page can create rows: `handleTableKeyDown` returns early unless
 `currentPage === totalPages`, because the last rendered row is only the document's
@@ -1249,17 +1210,11 @@ commitDepth(columnKey)
 ### `LookupAutocomplete.tsx`
 
 ```text
-handleQueryChange   filters suggestions; clears the committed value while the
-                    text no longer matches it
-acceptClosestMatch  → / ← while typing: commit the highlighted match and move
-                    one cell; returns false when there is nothing valid to take
-↑ / ↓               handed straight to handleCellNavigation — cell navigation,
-                    or bubble up so the table can add a row
-Tab / Shift + Tab   acceptClosestMatch when searching; otherwise
-                    finishEditing, then handleCellNavigation
-finishEditing       on blur/Tab: empty clears, an exact match commits, anything
-                    else is flagged "Select a valid value"
-selectSuggestion    commits a clicked or Enter-selected option
+handleQueryChange   filters the draft; explicit text clearing commits empty
+F2                  enters option-selection mode; Up / Down browse the list
+Enter / mouse       explicitly confirms a suggestion (including empty)
+Tab / arrows        navigate cells without accepting highlighted options
+finishEditing       on blur: validates unconfirmed text, never commits it
 clearCellValue      Delete empties the cell and reopens the dropdown
 ```
 
@@ -1330,7 +1285,7 @@ handleSave   see "Save button" above
 | Where is horizontal navigation (arrows, Tab)? | `getHorizontalStep` / `handleCellNavigation` in `tableNavigation.ts`, page crossing in `RawLithoTable.tsx` |
 | Where is copy / paste? | `rawLithoClipboard.ts` (pure), handlers in `RawLithoTable.tsx`, `applyCellEdits` in `rawLithoDocumentOperations.ts` |
 | Which fields keep their spaces? | `COMMENT_FIELD_KEYS` in `constants.ts` |
-| How do I accept a partly typed lookup code? | `→` or `←` — `acceptClosestMatch` in `LookupAutocomplete.tsx` |
+| How do I accept a partly typed lookup code? | `Enter` or a mouse click in `LookupAutocomplete.tsx` |
 | Why doesn't `↓` move inside a dropdown? | By design — the vertical keys belong to the table, so `↓` can add a row from any cell |
 | Where is the drillhole list order decided? | `orderDrillholes()` in `drillholeOrdering.ts` — the only place |
 | How many working drillholes are promoted? | `RECENT_DRILLHOLE_LIMIT` in `drillholeOrdering.ts` |
@@ -1367,10 +1322,10 @@ handleSave   see "Save button" above
 19. In the confirmation dialog, check Cancel holds focus, Escape cancels, and Remove is the only red button.
 20. Add more than 50 rows; use `PageUp`/`PageDown` and confirm both ends are no-ops and edits on other pages are intact.
 21. On page 1 with an invalid last row, press `F4` → the table jumps to the page holding it and focuses the offending cell.
-22. In a lookup cell on the last row, press `↓` with the dropdown open → the highlight does **not** move and a row is created (or the required-field warning appears). On any earlier row, `↓` moves down one cell.
-23. In a Litho Code cell, type a partial code (for example `Unk`) → the closest match is highlighted at the top of the list. Press `→` → the cell reads `Unknown`, the dropdown closes and focus is on the next cell. Repeat with `←` → focus lands on the previous cell.
+22. In table-navigation mode, ArrowDown in the last row creates a row or shows validation; on earlier rows it moves down once. F2 then ArrowDown browses options without creating a row.
+23. Type a partial code such as `Unk`; the closest match is highlighted below the empty choice. Enter confirms `Unknown`. Tab and arrows leave it unchanged and never accept an unconfirmed match.
 24. Type nonsense (`Zzz`) in a lookup cell and press `→` → nothing is inserted; the cell keeps the typed text and is flagged "Select a valid value" on blur.
-25. Focus a lookup cell that already has a value without typing → `←` / `→` still walk the caret through the text before leaving the cell.
+25. Keyboard-focus a filled cell: its whole value is selected, and one horizontal arrow moves to the adjacent cell. Click inside text or partially select it to use normal caret editing.
 26. Confirm the untouched routes: type a full code and press `Enter`, then `Tab`, then click an option with the mouse; scroll the option list with the mouse wheel.
 27. Select drillhole A without typing anything, clear the field and open the list → A is **not** under Recent Working Drillholes. Enter a value in A, B and C (in that order) → the list shows C, B, A under Recent Working Drillholes, then All Drillholes without them. Work in a fourth (D) → D takes the front, A moves to All Drillholes (still listed). Reload the page and confirm the same grouping; reopen A → its draft is restored.
 28. Navigate away and back → the same drillhole, rows, order and page are restored.

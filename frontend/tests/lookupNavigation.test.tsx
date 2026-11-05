@@ -3,15 +3,17 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import LookupAutocomplete from "../src/pages/RawLitho/LookupAutocomplete";
 
-function grid() {
-  return render(<table><tbody>{[0, 1, 2].map(row => <tr key={row}>
+function grid(value = "Last") {
+  const change = vi.fn();
+  render(<table><tbody>{[0, 1, 2].map(row => <tr key={row}>
     {[0, 1, 2].map(col => <td key={col}><LookupAutocomplete
       rowIndex={row}
       lookup={{ fieldKey: "lithoCode", codeProperty: "code", label: `Column ${col}` }}
       records={["A", "B", "C", "D", "E", "F", "Last"].map(code => ({ code }))}
-      value="Last" onValueChange={vi.fn()} isPageEnabled isLoading={false} error=""
+      value={value} onValueChange={change} isPageEnabled isLoading={false} error=""
     /></td>)}
   </tr>)}</tbody></table>);
+  return change;
 }
 
 describe("lookup keyboard entry", () => {
@@ -21,21 +23,22 @@ describe("lookup keyboard entry", () => {
     ["ArrowLeft", false, 3], ["ArrowRight", false, 5],
   ])("opens all options after %s (shift: %s)", async (key, shiftKey, target) => {
     const user = userEvent.setup();
-    grid();
+    const change = grid();
     const inputs = screen.getAllByRole("combobox") as HTMLInputElement[];
     const source = inputs[4]!;
     const destination = inputs[target]!;
     await user.click(source);
-    source.setSelectionRange(key === "ArrowLeft" ? 0 : 4, key === "ArrowLeft" ? 0 : 4);
+    source.select();
     fireEvent.keyDown(source, { key, shiftKey });
     expect(inputs[target]).toHaveFocus();
     expect(inputs[target]).toHaveAttribute("aria-expanded", "true");
     expect(screen.getAllByRole("listbox")).toHaveLength(1);
     expect(screen.getByRole("listbox").id).toBe(destination.getAttribute("aria-controls"));
-    expect(screen.getAllByRole("option")).toHaveLength(7);
+    expect(screen.getAllByRole("option")).toHaveLength(8);
+    expect(change).not.toHaveBeenCalled();
     expect(inputs[4]).toHaveValue("Last");
     await user.keyboard("F");
-    expect(screen.getAllByRole("option")).toHaveLength(1);
+    expect(screen.getAllByRole("option")).toHaveLength(2);
     expect(screen.getByRole("option", { name: "F" })).toBeInTheDocument();
   });
 
