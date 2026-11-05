@@ -1,10 +1,9 @@
 import type { LookupDefinition, LookupRecord } from "../../types/domain";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   handleCellNavigation,
   isClearCellRequest,
-  isNavigationFocus,
   markKeyAsHandled,
   moveFocusHorizontally,
 } from "./tableNavigation";
@@ -98,6 +97,7 @@ function LookupAutocomplete({
   const wasCleared = useRef(false);
   const [query, setQuery] = useState(() => toInputValue(value));
   const [isOpen, setIsOpen] = useState(false);
+  const [showAllOptions, setShowAllOptions] = useState(false);
   const [showInvalidSelection, setShowInvalidSelection] = useState(false);
   const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
 
@@ -127,7 +127,7 @@ function LookupAutocomplete({
   const suggestions = useMemo(() => {
     const normalizedQuery = normalize(query);
 
-    if (!normalizedQuery) return options;
+    if (showAllOptions || !normalizedQuery) return options;
 
     return options
       .map((option) => ({
@@ -142,14 +142,17 @@ function LookupAutocomplete({
       )
       .slice(0, MATCH_LIMIT)
       .map(({ option }) => option);
-  }, [options, query]);
+  }, [options, query, showAllOptions]);
 
   /*
    * The list is ranked exact match → prefix match → substring match, so the
-   * closest match is always the first entry. Highlighting is derived rather
-   * than stored because the keyboard no longer walks the list.
+   * closest match is the first entry while filtering. On focus the full list
+   * highlights the current value, so Enter preserves an existing selection.
    */
-  const highlightedIndex = suggestions.length === 0 ? -1 : 0;
+  const selectedIndex = showAllOptions && exactOption
+    ? suggestions.indexOf(exactOption)
+    : -1;
+  const highlightedIndex = suggestions.length === 0 ? -1 : Math.max(0, selectedIndex);
   const highlightedSuggestion = suggestions[highlightedIndex] ?? null;
 
   const isDisabled = !isPageEnabled || (!isLoading && options.length === 0);
@@ -180,7 +183,7 @@ function LookupAutocomplete({
       );
   }, [instanceId]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!showSuggestions) return undefined;
 
     function positionMenu() {
@@ -234,6 +237,7 @@ function LookupAutocomplete({
     }
 
     isSearching.current = true;
+    setShowAllOptions(false);
     wasCleared.current = false;
     setQuery(nextQuery);
     openDropdown();
@@ -331,6 +335,9 @@ function LookupAutocomplete({
   }
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    // In particular, Alt + Tab belongs entirely to Windows.
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+
     if (isClearCellRequest(event)) {
       event.preventDefault();
       clearCellValue();
@@ -395,8 +402,7 @@ function LookupAutocomplete({
     wasCleared.current = false;
     isAcceptingMatch.current = false;
 
-    if (isNavigationFocus()) return;
-
+    setShowAllOptions(true);
     openDropdown();
   }
 

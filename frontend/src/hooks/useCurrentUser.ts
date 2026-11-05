@@ -10,8 +10,8 @@ const RETRY_MS = 10_000;
  * services/currentUser.ts. A failed lookup gives null, never a guess.
  *
  * While the answer is null it asks again every RETRY_MS, so the name appears
- * on its own once the backend starts — no page refresh needed. It stops as
- * soon as a name arrives.
+ * on its own once the backend starts. Successful lookups are also checked;
+ * the service shares requests and revalidates at most once per minute.
  */
 export function useCurrentUser() {
   const [userName, setUserName] = useState<string | null>(null);
@@ -27,7 +27,7 @@ export function useCurrentUser() {
           if (!isActive) return;
           const verified = name?.trim() || null;
           setUserName(verified);
-          if (!verified) retryTimer = window.setTimeout(lookUp, RETRY_MS);
+          retryTimer = window.setTimeout(lookUp, RETRY_MS);
         });
     }
 

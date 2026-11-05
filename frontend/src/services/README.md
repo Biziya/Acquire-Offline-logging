@@ -178,13 +178,24 @@ Windows Integrated Authentication (Negotiate: Kerberos or NTLM), so the
 browser proves the signed-in Windows user and the backend answers with
 `userName` (backend README, *Identity*). The plain status poll stays anonymous.
 
-A verified name is kept for the rest of the page load. An error status (401
+A verified name is shared for one minute, then revalidated. An error status (401
 when the browser sent no Windows credentials), a body without `userName` or
 a network failure gives `null`, shown as "User not identified", and is not
-kept: `useCurrentUser()` asks again every 10 seconds until a name arrives,
+kept: `useCurrentUser()` checks every 10 seconds (sharing the one-minute cache),
 so starting the backend after the page fills in the name without a refresh.
 The hostname, user agent, a build-time user name, browser fingerprinting or
 anything typed in are never used.
+
+`IndexDB/windowsIdentityDb.ts` stores `{ domain, username, lastUpdated }` at
+`session["windows-identity"]` in the existing `raw-litho-db`. Local accounts
+have an empty domain because the API omits the machine authority. The timestamp
+is an ISO string updated when the identity changes. Existing stores and records
+are preserved without a schema upgrade. Each fresh lookup reads the persisted
+record and replaces it only with a verified backend identity if different.
+Storage failures do not prevent authentication. Failed authentication retains
+the local record but returns null; cached identity never supplies metadata or
+authorization. Backend Windows authentication and SQL user validation remain
+authoritative.
 
 **Browser and deployment notes**
 - Edge and Chrome send Windows credentials to `localhost` automatically. A

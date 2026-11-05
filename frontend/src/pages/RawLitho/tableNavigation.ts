@@ -10,12 +10,6 @@ export const EDITABLE_SELECTOR = [
 
 const VERTICAL_KEYS = new Set(["ArrowUp", "ArrowDown"]);
 
-let isMovingFocus = false;
-
-export function isNavigationFocus() {
-  return isMovingFocus;
-}
-
 /*
  * Cell-level handlers (arrow navigation, the lookup dropdown) run before the
  * table-level handler that creates rows, because keydown bubbles up from the
@@ -45,22 +39,16 @@ function focusElement(target: Element | null | undefined) {
     return false;
   }
 
-  isMovingFocus = true;
+  target.focus();
 
   try {
-    target.focus();
-
-    try {
-      if (
-        target instanceof HTMLInputElement ||
-        target instanceof HTMLTextAreaElement
-      )
-        target.select();
-    } catch {
-      /* Inputs such as type="number" may reject select(). */
-    }
-  } finally {
-    isMovingFocus = false;
+    if (
+      target instanceof HTMLInputElement ||
+      target instanceof HTMLTextAreaElement
+    )
+      target.select();
+  } catch {
+    /* Inputs such as type="number" may reject select(). */
   }
 
   return true;

@@ -1,5 +1,6 @@
 import { buildApiUrl } from "./Api/apiConfig";
 import { isRecord } from "../types/validation";
+import { cacheVerifiedWindowsIdentity, readCachedWindowsIdentity } from "./IndexDB/windowsIdentityDb";
 
 /*
  * The signed-in Windows user: "BEK" for a local account, "COMPANY\bek" for a
@@ -23,10 +24,15 @@ import { isRecord } from "../types/validation";
  */
 const CURRENT_USER_PATH = "/api/status?includeUser=true";
 const MAX_USER_NAME_LENGTH = 256;
+const VERIFIED_USER_TTL_MS = 60_000;
 
 let request: Promise<string | null> | null = null;
+let verifiedUntil = 0;
+let isPending = false;
 
 async function requestCurrentUser(): Promise<string | null> {
+  // Read on page load, but never publish this untrusted value as the current user.
+  const cached = readCachedWindowsIdentity().catch(() => null);
   try {
     const response = await fetch(buildApiUrl(CURRENT_USER_PATH), {
       credentials: "include",
@@ -40,23 +46,29 @@ async function requestCurrentUser(): Promise<string | null> {
         ? body.userName.trim()
         : "";
 
-    return userName && userName.length <= MAX_USER_NAME_LENGTH ? userName : null;
+    if (!userName || userName.length > MAX_USER_NAME_LENGTH) return null;
+    // Cache failure must never hide a successfully authenticated identity.
+    await cacheVerifiedWindowsIdentity(userName, await cached).catch(() => undefined);
+    return userName;
   } catch {
     return null;
   }
 }
 
 /*
- * Callers share one request. A verified name is kept for the rest of the page
- * load; a failed lookup (backend not started yet, 401, network error) is
+ * Callers share one request. A verified name is reused for one minute;
+ * subsequent calls revalidate it. A failed lookup (401, network error) is
  * forgotten, so the next call asks again instead of staying empty until a
  * refresh.
  */
 export function getCurrentWindowsUser(): Promise<string | null> {
-  if (!request) {
+  if (!request || (!isPending && Date.now() >= verifiedUntil)) {
+    isPending = true;
     const pending = requestCurrentUser();
     request = pending;
     pending.then((name) => {
+      isPending = false;
+      verifiedUntil = name === null ? 0 : Date.now() + VERIFIED_USER_TTL_MS;
       if (name === null && request === pending) request = null;
     });
   }
