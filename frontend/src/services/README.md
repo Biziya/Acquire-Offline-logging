@@ -167,7 +167,7 @@ validation all pick it up.
 
 `getCurrentWindowsUser()` is the one place the app asks who is signed in
 (`Bek` for a local account, `COMPANY\bek` for a domain account). Through
-`hooks/useCurrentUser.ts` it feeds the sidebar user name, Raw Litho's
+`hooks/useCurrentUser.ts` it feeds Raw Litho's
 `created_by` / `edited_by`, and Upload Data's "Edited By" stamp and
 "Imported By".
 
@@ -176,26 +176,40 @@ validation all pick it up.
 with `credentials: "include"`. That variant of the Status route requires
 Windows Integrated Authentication (Negotiate: Kerberos or NTLM), so the
 browser proves the signed-in Windows user and the backend answers with
-`userName` (backend README, *Identity*). The plain status poll stays anonymous.
+`userName` (backend README, *Identity*). It also returns `fullUsername`, the
+original authenticated principal including the machine/domain authority, for
+the display cache. Existing metadata keeps using `userName` unchanged.
+The plain status poll stays anonymous and exposes neither name.
 
 A verified name is shared for one minute, then revalidated. An error status (401
 when the browser sent no Windows credentials), a body without `userName` or
-a network failure gives `null`, shown as "User not identified", and is not
+a network failure gives `null` to verified-identity consumers and is not
 kept: `useCurrentUser()` checks every 10 seconds (sharing the one-minute cache),
 so starting the backend after the page fills in the name without a refresh.
 The hostname, user agent, a build-time user name, browser fingerprinting or
 anything typed in are never used.
 
-`IndexDB/windowsIdentityDb.ts` stores `{ domain, username, lastUpdated }` at
-`session["windows-identity"]` in the existing `raw-litho-db`. Local accounts
-have an empty domain because the API omits the machine authority. The timestamp
-is an ISO string updated when the identity changes. Existing stores and records
-are preserved without a schema upgrade. Each fresh lookup reads the persisted
-record and replaces it only with a verified backend identity if different.
+`IndexDB/windowsIdentityDb.ts` stores
+`{ id: "current-user", domain, username, fullUsername, lastUpdated }` at
+`session["windows-identity"]` in the existing `raw-litho-db`. Older records are
+upgraded in place without changing their timestamp. Older servers that only
+return `userName` remain supported; no missing authority is guessed.
+The timestamp is an ISO string updated when the identity changes. Existing
+stores and records are preserved without a schema upgrade. Each fresh lookup
+reads the persisted record before fetching, and replaces it only with a
+verified backend identity if different. Writes await transaction completion.
 Storage failures do not prevent authentication. Failed authentication retains
 the local record but returns null; cached identity never supplies metadata or
 authorization. Backend Windows authentication and SQL user validation remain
 authoritative.
+
+The sidebar uses `hooks/useCachedWindowsIdentity.ts` for display only. It reads
+IndexedDB and restores the label before initiating synchronization, then reads
+back the committed record after successful backend lookups. Failed requests
+and storage errors never clear a displayed identity. It retries every ten
+seconds using the shared one-minute verified request cache and refreshes on
+the browser `online` event. Page remounts and offline refreshes restore the
+same persisted record. With no cache the existing neutral label remains.
 
 **Browser and deployment notes**
 - Edge and Chrome send Windows credentials to `localhost` automatically. A

@@ -85,9 +85,12 @@ for later; to bring it back, add its route and `NavLink` again.
 The sidebar footer shows, left-aligned, the signed-in Windows user
 (`Bek` for a local account, `COMPANY\bek` for a domain account; truncated
 with a tooltip when long), a thin divider, then the backend status (green
-"Online", amber "Offline"). The user comes from `useCurrentUser()`, i.e. the
-Windows user proven by `GET /api/status?includeUser=true`; when it cannot be
-verified it reads "User not identified" — never a hostname or a guess. The sidebar is a flex column: the navigation
+"Online", amber "Offline"). The user comes from `useCachedWindowsIdentity()`,
+which restores the last persisted Windows principal from IndexedDB before
+synchronizing through `GET /api/status?includeUser=true`. The same label remains
+visible offline, including after a refresh. With no cache it reads "User not
+identified". Cached identity is display-only; metadata still uses the verified
+`useCurrentUser()` hook. The sidebar is a flex column: the navigation
 takes the free height and scrolls if it ever runs out of room, and the footer
 never shrinks, so the indicator stays pinned without overlapping the links.
 When the sidebar is collapsed only the coloured light is shown; its `title`

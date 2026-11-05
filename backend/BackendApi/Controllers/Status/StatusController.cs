@@ -36,7 +36,9 @@ public sealed class StatusController : ControllerBase
             return Challenge(NegotiateDefaults.AuthenticationScheme);
         }
 
-        return Ok(new StatusResponse(Online, Message, ToDisplayName(name)));
+        // Preserve UserName for existing metadata consumers; the display cache
+        // also needs the original Windows authority for local accounts.
+        return Ok(new StatusResponse(Online, Message, ToDisplayName(name), name));
     }
 
     /*

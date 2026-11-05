@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
 import StatusIndicator from "./StatusIndicator";
-import { useCurrentUser } from "../hooks/useCurrentUser";
+import { useCachedWindowsIdentity } from "../hooks/useCachedWindowsIdentity";
 import { uiConfig } from "../config/uiConfig";
 
 const ICON = "size-[17px] shrink-0";
-// Neutral text while no trusted identity source exists (services/currentUser.ts).
+// Neutral text until a previously persisted identity is available.
 const NO_USER_LABEL = "User not identified";
 const LABEL = "whitespace-nowrap";
 
@@ -77,8 +77,8 @@ function DatabaseViewerIcon() {
 
 function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
-  // "DOMAIN\username" from the trusted identity source, or null — never guessed.
-  const currentUser = useCurrentUser();
+  // Last cached Windows identity for display; never proof of authentication.
+  const currentUser = useCachedWindowsIdentity();
   const userLabel = currentUser ?? NO_USER_LABEL;
   const linkClassName = ({ isActive }: { isActive: boolean }) =>
     [

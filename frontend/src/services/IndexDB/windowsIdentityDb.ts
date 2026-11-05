@@ -2,8 +2,10 @@ import { isRecord } from "../../types/validation";
 import { readValue, SESSION_STORE, writeValue } from "./rawLithoDatabase";
 
 export interface CachedWindowsIdentity {
+  id: "current-user";
   domain: string;
   username: string;
+  fullUsername: string;
   lastUpdated: string;
 }
 
@@ -17,7 +19,16 @@ export async function readCachedWindowsIdentity(): Promise<CachedWindowsIdentity
       typeof value.lastUpdated !== "string" || !Number.isFinite(Date.parse(value.lastUpdated))) {
     return null;
   }
-  return { domain: value.domain, username: value.username, lastUpdated: value.lastUpdated };
+  const identity: CachedWindowsIdentity = {
+    id: "current-user", domain: value.domain, username: value.username,
+    fullUsername: value.domain ? `${value.domain}\\${value.username}` : value.username,
+    lastUpdated: value.lastUpdated,
+  };
+  // Upgrade the old record in place, preserving its identity and timestamp.
+  if (value.id !== identity.id || value.fullUsername !== identity.fullUsername) {
+    await writeValue(SESSION_STORE, IDENTITY_KEY, identity).catch(() => undefined);
+  }
+  return identity;
 }
 
 export async function cacheVerifiedWindowsIdentity(
@@ -29,6 +40,7 @@ export async function cacheVerifiedWindowsIdentity(
   const username = separator > 0 ? name.slice(separator + 1) : name;
   if (cached?.domain === domain && cached.username === username) return;
   await writeValue(SESSION_STORE, IDENTITY_KEY, {
-    domain, username, lastUpdated: new Date().toISOString(),
+    id: "current-user", domain, username, fullUsername: name,
+    lastUpdated: new Date().toISOString(),
   } satisfies CachedWindowsIdentity);
 }

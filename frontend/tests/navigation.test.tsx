@@ -10,6 +10,7 @@ vi.mock("../src/pages/DatabaseViewer/DatabaseViewer", () => ({ default: () => <h
 vi.mock("../src/pages/UploadData/UploadData", () => ({ default: () => <h1>Upload Data page</h1> }));
 vi.mock("../src/components/StatusIndicator", () => ({ default: () => null }));
 vi.mock("../src/hooks/useCurrentUser", () => ({ useCurrentUser: () => null }));
+vi.mock("../src/hooks/useCachedWindowsIdentity", () => ({ useCachedWindowsIdentity: () => null }));
 
 function renderAt(path: string) {
   return render(

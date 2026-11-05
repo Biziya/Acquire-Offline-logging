@@ -1,6 +1,6 @@
 import { act, render, renderHook, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import uiText from "../src/config/ui.yaml?raw";
 import { readUiConfig, uiConfig } from "../src/config/uiConfig";
 import Toast from "../src/components/Toast";
@@ -17,7 +17,8 @@ import {
   readRawLithoDraft,
   writeRawLithoDraft,
 } from "../src/services/IndexDB/rawLithoDraftDb";
-import { getCurrentWindowsUser } from "../src/services/currentUser";
+import { cacheVerifiedWindowsIdentity } from "../src/services/IndexDB/windowsIdentityDb";
+import { deleteValue, SESSION_STORE } from "../src/services/IndexDB/rawLithoDatabase";
 import type { RawLithoDocument } from "../src/types/domain";
 
 vi.mock("../src/services/currentUser", () => ({
@@ -148,6 +149,9 @@ describe("global toast configuration", () => {
 });
 
 describe("sidebar user", () => {
+  beforeEach(async () => {
+    await deleteValue(SESSION_STORE, "windows-identity");
+  });
   const renderSidebar = () =>
     render(
       <MemoryRouter>
@@ -155,8 +159,8 @@ describe("sidebar user", () => {
       </MemoryRouter>,
     );
 
-  it("shows the trusted domain user above the divider and the status", async () => {
-    vi.mocked(getCurrentWindowsUser).mockResolvedValueOnce("CORP\\jdoe");
+  it("shows the persisted domain user above the divider and the status", async () => {
+    await cacheVerifiedWindowsIdentity("CORP\\jdoe", null);
     const { container } = renderSidebar();
     const user = await screen.findByText("CORP\\jdoe");
     const divider = container.querySelector("hr");
@@ -173,7 +177,7 @@ describe("sidebar user", () => {
   });
 
   it("shows a local account name without a domain", async () => {
-    vi.mocked(getCurrentWindowsUser).mockResolvedValueOnce("Bek");
+    await cacheVerifiedWindowsIdentity("Bek", null);
     renderSidebar();
     expect(await screen.findByText("Bek")).toHaveAttribute("title", "Bek");
   });

@@ -29,7 +29,7 @@ describe("current Windows user", () => {
   });
 
   it("persists verified identity across module reloads without rewriting unchanged data", async () => {
-    const cached = { domain: "CORP", username: "jdoe", lastUpdated: "2025-01-01T00:00:00.000Z" };
+    const cached = { id: "current-user", domain: "CORP", username: "jdoe", fullUsername: "CORP\\jdoe", lastUpdated: "2025-01-01T00:00:00.000Z" };
     await writeValue(SESSION_STORE, "windows-identity", cached);
     await writeValue(DRAFT_STORE, "identity-preservation", { rows: ["existing"] });
     const fetchSpy = respond(200, { userName: "CORP\\jdoe" });
