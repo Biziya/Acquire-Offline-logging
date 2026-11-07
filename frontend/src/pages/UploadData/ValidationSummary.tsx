@@ -41,7 +41,7 @@ function ValidationSummary({ validation }: ValidationSummaryProps) {
         {COUNTS.map(([key, label, color]) => (
           <div
             key={key}
-            className="rounded-lg border border-[#e4e9f0] px-[15px] py-3"
+            className="rounded-ui border border-[#e4e9f0] px-[15px] py-3"
           >
             <dt className="text-[0.85rem] text-[#667389]">{label}</dt>
             <dd className={`m-0 text-[1.35rem] font-bold ${color}`}>
@@ -58,8 +58,8 @@ function ValidationSummary({ validation }: ValidationSummaryProps) {
               key={issue.message}
               className={
                 issue.severity === "error"
-                  ? "rounded-md border border-[#fca5a5] bg-[#fef2f2] px-3 py-2 text-[#b42318]"
-                  : "rounded-md border border-[#f3d18b] bg-[#fffbeb] px-3 py-2 text-[#8a5a00]"
+                  ? "rounded-ui border border-[#fca5a5] bg-[#fef2f2] px-3 py-2 text-[#b42318]"
+                  : "rounded-ui border border-[#f3d18b] bg-[#fffbeb] px-3 py-2 text-[#8a5a00]"
               }
             >
               <strong>{issue.severity === "error" ? "Error: " : "Warning: "}</strong>

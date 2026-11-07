@@ -241,7 +241,7 @@ function RawLithoFilters({
 
           {showClearButton && (
             <button
-              className="absolute top-1/2 right-2 size-6 -translate-y-1/2 cursor-pointer rounded border-0 bg-transparent p-0 text-[1.25rem] leading-none text-rl-text-muted transition-colors duration-140 hover:bg-rl-navy-soft hover:text-rl-navy focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-rl-cell-ring active:bg-[#dbe5f2]"
+              className="absolute top-1/2 right-2 size-6 -translate-y-1/2 cursor-pointer rounded-ui border-0 bg-transparent p-0 text-[1.25rem] leading-none text-rl-text-muted transition-colors duration-140 hover:bg-rl-navy-soft hover:text-rl-navy focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-rl-cell-ring active:bg-[#dbe5f2]"
               type="button"
               aria-label="Clear Drillhole"
               onMouseDown={(event) => event.preventDefault()}
@@ -254,7 +254,7 @@ function RawLithoFilters({
           {showSuggestionList && (
             <ul
               id={SUGGESTION_LIST_ID}
-              className="absolute inset-x-0 top-[calc(100%+4px)] z-20 m-0 max-h-[260px] list-none overflow-y-auto rounded-lg border border-rl-border bg-white p-1 shadow-[0_10px_24px_rgb(16_35_61/16%)]"
+              className="absolute inset-x-0 top-[calc(100%+4px)] z-20 m-0 max-h-[260px] list-none overflow-y-auto rounded-ui border border-rl-border bg-white p-1 shadow-[0_10px_24px_rgb(16_35_61/16%)]"
               role="listbox"
             >
               {suggestions.length > 0 ? (

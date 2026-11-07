@@ -121,7 +121,7 @@ function UploadFileSection({
       </div>
 
       <div
-        className={`grid justify-items-center gap-2 rounded-[10px] border-2 px-4 py-7 text-center transition-colors duration-140 ${
+        className={`grid justify-items-center gap-2 rounded-ui border-2 px-4 py-7 text-center transition-colors duration-140 ${
           isDragging
             ? "upload-drop-zone--active border-dashed border-[#2563eb] bg-[#eff6ff]"
             : isLoaded

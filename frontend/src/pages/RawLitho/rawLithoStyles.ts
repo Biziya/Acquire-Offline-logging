@@ -7,7 +7,7 @@
 // Callers add the size and a disabled look (OUTLINE_BUTTON_DISABLED, or a
 // plain opacity for Import JSON).
 export const OUTLINE_BUTTON = [
-  "cursor-pointer rounded-md border border-rl-border-strong bg-white font-[550]",
+  "cursor-pointer rounded-ui border border-rl-border-strong bg-white font-[550]",
   "transition-[background-color,border-color,color,box-shadow] duration-140",
   "enabled:active:translate-y-px",
   "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-rl-cell-ring",

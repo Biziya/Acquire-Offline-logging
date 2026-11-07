@@ -29,6 +29,13 @@ describe("Application navigation", () => {
     const links = screen.getAllByRole("link").map((link) => link.textContent);
     expect(links).toEqual(["Raw Litho", "Database Viewer", "Upload Data"]);
     expect(screen.getByRole("link", { name: "Raw Litho" })).toHaveClass("bg-[#1f2937]");
+    expect(screen.getByText("AcQuire WEB")).toHaveClass("font-bold");
+    for (const name of ["Raw Litho", "Database Viewer", "Upload Data"]) {
+      const link = screen.getByRole("link", { name });
+      expect(link.querySelector("span")).toHaveClass("font-semibold");
+      expect(link.querySelector("svg")).toHaveClass("size-5");
+    }
+    expect(screen.getByRole("button", { name: "Keyboard shortcuts" })).toBeInTheDocument();
   });
 
   it.each(["/", "/unknown"])("opens Raw Litho at %s instead of a blank page", (path) => {

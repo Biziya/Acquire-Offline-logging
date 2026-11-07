@@ -264,7 +264,7 @@ function RawLitho() {
         }
         footerEnd={
           <button
-            className="h-8 cursor-pointer rounded-md border border-transparent bg-rl-navy px-5 font-semibold text-white transition-[background-color,box-shadow] duration-140 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-rl-cell-ring enabled:hover:bg-rl-navy-dark enabled:hover:shadow-[0_2px_6px_rgb(16_35_61/22%)] enabled:active:translate-y-px enabled:active:bg-rl-navy-darker enabled:active:shadow-none disabled:cursor-not-allowed disabled:opacity-55"
+            className="h-8 cursor-pointer rounded-ui border border-transparent bg-rl-navy px-5 font-semibold text-white transition-[background-color,box-shadow] duration-140 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-rl-cell-ring enabled:hover:bg-rl-navy-dark enabled:hover:shadow-[0_2px_6px_rgb(16_35_61/22%)] enabled:active:translate-y-px enabled:active:bg-rl-navy-darker enabled:active:shadow-none disabled:cursor-not-allowed disabled:opacity-55"
             type="button"
             onClick={handleSave}
             disabled={!isPageEnabled || isSaving}

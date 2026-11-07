@@ -304,7 +304,7 @@ function LookupAutocomplete({
     ? createPortal(
         <ul
           id={suggestionListId}
-          className="fixed z-[1000] m-0 max-h-[220px] max-w-[320px] min-w-[150px] list-none overflow-y-auto rounded-lg border border-rl-border bg-white p-1 text-left shadow-[0_10px_24px_rgb(16_35_61/16%)]"
+          className="fixed z-[1000] m-0 max-h-[220px] max-w-[320px] min-w-[150px] list-none overflow-y-auto rounded-ui border border-rl-border bg-white p-1 text-left shadow-[0_10px_24px_rgb(16_35_61/16%)]"
           role="listbox"
           style={menuStyle}
         >
@@ -317,9 +317,9 @@ function LookupAutocomplete({
           {suggestions.map((suggestion, index) => (
             <li
               id={`${suggestionListId}-option-${index}`}
-              className={`${MENU_ITEM} cursor-pointer hover:bg-rl-navy-soft hover:text-rl-navy-dark${
+              className={`${MENU_ITEM} cursor-pointer hover:bg-rl-navy-soft ${suggestion.code === "" ? "text-rl-text-muted" : "hover:text-rl-navy-dark"}${
                 index === highlightedIndex
-                  ? " raw-litho-lookup-suggestion--active bg-rl-navy-soft text-rl-navy-dark"
+                  ? ` raw-litho-lookup-suggestion--active bg-rl-navy-soft${suggestion.code === "" ? "" : " text-rl-navy-dark"}`
                   : ""
               }`}
               key={suggestion.code}
@@ -330,7 +330,7 @@ function LookupAutocomplete({
                 selectSuggestion(suggestion);
               }}
             >
-              {suggestion.code || "Empty / No value"}
+              {suggestion.code || "Empty"}
             </li>
           ))}
 
@@ -390,6 +390,11 @@ function LookupAutocomplete({
         required={isRequired}
         onChange={handleQueryChange}
         onFocus={handleFocus}
+        onClick={() => {
+          // Selecting an option keeps input focus, so a later click cannot
+          // rely on another focus event. Reset only when reopening the menu.
+          if (!isOpen) handleFocus();
+        }}
         onBlur={finishEditing}
         onKeyDown={handleKeyDown}
       />

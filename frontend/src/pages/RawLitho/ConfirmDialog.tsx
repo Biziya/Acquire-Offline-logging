@@ -17,7 +17,7 @@ interface ConfirmDialogProps {
 // Shared by both buttons; each adds its colours. The disabled look wins over
 // either colour scheme while a confirmed action is in flight.
 const DIALOG_BUTTON = [
-  "h-[34px] cursor-pointer rounded-[7px] border px-4 text-[0.85rem] font-semibold",
+  "h-[34px] cursor-pointer rounded-ui border px-4 text-[0.85rem] font-semibold",
   "transition-[background-color,border-color,color,box-shadow,transform] duration-140",
   "focus-visible:outline-2 focus-visible:outline-offset-1",
   "enabled:active:translate-y-px enabled:active:shadow-none",
@@ -87,7 +87,7 @@ function ConfirmDialog({
       role="presentation"
     >
       <div
-        className="w-[min(400px,100%)] animate-dialog-in rounded-xl border border-rl-border bg-white px-[22px] pt-5 pb-[18px] shadow-[0_1px_2px_rgb(16_35_61/10%),0_20px_48px_rgb(16_35_61/26%)]"
+        className="w-[min(400px,100%)] animate-dialog-in rounded-ui border border-rl-border bg-white px-[22px] pt-5 pb-[18px] shadow-[0_1px_2px_rgb(16_35_61/10%),0_20px_48px_rgb(16_35_61/26%)]"
         role="alertdialog"
         aria-modal="true"
         aria-labelledby="raw-litho-dialog-title"

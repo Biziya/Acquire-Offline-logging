@@ -4,10 +4,10 @@ import StatusIndicator from "./StatusIndicator";
 import { useCachedWindowsIdentity } from "../hooks/useCachedWindowsIdentity";
 import { uiConfig } from "../config/uiConfig";
 
-const ICON = "size-[17px] shrink-0";
+const ICON = "size-5 shrink-0";
 // Neutral text until a previously persisted identity is available.
 const NO_USER_LABEL = "User not identified";
-const LABEL = "whitespace-nowrap";
+const LABEL = "whitespace-nowrap font-semibold";
 
 function RawLithoIcon() {
   return (
@@ -82,7 +82,7 @@ function Sidebar() {
   const userLabel = currentUser ?? NO_USER_LABEL;
   const linkClassName = ({ isActive }: { isActive: boolean }) =>
     [
-      "flex min-h-8 items-center gap-[9px] rounded-md border-0 py-[5px] text-[0.82rem] text-inherit no-underline hover:bg-[#1f2937] hover:text-white",
+      "flex min-h-8 items-center gap-[9px] rounded-ui border-0 py-[5px] text-[0.82rem] text-inherit no-underline hover:bg-[#1f2937] hover:text-white",
       collapsed ? "w-[34px] justify-center px-0" : "px-2",
       isActive ? "bg-[#1f2937] text-white" : "",
     ].join(" ");
@@ -100,12 +100,12 @@ function Sidebar() {
         }`}
       >
         {!collapsed && (
-          <span className="overflow-hidden text-[0.78rem] font-semibold tracking-[0.04em] text-ellipsis whitespace-nowrap text-[#9ca3af]">
+          <span className="min-w-0 overflow-hidden text-[0.85rem] font-bold tracking-[0.04em] text-ellipsis whitespace-nowrap text-[#9ca3af]">
             {uiConfig.appName}
           </span>
         )}
         <button
-          className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent text-inherit hover:bg-[#1f2937]"
+          className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-ui border-0 bg-transparent text-inherit hover:bg-[#1f2937]"
           type="button"
           onClick={() => setCollapsed((current) => !current)}
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}

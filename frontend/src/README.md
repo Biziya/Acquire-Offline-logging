@@ -61,6 +61,18 @@ src/
 `App.tsx` renders the persistent layout — `Sidebar` and `Routes` — so the
 sidebar stays mounted while the route changes.
 
+`KeyboardShortcuts.tsx` provides the compact top-right keyboard icon on all
+three routes. Its non-modal popup lists the implemented shortcuts with page
+scopes, scrolls within the viewport, and closes through its trigger, Close,
+outside pointer clicks, or Escape. Opening focuses Close; explicit dismissal
+returns focus to the trigger. Popup key presses do not reach Raw Litho's window
+shortcuts. There is no persistent right-side shortcuts panel in this shell.
+
+Rectangular controls, menus, table frames, dialogs, and panels use `rounded-ui`
+from `css/index.css`. Its `--radius-ui` aliases Tailwind's `--radius-md`, the
+existing standard button radius (0.375rem / 6px). Table cells stay rectangular;
+intentionally circular controls and badges retain `rounded-full`.
+
 ```text
 App
 ├── Sidebar                collapsible, NavLink-based, owns its collapsed state

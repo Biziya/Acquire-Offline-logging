@@ -7,6 +7,8 @@
  * use the same tokens so the pages stay visually consistent.
  */
 @theme {
+  /* Existing standard Raw Litho button radius (Tailwind rounded-md). */
+  --radius-ui: var(--radius-md);
   --font-sans:
     Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 

@@ -750,8 +750,10 @@ Accepted pastes keep row ids and whole row objects, are re-sorted by
 
 ### Lookup selection and navigation
 
-Every editable lookup opens its full list on focus with `Empty / No value`
+Every editable lookup opens its full list on focus with muted-grey `Empty`
 first. That choice commits `""`; it is not a placeholder or a default code.
+Selecting keeps input focus. Clicking that same input reopens the closed menu
+and resets the filter to show every option, without changing the stored value.
 Typing filters and ranks non-empty matches by exact, prefix, then substring.
 The empty choice remains available while filtering. Enter confirms the closest
 match, and clicking an option explicitly commits that choice.

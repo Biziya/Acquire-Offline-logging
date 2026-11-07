@@ -79,7 +79,7 @@ describe("autocomplete and focus", () => {
     render(<AutocompleteHarness onChange={change} />);
     const input = screen.getByRole("combobox");
     await user.click(input);
-    expect(screen.getAllByRole("option")[0]).toHaveTextContent("Empty / No value");
+    expect(screen.getAllByRole("option")[0]).toHaveTextContent("Empty");
     await user.keyboard(keys);
     expect(input).toHaveValue("");
     expect(change).not.toHaveBeenCalled();
@@ -112,9 +112,37 @@ describe("autocomplete and focus", () => {
     expect(change).toHaveBeenLastCalledWith("Unknown");
     await user.click(screen.getByLabelText("Before"));
     await user.click(input);
-    await user.click(screen.getByRole("option", { name: "Empty / No value" }));
+    await user.click(screen.getByRole("option", { name: "Empty" }));
     expect(input).toHaveValue("");
     expect(change).toHaveBeenLastCalledWith("");
+  });
+
+  it("reopens the same focused cell after choosing Empty and resets its filter", async () => {
+    const user = userEvent.setup();
+    const change = vi.fn();
+    render(<AutocompleteHarness onChange={change} />);
+    const input = screen.getByRole("combobox");
+    await user.type(input, "Unk{Enter}");
+    // Reopen without leaving the input, then filter and explicitly clear it.
+    await user.click(input);
+    await user.keyboard("{Control>}a{/Control}Oth");
+    const empty = screen.getByRole("option", { name: "Empty" });
+    expect(empty).toHaveClass("text-rl-text-muted");
+    await user.click(empty);
+    expect(input).toHaveFocus();
+    expect(input).toHaveValue("");
+    expect(change).toHaveBeenLastCalledWith("");
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+    change.mockClear();
+    await user.click(input);
+    expect(screen.getAllByRole("option").map(option => option.textContent)).toEqual(["Empty", "Unknown", "Other"]);
+    expect(input).toHaveFocus();
+    expect(change).not.toHaveBeenCalled();
+    await user.keyboard("{Enter}");
+    expect(input).toHaveValue("");
+    expect(change).not.toHaveBeenCalled();
+    await user.keyboard("{Enter}");
+    expect(screen.getByRole("listbox")).toBeInTheDocument();
   });
 
   it("only browses options after F2 and only commits on Enter", async () => {
@@ -366,7 +394,7 @@ describe("Tab navigation", () => {
     await user.keyboard("{F2}{ArrowDown}");
     expect(cell("Litho Code, row 1")).toHaveFocus();
     expect(screen.queryByLabelText("Litho From (m), row 2")).toBeNull();
-    await user.click(screen.getByRole("option", { name: "Empty / No value" }));
+    await user.click(screen.getByRole("option", { name: "Empty" }));
     expect(cell("Litho Code, row 1")).toHaveValue("");
     await user.keyboard("{F4}");
     expect(screen.queryByLabelText("Litho From (m), row 2")).toBeNull();

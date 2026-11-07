@@ -39,7 +39,7 @@ function DatasetSummary({ summary }: DatasetSummaryProps) {
         </div>
       </div>
 
-      <dl className="m-0 grid grid-cols-2 overflow-hidden rounded-lg border border-[#e4e9f0] max-[680px]:grid-cols-1">
+      <dl className="m-0 grid grid-cols-2 overflow-hidden rounded-ui border border-[#e4e9f0] max-[680px]:grid-cols-1">
         {summaryItems.map(([label, value]) => (
           <div
             className="flex justify-between gap-4 border-b border-[#e4e9f0] px-[15px] py-[13px] odd:border-r last:border-b-0 last:odd:border-r-0 max-[680px]:border-r-0"

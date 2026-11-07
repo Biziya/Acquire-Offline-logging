@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import Sidebar from "./components/Sidebar";
+import KeyboardShortcuts from "./components/KeyboardShortcuts";
 import RawLitho from "./pages/RawLitho/RawLitho";
 import UploadData from "./pages/UploadData/UploadData";
 import DatabaseViewer from "./pages/DatabaseViewer/DatabaseViewer";
@@ -11,7 +12,8 @@ function App() {
     <div className="flex min-h-screen">
       <Sidebar />
 
-      <main className="flex h-screen min-w-0 flex-1 flex-col overflow-hidden px-4 pt-1.5 pb-2.5">
+      <main className="relative flex h-screen min-w-0 flex-1 flex-col overflow-hidden px-4 pt-1.5 pb-2.5 [&_h1]:pr-10">
+        <KeyboardShortcuts />
         <Routes>
           <Route path="/raw-litho" element={<RawLitho />} />
           <Route path="/database-viewer" element={<DatabaseViewer />} />

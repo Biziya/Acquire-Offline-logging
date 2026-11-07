@@ -55,7 +55,7 @@ interface FileInfo {
 
 const numberFormat = new Intl.NumberFormat("en-US");
 const CONTROL =
-  "h-9 rounded-md border border-[#cbd5e1] bg-white px-2.5 text-[0.9rem] focus:border-[#2563eb] focus:shadow-[0_0_0_3px_rgb(37_99_235/18%)] focus:outline-none";
+  "h-9 rounded-ui border border-[#cbd5e1] bg-white px-2.5 text-[0.9rem] focus:border-[#2563eb] focus:shadow-[0_0_0_3px_rgb(37_99_235/18%)] focus:outline-none";
 
 function isJsonDocument(dataset: unknown): dataset is Record<string, unknown> {
   return (
@@ -564,7 +564,7 @@ function UploadData() {
 
       {isConfirmOpen && workingDocument && (
         <div
-          className="mt-4 rounded-xl border border-[#bfdbfe] bg-[#eff6ff] p-4"
+          className="mt-4 rounded-ui border border-[#bfdbfe] bg-[#eff6ff] p-4"
           role="alertdialog"
           aria-labelledby="upload-confirm-title"
           aria-describedby="upload-confirm-message"

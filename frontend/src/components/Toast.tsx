@@ -37,7 +37,7 @@ const ASSERTIVE_TYPES = new Set(["error", "warning"]);
 const TOAST_CLASS = [
   "pointer-events-none fixed top-4 left-1/2 z-[3000] flex w-max items-center gap-2.5",
   "max-w-[min(360px,calc(100vw-32px))] overflow-hidden py-[9px] pr-3.5 pl-3",
-  "rounded-[10px] border border-rl-border bg-white text-[0.82rem] leading-[1.3]",
+  "rounded-ui border border-rl-border bg-white text-[0.82rem] leading-[1.3]",
   "font-[550] [overflow-wrap:anywhere] text-rl-text [transform:translateX(-50%)]",
   "shadow-[0_1px_2px_rgb(16_35_61/8%),0_10px_28px_rgb(16_35_61/16%)]",
   "before:absolute before:inset-y-0 before:left-0 before:w-[3px]",
