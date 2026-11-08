@@ -340,6 +340,45 @@ const pageRows = (count: number) =>
   );
 
 describe("Tab navigation", () => {
+  it("moves backward one cell and stops repeatedly at the first cell without refocusing", async () => {
+    const user = await table(pageRows(2));
+    await user.click(cell("Colour, row 1"));
+    for (const label of ["Litho Code, row 1", "Litho To (m), row 1", "Litho From (m), row 1"]) {
+      await user.tab({ shift: true });
+      expect(cell(label)).toHaveFocus();
+    }
+    const first = cell("Litho From (m), row 1");
+    const focus = vi.spyOn(HTMLElement.prototype, "focus");
+    try {
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        expect(fireEvent.keyDown(first, { key: "Tab", shiftKey: true })).toBe(false);
+        expect(first).toHaveFocus();
+      }
+      expect(focus).not.toHaveBeenCalled();
+    } finally {
+      focus.mockRestore();
+    }
+    await user.tab();
+    expect(cell("Litho To (m), row 1")).toHaveFocus();
+    await waitFor(async () => expect(await storedRows()).toEqual(pageRows(2)));
+  });
+
+  it("stops at the first editable cell even when earlier cells are hidden or read-only", async () => {
+    const user = await table(pageRows(2));
+    cell("Litho From (m), row 1").closest("td")!.hidden = true;
+    (cell("Litho To (m), row 1") as HTMLInputElement).readOnly = true;
+    await user.click(cell("Colour, row 1"));
+    await user.tab({ shift: true });
+    const first = cell("Litho Code, row 1");
+    expect(first).toHaveFocus();
+    expect(first).toHaveAttribute("aria-expanded", "true");
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await user.tab({ shift: true });
+      expect(first).toHaveFocus();
+    }
+    expect(first).toHaveValue("Unknown");
+    expect(screen.getAllByRole("listbox")).toHaveLength(1);
+  });
   it("does not refocus or fall back when a logical focus request is already satisfied", async () => {
     const user = await table(pageRows(2));
     const input = cell("Litho Code, row 1");
@@ -418,11 +457,15 @@ describe("Tab navigation", () => {
     await user.tab({ shift: true });
     expect(cell("Granulo, row 2")).toHaveFocus();
   });
-  it("wraps backward across pages and creates exactly one row when advancing beyond the end", async () => {
+  it("stops backward navigation at the document start and preserves forward row creation", async () => {
     const user = await table(pageRows(51));
     await user.click(cell("Litho From (m), row 1"));
     await user.tab({ shift: true });
-    await waitFor(() => expect(cell("Hardness, row 51")).toHaveFocus());
+    expect(cell("Litho From (m), row 1")).toHaveFocus();
+    await user.click(cell("Hardness, row 50"));
+    await user.tab();
+    await waitFor(() => expect(cell("Litho From (m), row 51")).toHaveFocus());
+    await user.click(cell("Hardness, row 51"));
     expect(cell("Hardness, row 51")).toHaveAttribute("aria-expanded", "true");
     expect(cell("Hardness, row 51")).toHaveValue("");
     await user.tab();
@@ -431,7 +474,7 @@ describe("Tab navigation", () => {
     await waitFor(async () => expect(await storedRows()).toHaveLength(52));
   });
 
-  it("skips read-only, disabled, and hidden cells, including the wrap destination", async () => {
+  it("skips read-only, disabled, and hidden cells when moving backward across rows", async () => {
     const user = await table(pageRows(2));
     (cell("Lithology Comments, row 1") as HTMLInputElement).readOnly = true;
     cell("Granulo, row 1").closest("td")!.style.display = "none";
@@ -446,13 +489,17 @@ describe("Tab navigation", () => {
     (cell("Granulo, row 2") as HTMLInputElement).disabled = true;
     await user.click(cell("Litho From (m), row 1"));
     await user.tab({ shift: true });
-    expect(cell("Lithology Comments, row 2")).toHaveFocus();
+    expect(cell("Litho From (m), row 1")).toHaveFocus();
+    await user.click(cell("Litho From (m), row 2"));
+    await user.tab({ shift: true });
+    expect(cell("Redox Code, row 1")).toHaveFocus();
+    await user.click(cell("Lithology Comments, row 2"));
     await user.tab({ shift: true });
     expect(cell("Redox Code, row 2")).toHaveFocus();
     await user.click(cell("Litho From (m), row 1"));
     cell("Litho From (m), row 2").closest("tr")!.hidden = true;
     await user.tab({ shift: true });
-    expect(cell("Redox Code, row 1")).toHaveFocus();
+    expect(cell("Litho From (m), row 1")).toHaveFocus();
   });
 
   it("allows browser focus navigation after Escape and resumes editing on re-entry", async () => {
@@ -464,7 +511,8 @@ describe("Tab navigation", () => {
     await user.tab();
     expect(cell("Litho From (m), row 1")).toHaveFocus();
     await user.tab({ shift: true });
-    expect(cell("Hardness, row 2")).toHaveFocus();
+    expect(cell("Litho From (m), row 1")).toHaveFocus();
+    await user.click(cell("Hardness, row 2"));
     await user.keyboard("{Escape}");
     await user.tab();
     expect(screen.getByRole("button", { name: /Add Row/ })).toHaveFocus();

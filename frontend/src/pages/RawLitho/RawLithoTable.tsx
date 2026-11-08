@@ -223,10 +223,10 @@ function RawLithoTable({
   /*
    * Tab / Shift + Tab / ArrowRight / ArrowLeft at the edge of the rendered page:
    * the cell handler found no neighbour, so continue in the adjacent row on the
-   * next or previous page. Shift + Tab wraps backward at the first cell;
+   * next or previous page. Shift + Tab stops at the first editable cell;
    * forward Tab at the final cell reaches the shared row-creation path.
    */
-  function focusAdjacentPageRow(element: EventTarget, step: number, wrap = false) {
+  function focusAdjacentPageRow(element: EventTarget, step: number) {
     const rowId = getRowIdFromElement(element);
     const sourceCell = element instanceof Element ? element.closest("td") : null;
     const index = rows.findIndex((row) => String(row.id) === rowId);
@@ -234,8 +234,8 @@ function RawLithoTable({
 
     for (let distance = 1; distance <= rows.length; distance += 1) {
       const position = index + step * distance;
-      if (!wrap && (position < 0 || position >= rows.length)) return false;
-      const target = rows[(position + rows.length) % rows.length];
+      if (position < 0 || position >= rows.length) return false;
+      const target = rows[position];
       if (!target) return false;
       const rendered = Array.from(tableBodyRef.current?.rows ?? []).find(
         row => row.dataset.rowId === String(target.id),
@@ -273,15 +273,15 @@ function RawLithoTable({
     const editors = step !== 0 && tbody ? getEditableElements(tbody) : [];
     const isEditableCell = Boolean(sourceCell && editors.some(editor => editor.closest("td") === sourceCell));
     if (step !== 0 && isEditableCell &&
-        focusAdjacentPageRow(event.target, step, event.key === "Tab" && event.shiftKey)) {
+        focusAdjacentPageRow(event.target, step)) {
       event.preventDefault();
       markKeyAsHandled(event);
       return;
     }
 
     if (event.key === "Tab" && step < 0 && isEditableCell) {
-      // A table with only one editable cell has no different backward target.
-      // Keep the boundary without refocusing an internal control. Esc still exits.
+      // No previous editable cell exists. Prevent native browser navigation
+      // without changing focus or wrapping to the table's end. Esc still exits.
       event.preventDefault();
       markKeyAsHandled(event);
       return;

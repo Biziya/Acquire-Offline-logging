@@ -238,7 +238,7 @@ export function getHorizontalStep(event: TableKeyEvent) {
 /*
  * Arrow keys, Tab and Shift + Tab inside a cell. Returns true and marks the
  * event when focus moved. When it returns false at the edge of the page, the
- * event bubbles to the table, which changes page, wraps Shift + Tab backward,
+ * event bubbles to the table, which changes page, holds Shift + Tab at the start,
  * or appends a row with forward Tab / ArrowDown.
  */
 export function handleCellNavigation(event: TableKeyEvent) {
