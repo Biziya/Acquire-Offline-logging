@@ -10,6 +10,8 @@ export const EDITABLE_SELECTOR = [
 
 const VERTICAL_KEYS = new Set(["ArrowUp", "ArrowDown"]);
 
+// One primary editor per logical cell. Secondary inputs, triggers, and wrappers
+// must never become additional stops when moving through the table.
 export function getEditableElements(root: Element): HTMLElement[] {
   const visibility = new Map<Element, boolean>();
   function isVisible(element: Element): boolean {
@@ -22,10 +24,17 @@ export function getEditableElements(root: Element): HTMLElement[] {
     visibility.set(element, visible);
     return visible;
   }
+  const cells = new Set<Element>();
   return Array.from(root.querySelectorAll<HTMLElement>(EDITABLE_SELECTOR)).filter(
     element => !element.matches(':disabled, [aria-disabled="true"], [aria-readonly="true"]') &&
       element.tabIndex >= 0 && isVisible(element),
-  );
+  ).filter(element => {
+    const cell = element.closest("td");
+    if (!cell) return true;
+    if (cells.has(cell)) return false;
+    cells.add(cell);
+    return true;
+  });
 }
 
 /*
@@ -56,8 +65,11 @@ function focusElement(target: Element | null | undefined) {
   if (!(target instanceof HTMLElement)) {
     return false;
   }
+  // An already satisfied focus request must not fall through to a row fallback.
+  if (target === target.ownerDocument.activeElement) return true;
 
   target.focus();
+  if (target.ownerDocument.activeElement !== target) return false;
 
   try {
     if (
@@ -68,6 +80,7 @@ function focusElement(target: Element | null | undefined) {
   } catch {
     /* Inputs such as type="number" may reject select(). */
   }
+  target.scrollIntoView?.({ block: "nearest", inline: "nearest" });
 
   return true;
 }
@@ -84,11 +97,10 @@ function focusEditable(cell: Element | null | undefined) {
  */
 function moveHorizontally(cell: HTMLTableCellElement, step: number) {
   const tbody = cell.closest("tbody");
-  const current = getEditableElements(cell)[0];
-  if (!tbody || !current) return false;
+  if (!tbody) return false;
 
   const editables = getEditableElements(tbody);
-  const index = editables.indexOf(current);
+  const index = editables.findIndex(editor => editor.closest("td") === cell);
   if (index === -1) return false;
 
   return focusElement(editables[index + step]);
@@ -226,9 +238,11 @@ export function getHorizontalStep(event: TableKeyEvent) {
 /*
  * Arrow keys, Tab and Shift + Tab inside a cell. Returns true and marks the
  * event when focus moved. When it returns false at the edge of the page, the
- * event bubbles to the table, which changes page, wraps Tab, or appends a row with ArrowDown.
+ * event bubbles to the table, which changes page, wraps Shift + Tab backward,
+ * or appends a row with forward Tab / ArrowDown.
  */
 export function handleCellNavigation(event: TableKeyEvent) {
+  if (isKeyAlreadyHandled(event)) return true;
   const element = event.target;
   const cell = element instanceof Element ? element.closest("td") : null;
 

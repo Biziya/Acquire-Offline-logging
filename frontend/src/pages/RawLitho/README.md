@@ -673,7 +673,7 @@ which stays swallowed.
 | `←` / `→` / `Tab` / `Shift`+`Tab` in a lookup cell with an open dropdown (typed or empty) | Move focus without changing the committed value. Empty cells remain empty. |
 | `↑` / `↓` | Move one cell vertically in the same column. On `number` inputs the default spinner behaviour is suppressed. After F2 in a lookup cell, these keys browse options instead. |
 | `↓` on the last row | No cell below, so the table creates the next row and focuses it — from a lookup cell as well as a plain one. |
-| `Tab` from the last cell of the last row | Wraps to the first editable cell, without adding a row. |
+| `Tab` from the last editable cell of the final row | Creates one row through the same validated path as ArrowDown, then focuses its first editable cell. |
 | `Enter` | In a Litho From / Litho To cell, commits the value and reorders the rows without leaving the cell. |
 | `Delete` | Clears the cell when the whole value is selected, the caret is at the end, or the cell is already empty. Otherwise the browser default applies. |
 | `Escape` (lookup cell) | Reverts the typed text and closes the dropdown. |
@@ -687,8 +687,16 @@ All four horizontal keys share one mechanism: `getHorizontalStep(event)` in
 neighbour the event bubbles to `handleTableKeyDown`, which asks the same
 function and continues in the adjacent row on the next / previous page through
 `focusRowCell` (rows addressed by id, page switched first, cell focused — and so
-scrolled into view — after the render). At the document boundaries, Tab and Shift+Tab wrap in both directions across
-pages. Only ArrowDown on the final row, F4, and Add Row create rows.
+scrolled into view — after the render). Shift+Tab wraps backward at the document start; forward Tab never wraps.
+Tab at the final editable cell, ArrowDown on the final row, F4, and Add Row all
+reuse `requestAddRow`, including validation, defaults, pending focus, and IndexedDB
+autosave. Successful focus requests scroll the destination into view.
+
+Navigation indexes logical table cells, with one primary editor per cell.
+Secondary inputs, wrappers, and dropdown triggers never become extra stops.
+The currently active cell determines the starting position, and handled native
+key events are ignored by later handlers. Already focused destinations do not
+trigger another focus call or a fallback to a different cell.
 
 ### Comment cells
 
@@ -1133,7 +1141,7 @@ handleTableKeyDown(event)
   used the key
 - Tab / Shift + Tab / ← / → at the page edge: focusAdjacentPageRow()
 - otherwise returns early unless on the last page with a row-creation key
-- Tab at document boundaries wraps; ArrowDown-on-last-row calls requestAddRow()
+- Shift+Tab wraps backward; final-cell Tab and ArrowDown-on-last-row call requestAddRow()
 
 document mousedown listener
 - Ctrl / ⌘ + click on a cell: toggle it in selectedCells and focus it
@@ -1314,7 +1322,7 @@ handleSave   see "Save button" above
 9. With more than 50 rows, edit a row's Litho From so it belongs on another page → the table follows it and the caret stays on that row.
 10. Click the Save button straight after typing a Litho From that reorders the rows → the reorder happens but focus stays on the button.
 11. Leave `Redox Code` empty and press Add Row → no row, warning toast, focus lands in `Redox Code`.
-12. Tab from the last editable cell wraps to the first; Shift+Tab wraps back. F4 or ArrowDown on the last row adds a row after validation.
+12. Tab from the last editable cell adds exactly one validated row, scrolls it into view, and focuses its first cell. Shift+Tab from the first table cell preserves backward wrapping.
 13. Confirm `CA`, `PY`, `Sedim`, `Granulo`, `Hardness` and the comments are **not** copied.
 14. Enter an interval that already exists → both rows' depth cells turn orange, the duplicate warning appears, and Add Row / F4 / Tab / ArrowDown all refuse to advance while focus stays in `Litho To`. Confirm this still holds after the rows have been reordered.
 15. Change the duplicate to a unique interval → creation works again.

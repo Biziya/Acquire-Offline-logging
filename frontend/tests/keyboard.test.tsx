@@ -340,7 +340,85 @@ const pageRows = (count: number) =>
   );
 
 describe("Tab navigation", () => {
-  it("wraps across the whole document in both directions, including page boundaries", async () => {
+  it("does not refocus or fall back when a logical focus request is already satisfied", async () => {
+    const user = await table(pageRows(2));
+    const input = cell("Litho Code, row 1");
+    await user.click(input);
+    const focus = vi.spyOn(HTMLElement.prototype, "focus");
+    try {
+      expect(focusCellInRow(input.closest("tbody"), "r0", "lithoCode")).toBe(true);
+      expect(input).toHaveFocus();
+      expect(focus).not.toHaveBeenCalled();
+    } finally {
+      focus.mockRestore();
+    }
+  });
+  it("moves exactly one cell from secondary controls without their own keyboard handlers", async () => {
+    const user = await table(pageRows(2));
+    const secondary = document.createElement("input");
+    secondary.setAttribute("aria-label", "Secondary colour control");
+    cell("Colour, row 1").closest("td")!.append(secondary);
+    await user.click(secondary);
+    await user.tab({ shift: true });
+    expect(cell("Litho Code, row 1")).toHaveFocus();
+    await user.click(secondary);
+    await user.tab();
+    expect(cell("Redox Code, row 1")).toHaveFocus();
+    expect(cell("Colour, row 1")).toHaveValue("Unknown");
+    expect(screen.queryByLabelText("Litho From (m), row 3")).toBeNull();
+  });
+  it("adds one row through Tab across a page boundary, scrolls to it, and persists existing values", async () => {
+    const existing = pageRows(50);
+    const user = await table(existing);
+    const descriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollIntoView");
+    const scroll = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: scroll });
+    try {
+      await user.click(cell("Hardness, row 50"));
+      await user.tab();
+      await waitFor(() => expect(cell("Litho From (m), row 51")).toHaveFocus());
+      expect(screen.queryByLabelText("Litho From (m), row 52")).toBeNull();
+      expect(scroll.mock.contexts.filter(target => target === cell("Litho From (m), row 51"))).toHaveLength(1);
+      expect(scroll).toHaveBeenCalledWith({ block: "nearest", inline: "nearest" });
+      expect(toast.mock.calls.filter(([notification]) => notification === TOAST_NOTIFICATIONS.rowAdded)).toHaveLength(1);
+      await waitFor(async () => {
+        const saved = await storedRows();
+        expect(saved).toHaveLength(51);
+        expect(saved?.slice(0, 50)).toEqual(existing);
+        expect(saved?.[50]).toMatchObject({ lithoFrom: "500", lithoTo: "", lithoCode: "Unknown", colorCode: "Unknown", redoxCode: "Unknown", hardness: "" });
+      });
+    } finally {
+      if (descriptor) Object.defineProperty(HTMLElement.prototype, "scrollIntoView", descriptor);
+      else Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView");
+    }
+  });
+
+  it("creates a row from the final editable cell when later columns are hidden or read-only", async () => {
+    const user = await table();
+    cell("Hardness, row 1").closest("td")!.hidden = true;
+    (cell("Granulo, row 1") as HTMLInputElement).disabled = true;
+    (cell("Lithology Comments, row 1") as HTMLInputElement).readOnly = true;
+    await user.click(cell("Redox Code, row 1"));
+    await user.tab();
+    await waitFor(() => expect(cell("Litho From (m), row 2")).toHaveFocus());
+    expect(screen.queryByLabelText("Litho From (m), row 3")).toBeNull();
+  });
+
+  it("keeps the backward destination on its logical row after a depth edit reorders rows", async () => {
+    const user = await table(pageRows(2));
+    const from = cell("Litho From (m), row 2");
+    await user.click(from);
+    fireEvent.change(from, { target: { value: "-5" } });
+    await user.tab({ shift: true });
+    await waitFor(() => {
+      expect(cell("Litho From (m), row 1")).toHaveValue(-5);
+      expect(cell("Hardness, row 2")).toHaveFocus();
+      expect(document.activeElement?.closest("tr")).toHaveAttribute("data-row-id", "r0");
+    });
+    await user.tab({ shift: true });
+    expect(cell("Granulo, row 2")).toHaveFocus();
+  });
+  it("wraps backward across pages and creates exactly one row when advancing beyond the end", async () => {
     const user = await table(pageRows(51));
     await user.click(cell("Litho From (m), row 1"));
     await user.tab({ shift: true });
@@ -348,8 +426,9 @@ describe("Tab navigation", () => {
     expect(cell("Hardness, row 51")).toHaveAttribute("aria-expanded", "true");
     expect(cell("Hardness, row 51")).toHaveValue("");
     await user.tab();
-    await waitFor(() => expect(cell("Litho From (m), row 1")).toHaveFocus());
-    expect(screen.queryByLabelText("Litho From (m), row 52")).toBeNull();
+    await waitFor(() => expect(cell("Litho From (m), row 52")).toHaveFocus());
+    expect(screen.queryByLabelText("Litho From (m), row 53")).toBeNull();
+    await waitFor(async () => expect(await storedRows()).toHaveLength(52));
   });
 
   it("skips read-only, disabled, and hidden cells, including the wrap destination", async () => {
@@ -368,8 +447,9 @@ describe("Tab navigation", () => {
     await user.click(cell("Litho From (m), row 1"));
     await user.tab({ shift: true });
     expect(cell("Lithology Comments, row 2")).toHaveFocus();
-    await user.tab();
-    expect(cell("Litho From (m), row 1")).toHaveFocus();
+    await user.tab({ shift: true });
+    expect(cell("Redox Code, row 2")).toHaveFocus();
+    await user.click(cell("Litho From (m), row 1"));
     cell("Litho From (m), row 2").closest("tr")!.hidden = true;
     await user.tab({ shift: true });
     expect(cell("Redox Code, row 1")).toHaveFocus();
@@ -449,7 +529,7 @@ describe("Tab navigation", () => {
     expect(screen.queryByLabelText("Litho From (m), row 2")).toBeNull();
     expect(toast).toHaveBeenCalledWith(TOAST_NOTIFICATIONS.missingRequiredFields);
   });
-  it("moves across rows and wraps table boundaries without adding rows", async () => {
+  it("moves across rows and creates a validated row at the final editable cell", async () => {
     const user = await table(pageRows(2));
     await user.click(cell("Litho From (m), row 1"));
     await user.tab();
@@ -469,11 +549,13 @@ describe("Tab navigation", () => {
 
     await user.click(cell("Hardness, row 2"));
     await user.tab();
-    expect(cell("Litho From (m), row 1")).toHaveFocus();
-    await user.tab({ shift: true });
-    expect(cell("Hardness, row 2")).toHaveFocus();
-    expect(screen.queryByLabelText("Litho From (m), row 3")).toBeNull();
-    expect(toast).not.toHaveBeenCalled();
+    await waitFor(() => expect(cell("Litho From (m), row 3")).toHaveFocus());
+    expect(screen.queryByLabelText("Litho From (m), row 4")).toBeNull();
+    await user.click(cell("Hardness, row 3"));
+    await user.tab();
+    expect(cell("Litho To (m), row 3")).toHaveFocus();
+    expect(screen.queryByLabelText("Litho From (m), row 4")).toBeNull();
+    expect(toast).toHaveBeenCalledWith(TOAST_NOTIFICATIONS.missingRequiredFields);
   });
 
   it("Enter confirms partial lookup matches before table navigation", async () => {
@@ -499,14 +581,15 @@ describe("Tab navigation", () => {
     );
   });
 
-  it("Tab preserves the confirmed last lookup value and wraps instead of adding a row", async () => {
+  it("Tab preserves the confirmed last lookup value when adding a new row", async () => {
     const user = await table();
     await user.click(cell("Hardness, row 1"));
     await user.keyboard("7{Enter}");
     await user.tab();
-    expect(cell("Litho From (m), row 1")).toHaveFocus();
-    expect(screen.queryByLabelText("Litho From (m), row 2")).toBeNull();
+    await waitFor(() => expect(cell("Litho From (m), row 2")).toHaveFocus());
+    expect(screen.queryByLabelText("Litho From (m), row 3")).toBeNull();
     expect(cell("Hardness, row 1")).toHaveValue("7");
+    await waitFor(async () => expect((await storedRows())?.[0]?.hardness).toBe("7"));
 
     // Shift + Tab from the first cell of the first row never creates a row.
     await user.click(cell("Litho From (m), row 1"));

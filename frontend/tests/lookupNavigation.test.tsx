@@ -2,6 +2,36 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import LookupAutocomplete from "../src/pages/RawLitho/LookupAutocomplete";
+import { handleCellNavigation } from "../src/pages/RawLitho/tableNavigation";
+
+describe("logical cell navigation", () => {
+  it.each([
+    [false, "Secondary B", "Editor C"],
+    [true, "Editor B", "Editor A"],
+  ])("uses one logical destination with Shift: %s, regardless of internal controls", async (shiftKey, source, destination) => {
+    const user = userEvent.setup();
+    render(<table><tbody onKeyDown={handleCellNavigation}><tr>
+      {["A", "B", "C"].map(name => <td key={name}>
+        <div tabIndex={0}>
+          <input aria-label={`Editor ${name}`} onKeyDown={handleCellNavigation} />
+          <input aria-label={`Secondary ${name}`} onKeyDown={handleCellNavigation} />
+          <button type="button">Open {name}</button>
+        </div>
+      </td>)}
+    </tr></tbody></table>);
+    const input = screen.getByLabelText(source);
+    await user.click(input);
+    const focus = vi.spyOn(HTMLElement.prototype, "focus");
+    try {
+      fireEvent.keyDown(input, { key: "Tab", shiftKey });
+      expect(screen.getByLabelText(destination)).toHaveFocus();
+      expect(focus).toHaveBeenCalledTimes(1);
+      expect(focus.mock.instances[0]).toBe(screen.getByLabelText(destination));
+    } finally {
+      focus.mockRestore();
+    }
+  });
+});
 
 function grid(value = "Last") {
   const change = vi.fn();

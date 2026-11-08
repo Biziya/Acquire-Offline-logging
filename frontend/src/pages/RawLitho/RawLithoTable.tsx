@@ -17,6 +17,7 @@ import {
   getColumnKeyFromElement,
   getHorizontalStep,
   getRowIdFromElement,
+  handleCellNavigation,
   isKeyAlreadyHandled,
   isLastRowArrowDown,
   markKeyAsHandled,
@@ -187,7 +188,7 @@ function RawLithoTable({
 
   /*
    * Every route into row creation goes through here: the Add Row button, F4,
-   * ArrowDown from the last row. `onAddRow` owns the
+   * Tab from the final editable cell and ArrowDown from the last row. `onAddRow` owns the
    * validation; this function owns only where the caret ends up.
    *
    * Both branches address the row by id, because the new row is sorted into
@@ -222,10 +223,12 @@ function RawLithoTable({
   /*
    * Tab / Shift + Tab / ArrowRight / ArrowLeft at the edge of the rendered page:
    * the cell handler found no neighbour, so continue in the adjacent row on the
-   * next or previous page. Tab wraps around the document; arrows stop at its ends.
+   * next or previous page. Shift + Tab wraps backward at the first cell;
+   * forward Tab at the final cell reaches the shared row-creation path.
    */
   function focusAdjacentPageRow(element: EventTarget, step: number, wrap = false) {
     const rowId = getRowIdFromElement(element);
+    const sourceCell = element instanceof Element ? element.closest("td") : null;
     const index = rows.findIndex((row) => String(row.id) === rowId);
     if (index === -1) return false;
 
@@ -240,7 +243,7 @@ function RawLithoTable({
       if (rendered) {
         const editables = getEditableElements(rendered);
         const input = step > 0 ? editables[0] : editables.at(-1);
-        if (!input) continue;
+        if (!input || input.closest("td") === sourceCell) continue;
         focusRowCell(target.id, getColumnKeyFromElement(input));
       } else {
         focusRowCell(target.id, step > 0 ? FIRST_COLUMN_KEY : LAST_COLUMN_KEY);
@@ -259,12 +262,26 @@ function RawLithoTable({
 
     // A cell handler (arrow navigation, lookup dropdown) already used this key.
     if (isKeyAlreadyHandled(event)) return;
+    // Secondary controls and wrappers may not have their own cell handler.
+    // Resolve them from the same logical cell before considering page edges.
+    if (handleCellNavigation(event)) return;
 
     const step = getHorizontalStep(event);
 
     const tbody = tableBodyRef.current;
-    if (step !== 0 && tbody && getEditableElements(tbody).includes(event.target as HTMLElement) &&
-        focusAdjacentPageRow(event.target, step, event.key === "Tab")) {
+    const sourceCell = event.target instanceof Element ? event.target.closest("td") : null;
+    const editors = step !== 0 && tbody ? getEditableElements(tbody) : [];
+    const isEditableCell = Boolean(sourceCell && editors.some(editor => editor.closest("td") === sourceCell));
+    if (step !== 0 && isEditableCell &&
+        focusAdjacentPageRow(event.target, step, event.key === "Tab" && event.shiftKey)) {
+      event.preventDefault();
+      markKeyAsHandled(event);
+      return;
+    }
+
+    if (event.key === "Tab" && step < 0 && isEditableCell) {
+      // A table with only one editable cell has no different backward target.
+      // Keep the boundary without refocusing an internal control. Esc still exits.
       event.preventDefault();
       markKeyAsHandled(event);
       return;
@@ -272,9 +289,12 @@ function RawLithoTable({
 
     // Only the final page ends at the final row of the document.
     if (!isLastRowVisible) return;
-    if (!isLastRowArrowDown(event, tableBodyRef.current)) return;
+    const isFinalCellTab = event.key === "Tab" && step === 1 && isEditableCell &&
+      editors.at(-1)?.closest("td") === sourceCell;
+    if (!isFinalCellTab && !isLastRowArrowDown(event, tbody)) return;
 
     event.preventDefault();
+    markKeyAsHandled(event);
     requestAddRow();
   }
 
