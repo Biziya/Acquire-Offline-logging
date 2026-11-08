@@ -13,10 +13,13 @@ import { useRawLithoShortcuts } from "./hooks/useRawLithoShortcuts";
 import { useRawLithoRowFocus } from "./hooks/useRawLithoRowFocus";
 import {
   focusCellInRow,
+  getEditableElements,
+  getColumnKeyFromElement,
   getHorizontalStep,
   getRowIdFromElement,
   isKeyAlreadyHandled,
-  isRowCreationKey,
+  isLastRowArrowDown,
+  markKeyAsHandled,
 } from "./tableNavigation";
 import {
   buildClipboardText,
@@ -93,6 +96,7 @@ function RawLithoTable({
 }: RawLithoTableProps) {
   const tableWrapperRef = useRef<HTMLDivElement>(null);
   const tableBodyRef = useRef<HTMLTableSectionElement>(null);
+  const tabNavigationActive = useRef(true);
   // Ctrl + click selection, by row id and column key so it survives sorting.
   const [selectedCells, setSelectedCells] = useState<CellRef[]>([]);
 
@@ -183,7 +187,7 @@ function RawLithoTable({
 
   /*
    * Every route into row creation goes through here: the Add Row button, F4,
-   * Tab from the last cell and ArrowDown from the last row. `onAddRow` owns the
+   * ArrowDown from the last row. `onAddRow` owns the
    * validation; this function owns only where the caret ends up.
    *
    * Both branches address the row by id, because the new row is sorted into
@@ -218,17 +222,32 @@ function RawLithoTable({
   /*
    * Tab / Shift + Tab / ArrowRight / ArrowLeft at the edge of the rendered page:
    * the cell handler found no neighbour, so continue in the adjacent row on the
-   * next or previous page. Returns false at either end of the document.
+   * next or previous page. Tab wraps around the document; arrows stop at its ends.
    */
-  function focusAdjacentPageRow(element: EventTarget, step: number) {
+  function focusAdjacentPageRow(element: EventTarget, step: number, wrap = false) {
     const rowId = getRowIdFromElement(element);
     const index = rows.findIndex((row) => String(row.id) === rowId);
-    const target = index === -1 ? undefined : rows[index + step];
+    if (index === -1) return false;
 
-    if (!target) return false;
-
-    focusRowCell(target.id, step > 0 ? FIRST_COLUMN_KEY : LAST_COLUMN_KEY);
-    return true;
+    for (let distance = 1; distance <= rows.length; distance += 1) {
+      const position = index + step * distance;
+      if (!wrap && (position < 0 || position >= rows.length)) return false;
+      const target = rows[(position + rows.length) % rows.length];
+      if (!target) return false;
+      const rendered = Array.from(tableBodyRef.current?.rows ?? []).find(
+        row => row.dataset.rowId === String(target.id),
+      );
+      if (rendered) {
+        const editables = getEditableElements(rendered);
+        const input = step > 0 ? editables[0] : editables.at(-1);
+        if (!input) continue;
+        focusRowCell(target.id, getColumnKeyFromElement(input));
+      } else {
+        focusRowCell(target.id, step > 0 ? FIRST_COLUMN_KEY : LAST_COLUMN_KEY);
+      }
+      return true;
+    }
+    return false;
   }
 
   function handleTableKeyDown(
@@ -243,14 +262,17 @@ function RawLithoTable({
 
     const step = getHorizontalStep(event);
 
-    if (step !== 0 && focusAdjacentPageRow(event.target, step)) {
+    const tbody = tableBodyRef.current;
+    if (step !== 0 && tbody && getEditableElements(tbody).includes(event.target as HTMLElement) &&
+        focusAdjacentPageRow(event.target, step, event.key === "Tab")) {
       event.preventDefault();
+      markKeyAsHandled(event);
       return;
     }
 
     // Only the final page ends at the final row of the document.
     if (!isLastRowVisible) return;
-    if (!isRowCreationKey(event, tableBodyRef.current)) return;
+    if (!isLastRowArrowDown(event, tableBodyRef.current)) return;
 
     event.preventDefault();
     requestAddRow();
@@ -355,8 +377,23 @@ function RawLithoTable({
 
           <tbody
             ref={tableBodyRef}
+            onKeyDownCapture={(event) => {
+              if (event.key === "Escape") tabNavigationActive.current = false;
+              if (event.key === "Tab" && !tabNavigationActive.current) {
+                // Explicitly leaving editing: skip cell handlers and allow the
+                // browser default. This listener exists only on the table body.
+                event.stopPropagation();
+              }
+            }}
+            onMouseDownCapture={() => { tabNavigationActive.current = true; }}
             onKeyDown={handleTableKeyDown}
-            onFocus={handleTableFocus}
+            onFocus={(event) => {
+              if (!(event.relatedTarget instanceof Node) ||
+                  !event.currentTarget.contains(event.relatedTarget)) {
+                tabNavigationActive.current = true;
+              }
+              handleTableFocus(event);
+            }}
             onCopy={handleCopy}
             onPaste={handlePaste}
           >

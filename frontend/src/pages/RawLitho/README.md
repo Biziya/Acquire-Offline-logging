@@ -669,15 +669,15 @@ which stays swallowed.
 | Key | Behaviour |
 | --- | --- |
 | `←` / `→` | Move to the previous / next editable cell, when the whole cell value is selected or the caret is at the edge of the current value, so normal text editing still works. Disabled cells are skipped, the end of a row continues on the next row (and the start on the previous row), and the edge of a page continues on the adjacent page. |
-| `Tab` / `Shift`+`Tab` | Exactly like `→` / `←`, except that they always leave the cell regardless of the caret. Leaving a lookup cell never confirms a highlighted suggestion. `Shift`+`Tab` from the very first cell leaves the table normally. |
+| `Tab` / `Shift`+`Tab` | Exactly like `→` / `←`, except that they always leave the cell regardless of the caret. Leaving a lookup cell never confirms a highlighted suggestion. `Shift`+`Tab` from the first cell wraps to the last editable cell of the document. |
 | `←` / `→` / `Tab` / `Shift`+`Tab` in a lookup cell with an open dropdown (typed or empty) | Move focus without changing the committed value. Empty cells remain empty. |
 | `↑` / `↓` | Move one cell vertically in the same column. On `number` inputs the default spinner behaviour is suppressed. After F2 in a lookup cell, these keys browse options instead. |
 | `↓` on the last row | No cell below, so the table creates the next row and focuses it — from a lookup cell as well as a plain one. |
-| `Tab` from the last cell of the last row | Creates the next row and focuses its first cell. |
+| `Tab` from the last cell of the last row | Wraps to the first editable cell, without adding a row. |
 | `Enter` | In a Litho From / Litho To cell, commits the value and reorders the rows without leaving the cell. |
 | `Delete` | Clears the cell when the whole value is selected, the caret is at the end, or the cell is already empty. Otherwise the browser default applies. |
 | `Escape` (lookup cell) | Reverts the typed text and closes the dropdown. |
-| `Escape` (any cell) | Also clears the Ctrl + click cell selection. |
+| `Escape` (any cell) | Clears cell selection and releases Tab navigation to the browser. Re-entering the table or clicking a cell resumes table navigation. |
 | `Space` | Types normally; leading whitespace in Lithology Comments is removed by the shared normalizer. |
 | `F2` (lookup cell) | Enters option-selection mode: Up/Down browse, Enter confirms, Escape cancels. |
 
@@ -687,8 +687,8 @@ All four horizontal keys share one mechanism: `getHorizontalStep(event)` in
 neighbour the event bubbles to `handleTableKeyDown`, which asks the same
 function and continues in the adjacent row on the next / previous page through
 `focusRowCell` (rows addressed by id, page switched first, cell focused — and so
-scrolled into view — after the render). At the end of the document only `Tab`
-reaches row creation.
+scrolled into view — after the render). At the document boundaries, Tab and Shift+Tab wrap in both directions across
+pages. Only ArrowDown on the final row, F4, and Add Row create rows.
 
 ### Comment cells
 
@@ -1133,7 +1133,7 @@ handleTableKeyDown(event)
   used the key
 - Tab / Shift + Tab / ← / → at the page edge: focusAdjacentPageRow()
 - otherwise returns early unless on the last page with a row-creation key
-- for Tab-at-row-end and ArrowDown-on-last-row: preventDefault + requestAddRow()
+- Tab at document boundaries wraps; ArrowDown-on-last-row calls requestAddRow()
 
 document mousedown listener
 - Ctrl / ⌘ + click on a cell: toggle it in selectedCells and focus it
@@ -1314,7 +1314,7 @@ handleSave   see "Save button" above
 9. With more than 50 rows, edit a row's Litho From so it belongs on another page → the table follows it and the caret stays on that row.
 10. Click the Save button straight after typing a Litho From that reorders the rows → the reorder happens but focus stays on the button.
 11. Leave `Redox Code` empty and press Add Row → no row, warning toast, focus lands in `Redox Code`.
-12. Fill the required fields, then Tab from the last cell → a row is created with Litho Code, Color Code, Redox Code and OX copied and `Litho From` continuing from the previous `Litho To`.
+12. Tab from the last editable cell wraps to the first; Shift+Tab wraps back. F4 or ArrowDown on the last row adds a row after validation.
 13. Confirm `CA`, `PY`, `Sedim`, `Granulo`, `Hardness` and the comments are **not** copied.
 14. Enter an interval that already exists → both rows' depth cells turn orange, the duplicate warning appears, and Add Row / F4 / Tab / ArrowDown all refuse to advance while focus stays in `Litho To`. Confirm this still holds after the rows have been reordered.
 15. Change the duplicate to a unique interval → creation works again.

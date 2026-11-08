@@ -3,12 +3,30 @@ import type { RowId } from "../../types/domain";
 type TableKeyEvent = KeyboardEvent | ReactKeyboardEvent<HTMLElement>;
 
 export const EDITABLE_SELECTOR = [
-  'input:not([disabled]):not([type="hidden"])',
+  'input:not([disabled]):not([readonly]):not([type="hidden"])',
   "select:not([disabled])",
-  "textarea:not([disabled])",
+  "textarea:not([disabled]):not([readonly])",
 ].join(", ");
 
 const VERTICAL_KEYS = new Set(["ArrowUp", "ArrowDown"]);
+
+export function getEditableElements(root: Element): HTMLElement[] {
+  const visibility = new Map<Element, boolean>();
+  function isVisible(element: Element): boolean {
+    const cached = visibility.get(element);
+    if (cached !== undefined) return cached;
+    const style = getComputedStyle(element);
+    const visible = !element.matches('[hidden], [inert], [aria-hidden="true"]') &&
+      style.display !== "none" && style.visibility !== "hidden" && style.visibility !== "collapse" &&
+      (!element.parentElement || isVisible(element.parentElement));
+    visibility.set(element, visible);
+    return visible;
+  }
+  return Array.from(root.querySelectorAll<HTMLElement>(EDITABLE_SELECTOR)).filter(
+    element => !element.matches(':disabled, [aria-disabled="true"], [aria-readonly="true"]') &&
+      element.tabIndex >= 0 && isVisible(element),
+  );
+}
 
 /*
  * Cell-level handlers (arrow navigation, the lookup dropdown) run before the
@@ -55,7 +73,7 @@ function focusElement(target: Element | null | undefined) {
 }
 
 function focusEditable(cell: Element | null | undefined) {
-  return focusElement(cell?.querySelector(EDITABLE_SELECTOR));
+  return focusElement(cell && getEditableElements(cell)[0]);
 }
 
 /*
@@ -66,10 +84,10 @@ function focusEditable(cell: Element | null | undefined) {
  */
 function moveHorizontally(cell: HTMLTableCellElement, step: number) {
   const tbody = cell.closest("tbody");
-  const current = cell.querySelector(EDITABLE_SELECTOR);
+  const current = getEditableElements(cell)[0];
   if (!tbody || !current) return false;
 
-  const editables = Array.from(tbody.querySelectorAll(EDITABLE_SELECTOR));
+  const editables = getEditableElements(tbody);
   const index = editables.indexOf(current);
   if (index === -1) return false;
 
@@ -208,7 +226,7 @@ export function getHorizontalStep(event: TableKeyEvent) {
 /*
  * Arrow keys, Tab and Shift + Tab inside a cell. Returns true and marks the
  * event when focus moved. When it returns false at the edge of the page, the
- * event bubbles to the table, which changes page or appends a row.
+ * event bubbles to the table, which changes page, wraps Tab, or appends a row with ArrowDown.
  */
 export function handleCellNavigation(event: TableKeyEvent) {
   const element = event.target;
@@ -247,23 +265,6 @@ export function handleCellNavigation(event: TableKeyEvent) {
   return true;
 }
 
-export function isRowEndTab(
-  event: TableKeyEvent,
-  tbody: HTMLTableSectionElement | null,
-) {
-  if (event.key !== "Tab" || event.shiftKey) return false;
-  if (event.altKey || event.ctrlKey || event.metaKey) return false;
-  if (!tbody) return false;
-
-  const lastRow = tbody.rows?.[tbody.rows.length - 1];
-  if (!lastRow) return false;
-
-  const editables = lastRow.querySelectorAll(EDITABLE_SELECTOR);
-  return (
-    editables.length > 0 && editables[editables.length - 1] === event.target
-  );
-}
-
 /*
  * ArrowDown pressed inside the last rendered row. The caller has already
  * checked `isKeyAlreadyHandled`, so reaching here means no cell below exists
@@ -285,18 +286,6 @@ export function isLastRowArrowDown(
   return (
     event.target instanceof Element && event.target.closest("tr") === lastRow
   );
-}
-
-/* Either key that appends a row from the end of the last rendered row. */
-export function isRowCreationKey(
-  event: TableKeyEvent,
-  tbody: HTMLTableSectionElement | null,
-) {
-  return isRowEndTab(event, tbody) || isLastRowArrowDown(event, tbody);
-}
-
-function focusFirstEditableInRow(row: Element | null) {
-  return focusElement(row?.querySelector(EDITABLE_SELECTOR));
 }
 
 /*
@@ -324,7 +313,10 @@ export function focusCellInRow(
     ? Array.from(row.cells).find((item) => item.dataset.column === columnKey)
     : null;
 
-  return focusEditable(cell) || focusFirstEditableInRow(row);
+  const editables = getEditableElements(row);
+  return focusEditable(cell) || focusElement(
+    cell === row.lastElementChild ? editables.at(-1) : editables[0],
+  );
 }
 
 /* Row id of the rendered row containing `element`, or null. */

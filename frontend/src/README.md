@@ -9,7 +9,7 @@ React + Vite single-page application. This file maps the `src/` tree; the
 src/
 ├── assets/          images (badrakh-logo.png, hero.png, react.svg, vite.svg) — unreferenced
 ├── components/      shared UI
-│   ├── Sidebar.tsx         navigation; footer: domain user, divider, status
+│   ├── Sidebar.tsx         navigation; footer: domain user and status
 │   ├── StatusIndicator.tsx
 │   ├── Toast.tsx           the one toast used by every page
 │   ├── dataTableStyles.ts  table look + proportional widths, shared by all tables
@@ -62,8 +62,9 @@ src/
 sidebar stays mounted while the route changes.
 
 `KeyboardShortcuts.tsx` provides the compact top-right keyboard icon on all
-three routes. Its non-modal popup lists the implemented shortcuts with page
-scopes, scrolls within the viewport, and closes through its trigger, Close,
+three routes. Its non-modal popup lists eight everyday table and clipboard
+shortcuts, with plus signs between combined keys and grouped arrows. It
+scrolls within the viewport and closes through its trigger, Close,
 outside pointer clicks, or Escape. Opening focuses Close; explicit dismissal
 returns focus to the trigger. Popup key presses do not reach Raw Litho's window
 shortcuts. There is no persistent right-side shortcuts panel in this shell.
@@ -77,7 +78,7 @@ intentionally circular controls and badges retain `rounded-full`.
 App
 ├── Sidebar                collapsible, NavLink-based, owns its collapsed state
 │   ├── heading            the application name, "AcQuire WEB" (config/ui.yaml appName)
-│   ├── user name          footer; user from useCurrentUser(), then a divider
+│   ├── user name          footer; user from useCachedWindowsIdentity()
 │   └── StatusIndicator    footer; polls GET /api/status every 5s (900ms timeout)
 └── main.page-content
     └── Routes
@@ -96,7 +97,7 @@ for later; to bring it back, add its route and `NavLink` again.
 
 The sidebar footer shows, left-aligned, the signed-in Windows user
 (`Bek` for a local account, `COMPANY\bek` for a domain account; truncated
-with a tooltip when long), a thin divider, then the backend status (green
+with a tooltip when long), followed by the backend status (green
 "Online", amber "Offline"). The user comes from `useCachedWindowsIdentity()`,
 which restores the last persisted Windows principal from IndexedDB before
 synchronizing through `GET /api/status?includeUser=true`. The same label remains
@@ -108,6 +109,10 @@ never shrinks, so the indicator stays pinned without overlapping the links.
 When the sidebar is collapsed only the coloured light is shown; its `title`
 still reads "Backend online" / "Backend offline". There is exactly one
 `StatusIndicator` in the app.
+
+The sidebar's only divider sits directly beneath the branding, before the
+navigation. The footer identity and connection status have no divider above
+or between them.
 
 `StrictMode` double-invokes effects in development. Data-loading hooks are
 written for it: `useDrillholes` and `useRawLithoLookups` use `AbortController`,

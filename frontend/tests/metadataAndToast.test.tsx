@@ -18,6 +18,7 @@ import {
   writeRawLithoDraft,
 } from "../src/services/IndexDB/rawLithoDraftDb";
 import { cacheVerifiedWindowsIdentity } from "../src/services/IndexDB/windowsIdentityDb";
+import { getBackendStatus } from "../src/services/Api/backendStatus";
 import { deleteValue, SESSION_STORE } from "../src/services/IndexDB/rawLithoDatabase";
 import type { RawLithoDocument } from "../src/types/domain";
 
@@ -159,7 +160,7 @@ describe("sidebar user", () => {
       </MemoryRouter>,
     );
 
-  it("shows the persisted domain user above the divider and the status", async () => {
+  it("places the only divider under branding and keeps cached identity above status", async () => {
     await cacheVerifiedWindowsIdentity("CORP\\jdoe", null);
     const { container } = renderSidebar();
     const user = await screen.findByText("CORP\\jdoe");
@@ -167,12 +168,15 @@ describe("sidebar user", () => {
     const status = await screen.findByRole("status");
 
     expect(divider).not.toBeNull();
-    expect(user.compareDocumentPosition(divider as Node)).toBe(
+    expect(container.querySelectorAll("hr")).toHaveLength(1);
+    expect(screen.getByText("AcQuire WEB").compareDocumentPosition(divider as Node)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
-    expect(divider?.compareDocumentPosition(status)).toBe(
+    expect(divider?.compareDocumentPosition(screen.getByRole("navigation"))).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
+    expect(user.parentElement).not.toHaveClass("border-t");
+    expect(user.compareDocumentPosition(status)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     await waitFor(() => expect(status).toHaveTextContent("Online"));
   });
 
@@ -180,6 +184,15 @@ describe("sidebar user", () => {
     await cacheVerifiedWindowsIdentity("Bek", null);
     renderSidebar();
     expect(await screen.findByText("Bek")).toHaveAttribute("title", "Bek");
+  });
+
+  it("keeps the cached identity visible with an offline status", async () => {
+    await cacheVerifiedWindowsIdentity("CORP\\cached", null);
+    vi.mocked(getBackendStatus).mockRejectedValueOnce(new Error("offline"));
+    renderSidebar();
+    expect(await screen.findByText("CORP\\cached")).toBeVisible();
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Offline"));
+    expect(screen.getByText("CORP\\cached")).toBeVisible();
   });
 
   it("shows a neutral label, never a guessed name, without an identity", async () => {

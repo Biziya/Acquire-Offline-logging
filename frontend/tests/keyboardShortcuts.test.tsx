@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import KeyboardShortcuts from "../src/components/KeyboardShortcuts";
@@ -32,11 +32,25 @@ describe("keyboard shortcuts popup", () => {
     await user.click(trigger);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     await user.click(trigger);
-    await user.click(screen.getByText("Table navigation · Raw Litho / Upload Data"));
+    await user.click(screen.getByText("Table editing"));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Outside" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Outside" })).toHaveFocus();
+  });
+
+  it("shows concise everyday actions with explicit combination separators", async () => {
+    const user = userEvent.setup();
+    render(<KeyboardShortcuts />);
+    await user.click(screen.getByRole("button", { name: "Keyboard shortcuts" }));
+    const popup = screen.getByRole("dialog");
+    const shiftTab = popup.querySelector('[aria-label="Shift + Tab"]')!;
+    expect(shiftTab).toHaveTextContent("Shift+Tab");
+    expect(within(shiftTab as HTMLElement).getByText("+")).toBeInTheDocument();
+    expect(popup.querySelector('[aria-label="Ctrl + Click"]')).toBeInTheDocument();
+    expect(popup.querySelector('[aria-label="↑ ↓ ← →"]')).toBeInTheDocument();
+    expect(within(popup).getAllByRole("definition")).toHaveLength(8);
+    expect(within(popup).queryByText("F5")).not.toBeInTheDocument();
   });
 
   it("keeps popup key presses away from window table shortcuts and removes listeners when closed", async () => {

@@ -115,6 +115,8 @@ function Sidebar() {
         </button>
       </div>
 
+      <hr className="mx-3.5 mt-0 mb-1 shrink-0 border-0 border-t border-[#1f2937]" />
+
       <nav
         className={`grid min-h-0 flex-1 content-start gap-0.5 overflow-y-auto px-1.5 py-1 ${
           collapsed ? "justify-items-center" : ""
@@ -151,12 +153,12 @@ function Sidebar() {
       </nav>
 
       {/*
-        Signed-in user, a thin divider, then backend status — pinned to the
+        Signed-in user and backend status — pinned to the
         bottom and aligned with the link icons. Collapsed, only the status
         light remains (the name is in its tooltip).
       */}
       <div
-        className={`shrink-0 border-t border-[#1f2937] py-2.5 ${
+        className={`shrink-0 py-2.5 ${
           collapsed ? "px-0 text-center" : "px-3.5"
         }`}
         title={collapsed ? userLabel : undefined}
@@ -171,7 +173,7 @@ function Sidebar() {
             >
               {userLabel}
             </p>
-            <hr className="my-2 border-0 border-t border-[#374151]" />
+            <div className="h-2" />
           </>
         )}
         <StatusIndicator />

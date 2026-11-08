@@ -340,6 +340,55 @@ const pageRows = (count: number) =>
   );
 
 describe("Tab navigation", () => {
+  it("wraps across the whole document in both directions, including page boundaries", async () => {
+    const user = await table(pageRows(51));
+    await user.click(cell("Litho From (m), row 1"));
+    await user.tab({ shift: true });
+    await waitFor(() => expect(cell("Hardness, row 51")).toHaveFocus());
+    expect(cell("Hardness, row 51")).toHaveAttribute("aria-expanded", "true");
+    expect(cell("Hardness, row 51")).toHaveValue("");
+    await user.tab();
+    await waitFor(() => expect(cell("Litho From (m), row 1")).toHaveFocus());
+    expect(screen.queryByLabelText("Litho From (m), row 52")).toBeNull();
+  });
+
+  it("skips read-only, disabled, and hidden cells, including the wrap destination", async () => {
+    const user = await table(pageRows(2));
+    (cell("Lithology Comments, row 1") as HTMLInputElement).readOnly = true;
+    cell("Granulo, row 1").closest("td")!.style.display = "none";
+    (cell("Hardness, row 1") as HTMLInputElement).disabled = true;
+    await user.click(cell("Redox Code, row 1"));
+    await user.tab();
+    expect(cell("Litho From (m), row 2")).toHaveFocus();
+    await user.tab({ shift: true });
+    expect(cell("Redox Code, row 1")).toHaveFocus();
+
+    cell("Hardness, row 2").closest("td")!.hidden = true;
+    (cell("Granulo, row 2") as HTMLInputElement).disabled = true;
+    await user.click(cell("Litho From (m), row 1"));
+    await user.tab({ shift: true });
+    expect(cell("Lithology Comments, row 2")).toHaveFocus();
+    await user.tab();
+    expect(cell("Litho From (m), row 1")).toHaveFocus();
+    cell("Litho From (m), row 2").closest("tr")!.hidden = true;
+    await user.tab({ shift: true });
+    expect(cell("Redox Code, row 1")).toHaveFocus();
+  });
+
+  it("allows browser focus navigation after Escape and resumes editing on re-entry", async () => {
+    const user = await table(pageRows(2));
+    await user.click(cell("Litho From (m), row 1"));
+    await user.keyboard("{Escape}");
+    await user.tab({ shift: true });
+    expect(screen.getByRole("button", { name: "Select" })).toHaveFocus();
+    await user.tab();
+    expect(cell("Litho From (m), row 1")).toHaveFocus();
+    await user.tab({ shift: true });
+    expect(cell("Hardness, row 2")).toHaveFocus();
+    await user.keyboard("{Escape}");
+    await user.tab();
+    expect(screen.getByRole("button", { name: /Add Row/ })).toHaveFocus();
+  });
   it("moves through consecutive filled cells and rows with one arrow per move", async () => {
     const user = await table(pageRows(2));
     await user.click(cell("Litho To (m), row 1"));
@@ -400,7 +449,7 @@ describe("Tab navigation", () => {
     expect(screen.queryByLabelText("Litho From (m), row 2")).toBeNull();
     expect(toast).toHaveBeenCalledWith(TOAST_NOTIFICATIONS.missingRequiredFields);
   });
-  it("moves like the arrows, wraps rows, and appends only a valid row", async () => {
+  it("moves across rows and wraps table boundaries without adding rows", async () => {
     const user = await table(pageRows(2));
     await user.click(cell("Litho From (m), row 1"));
     await user.tab();
@@ -420,16 +469,11 @@ describe("Tab navigation", () => {
 
     await user.click(cell("Hardness, row 2"));
     await user.tab();
-    await waitFor(() => expect(cell("Litho From (m), row 3")).toHaveFocus());
-
-    // The new row is incomplete, so Tab from its end is refused.
-    await user.click(cell("Hardness, row 3"));
-    await user.tab();
-    expect(screen.queryByLabelText("Litho From (m), row 4")).toBeNull();
-    expect(cell("Litho To (m), row 3")).toHaveFocus();
-    expect(toast).toHaveBeenCalledWith(
-      TOAST_NOTIFICATIONS.missingRequiredFields,
-    );
+    expect(cell("Litho From (m), row 1")).toHaveFocus();
+    await user.tab({ shift: true });
+    expect(cell("Hardness, row 2")).toHaveFocus();
+    expect(screen.queryByLabelText("Litho From (m), row 3")).toBeNull();
+    expect(toast).not.toHaveBeenCalled();
   });
 
   it("Enter confirms partial lookup matches before table navigation", async () => {
@@ -455,12 +499,13 @@ describe("Tab navigation", () => {
     );
   });
 
-  it("Tab from an explicitly confirmed last lookup cell creates the next row", async () => {
+  it("Tab preserves the confirmed last lookup value and wraps instead of adding a row", async () => {
     const user = await table();
     await user.click(cell("Hardness, row 1"));
     await user.keyboard("7{Enter}");
     await user.tab();
-    await waitFor(() => expect(cell("Litho From (m), row 2")).toHaveFocus());
+    expect(cell("Litho From (m), row 1")).toHaveFocus();
+    expect(screen.queryByLabelText("Litho From (m), row 2")).toBeNull();
     expect(cell("Hardness, row 1")).toHaveValue("7");
 
     // Shift + Tab from the first cell of the first row never creates a row.
