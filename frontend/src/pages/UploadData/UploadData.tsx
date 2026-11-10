@@ -36,6 +36,8 @@ import { useUploadDataDraft, type DraftSource } from "./useUploadDataDraft";
 import { useCurrentUser } from "../../hooks/useCurrentUser";
 import { useToast } from "../../hooks/useToast";
 import Toast from "../../components/Toast";
+import PageTitle from "../../components/PageTitle";
+import ConfirmDialog from "../RawLitho/ConfirmDialog";
 import {
   BUTTON_PRIMARY,
   BUTTON_SECONDARY,
@@ -444,19 +446,15 @@ function UploadData() {
   };
 
   return (
-    <section className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden pt-1 text-[#172033]">
+    <section className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden text-[#172033]">
       {/*
         The title stays outside the scroll area, like Raw Litho and Database
         Viewer, so the page scrollbar starts below the header row and never
         runs under the shared keyboard shortcuts button.
       */}
-      <header className="mb-3 shrink-0">
-        <h1 className="m-0 text-[clamp(1.6rem,3vw,2.1rem)] font-bold">
-          {uploadDataConfig.title}
-        </h1>
-      </header>
+      <PageTitle>{uploadDataConfig.title}</PageTitle>
 
-      <div className="min-h-0 flex-1 overflow-y-auto pb-2">
+      <div className="min-h-0 flex-1 overflow-y-auto pt-1.5 pb-2">
         {/*
           One column, or on extra-wide screens File Selection beside Dataset
           Information with the preview and summary full width below.
@@ -568,44 +566,29 @@ function UploadData() {
           />
         )}
 
+        {/*
+          Nothing is sent until Confirm Upload. Cancel is focused first, so a
+          stray Enter cannot upload; Escape cancels. handleImport closes the
+          dialog and sets its request guard synchronously, so repeated clicks
+          send one request.
+        */}
         {isConfirmOpen && workingDocument && (
-          <div
-            className="mt-4 rounded-ui border border-[#bfdbfe] bg-[#eff6ff] p-4"
-            role="alertdialog"
-            aria-labelledby="upload-confirm-title"
-            aria-describedby="upload-confirm-message"
-            onKeyDown={(event) => {
-              if (event.key === "Escape") setIsConfirmOpen(false);
-            }}
-          >
-            <h2 id="upload-confirm-title" className="m-0 mb-1 text-[1.05rem] font-bold">
-              Upload {numberFormat.format(rows.length)} records to the database?
-            </h2>
-            <p id="upload-confirm-message" className="m-0 text-[0.9rem] text-[#334155]">
-              Project {displayValue(workingDocument.project)}, drillhole{" "}
-              {displayValue(workingDocument.drillhole)}.{" "}
-              {isEdited
+          <ConfirmDialog
+            title="Confirm Database Upload"
+            message="Are you sure you want to upload this data to the database?"
+            details={`${numberFormat.format(rows.length)} records · project ${displayValue(workingDocument.project)}, drillhole ${displayValue(workingDocument.drillhole)}. ${
+              isEdited
                 ? "Your edited version will be uploaded."
-                : "The original file will be uploaded unchanged."}
-            </p>
-            <div className="mt-3 flex justify-end gap-3">
-              <button
-                className={BUTTON_SECONDARY}
-                type="button"
-                onClick={() => setIsConfirmOpen(false)}
-              >
-                Back
-              </button>
-              <button
-                className={BUTTON_PRIMARY}
-                type="button"
-                onClick={handleImport}
-                autoFocus
-              >
-                Confirm upload
-              </button>
-            </div>
-          </div>
+                : "The original file will be uploaded unchanged."
+            }`}
+            confirmLabel="Confirm Upload"
+            cancelLabel="Cancel"
+            busyLabel="Uploading…"
+            isBusy={isImporting}
+            tone="primary"
+            onConfirm={() => void handleImport()}
+            onCancel={() => setIsConfirmOpen(false)}
+          />
         )}
 
         <div className="mt-4 flex justify-between gap-3 max-[680px]:flex-col-reverse">

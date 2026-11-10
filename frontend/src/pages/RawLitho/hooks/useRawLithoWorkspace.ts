@@ -196,6 +196,23 @@ export function useRawLithoWorkspace({
     (page: number) => setCurrentPage(Math.min(Math.max(page, 1), totalPages)),
     [totalPages],
   );
+
+  /*
+   * Every table row receives these two. Stable identities let the memoized
+   * RawLithoRow skip the rows a keystroke did not change; each call still
+   * runs the latest closure (current draft key, identity and document).
+   */
+  const rowHandlers = useRef({ updateRow, commitDepthEdit });
+  rowHandlers.current = { updateRow, commitDepthEdit };
+  const stableUpdateRow = useCallback<typeof updateRow>(
+    (...args) => rowHandlers.current.updateRow(...args),
+    [],
+  );
+  const stableCommitDepthEdit = useCallback<typeof commitDepthEdit>(
+    (...args) => rowHandlers.current.commitDepthEdit(...args),
+    [],
+  );
+
   return {
     selectedHoleId,
     rawLithoDocument,
@@ -206,8 +223,8 @@ export function useRawLithoWorkspace({
     isPageEnabled,
     isRestoringSession,
     selectDrillhole,
-    updateRow,
-    commitDepthEdit,
+    updateRow: stableUpdateRow,
+    commitDepthEdit: stableCommitDepthEdit,
     sortRows,
     pasteCells,
     tryAddRow,

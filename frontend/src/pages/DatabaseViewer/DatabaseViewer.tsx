@@ -13,6 +13,7 @@ import Toast from "../../components/Toast";
 // The Raw Litho drillhole selector, reused as it is.
 import RawLithoFilters from "../RawLitho/RawLithoFilters";
 import { OUTLINE_BUTTON, OUTLINE_BUTTON_NAVY } from "../RawLitho/rawLithoStyles";
+import PageTitle from "../../components/PageTitle";
 
 const { title } = databaseViewerConfig;
 const numberFormat = new Intl.NumberFormat("en-US");
@@ -70,9 +71,7 @@ function DatabaseViewer() {
 
   return (
     <section className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden">
-      <h1 className="m-0 mb-1.5 text-[1.3rem] font-[650] tracking-[-0.01em] text-rl-navy">
-        {title}
-      </h1>
+      <PageTitle>{title}</PageTitle>
 
       <RawLithoFilters
         drillholes={drillholes}

@@ -5,7 +5,7 @@ import type {
   LookupStatuses,
   RowChange,
 } from "../../types/domain";
-import { useRef } from "react";
+import { memo, useRef } from "react";
 import LookupAutocomplete from "./LookupAutocomplete";
 import {
   COMPACT_COLUMN_KEYS,
@@ -219,4 +219,6 @@ function RawLithoRow({
   );
 }
 
-export default RawLithoRow;
+// Memoized: with stable callbacks from the workspace, a keystroke re-renders
+// only the edited row (unchanged rows keep their object identity).
+export default memo(RawLithoRow);

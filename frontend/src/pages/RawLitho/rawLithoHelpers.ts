@@ -99,11 +99,32 @@ function createStableRowId(usedIds: Set<string>) {
   return rowId;
 }
 
+function isSameRow(source: Record<string, unknown>, normalized: RawLithoRow) {
+  const keys = Object.keys(normalized) as (keyof RawLithoRow)[];
+  return (
+    Object.keys(source).length === keys.length &&
+    keys.every((key) => Object.is(source[key], normalized[key]))
+  );
+}
+
+/*
+ * Row objects this module has produced or verified as normal. Rows are never
+ * mutated in place (every edit creates a new object, which is checked again),
+ * so membership stays true. Every edit renormalizes the whole document twice;
+ * this turns that from per-field work on every row into a lookup.
+ */
+const knownNormalRows = new WeakSet<object>();
+
 export function normalizeRawLithoRows(rows: unknown): RawLithoRow[] {
   const usedIds = new Set<string>();
   const sourceRows: unknown[] = Array.isArray(rows) ? rows : [];
 
   const normalizedRows = sourceRows.filter(isObject).map((row) => {
+    if (knownNormalRows.has(row) && !usedIds.has(String(row.id))) {
+      usedIds.add(String(row.id));
+      return row as RawLithoRow;
+    }
+
     const canPreserveId = isValidRowId(row.id) && !usedIds.has(String(row.id));
     const rowId =
       canPreserveId && isValidRowId(row.id)
@@ -115,7 +136,12 @@ export function normalizeRawLithoRows(rows: unknown): RawLithoRow[] {
     const normalized = createEmptyRow(rowId);
     for (const fieldKey of ROW_FIELD_KEYS)
       normalized[fieldKey] = normalizeFieldValue(fieldKey, row[fieldKey]);
-    return normalized;
+    // An already-normal row is returned as is: keeping unchanged rows'
+    // identity is what lets the memoized table rows skip re-rendering. Same
+    // keys, same values: no data can differ from the freshly built copy.
+    const result = isSameRow(row, normalized) ? (row as RawLithoRow) : normalized;
+    knownNormalRows.add(result);
+    return result;
   });
 
   if (normalizedRows.length === 0) {

@@ -121,7 +121,7 @@ const jsonFile = (value: unknown) =>
 
 async function confirmImport(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole("button", { name: "Upload to Database" }));
-  await user.click(screen.getByRole("button", { name: "Confirm upload" }));
+  await user.click(screen.getByRole("button", { name: "Confirm Upload" }));
 }
 
 describe("Upload Data page", () => {
@@ -174,7 +174,7 @@ describe("Upload Data page", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Fix blocking errors",
     );
-    expect(screen.queryByRole("button", { name: "Confirm upload" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Confirm Upload" })).toBeNull();
     expect(importUploadData).not.toHaveBeenCalled();
   });
 
@@ -344,7 +344,7 @@ describe("Upload Data creator and importer", () => {
     });
     expect(summary("Edited By")).toBe(UPLOADER);
     await user.click(screen.getByRole("button", { name: "Upload to Database" }));
-    await user.click(screen.getByRole("button", { name: "Confirm upload" }));
+    await user.click(screen.getByRole("button", { name: "Confirm Upload" }));
     const uploaded = vi.mocked(importUploadData).mock.calls[0]?.[0] as File;
     const json = JSON.parse(await uploaded.text());
     expect(json.created_by).toBe(CREATOR);
@@ -456,7 +456,7 @@ describe("Upload Data draft persistence", () => {
     await loadAndEdit();
 
     await user.click(screen.getByRole("button", { name: "Upload to Database" }));
-    const confirm = screen.getByRole("button", { name: "Confirm upload" });
+    const confirm = screen.getByRole("button", { name: "Confirm Upload" });
     fireEvent.click(confirm);
     fireEvent.click(confirm);
     const uploading = await screen.findByRole("button", { name: "Uploading…" });
@@ -467,6 +467,38 @@ describe("Upload Data draft persistence", () => {
     pending.resolve({ message: "Data uploaded successfully." });
     expect(await screen.findByText("Data uploaded successfully.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Upload to Database" })).toBeEnabled();
+  });
+
+  it("asks for confirmation in a modal and never uploads on Cancel, Escape or Enter", async () => {
+    const user = userEvent.setup();
+    await loadAndEdit();
+    const upload = screen.getByRole("button", { name: "Upload to Database" });
+
+    await user.click(upload);
+    const dialog = screen.getByRole("alertdialog", { name: "Confirm Database Upload" });
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    expect(dialog).toHaveAccessibleDescription(
+      "Are you sure you want to upload this data to the database?",
+    );
+    // Cancel is focused first, so Enter cancels instead of uploading.
+    const cancel = within(dialog).getByRole("button", { name: "Cancel" });
+    expect(cancel).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(upload).toHaveFocus();
+
+    await user.click(upload);
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+
+    await user.click(upload);
+    await user.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+
+    expect(importUploadData).not.toHaveBeenCalled();
+    // The file and the edited preview survive every cancel.
+    expect(within(zone()).getByText("upload.json")).toBeInTheDocument();
+    expect(comment(2)).toHaveValue("kept edit");
   });
 
   it("keeps the draft when the upload fails", async () => {

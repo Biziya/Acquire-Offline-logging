@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef } from "react";
 
 interface ConfirmDialogProps {
   title: string;
@@ -9,6 +9,8 @@ interface ConfirmDialogProps {
   busyLabel?: string;
   isBusy?: boolean;
   initialFocus?: "cancel" | "confirm";
+  // "danger" (default) for destructive actions; "primary" for a safe commit.
+  tone?: "danger" | "primary";
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -25,9 +27,16 @@ const DIALOG_BUTTON = [
   "disabled:text-rl-disabled disabled:shadow-none",
 ].join(" ");
 
+const CONFIRM_TONE = {
+  danger:
+    "border-transparent bg-rl-danger text-white shadow-[0_1px_2px_rgb(180_35_24/30%)] focus-visible:outline-rl-danger enabled:hover:bg-rl-danger-dark enabled:hover:shadow-[0_2px_8px_rgb(180_35_24/32%)]",
+  primary:
+    "border-transparent bg-rl-navy text-white shadow-[0_1px_2px_rgb(16_35_61/30%)] focus-visible:outline-rl-cell-ring enabled:hover:bg-rl-navy-dark enabled:hover:shadow-[0_2px_8px_rgb(16_35_61/32%)]",
+};
+
 /*
- * Shared confirmation modal. Used by the JSON import confirmation and by the
- * Remove Last Row confirmation.
+ * Shared confirmation modal. Used by the JSON import confirmation, the
+ * Remove Last Row confirmation and the Upload Data database upload.
  *
  * `initialFocus` defaults to the cancel button: for a destructive dialog the
  * safe option should be the one Enter reaches first.
@@ -41,9 +50,11 @@ function ConfirmDialog({
   busyLabel,
   isBusy = false,
   initialFocus = "cancel",
+  tone = "danger",
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
+  const id = useId();
   const confirmButtonRef = useRef<HTMLButtonElement>(null);
   const cancelButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -90,19 +101,19 @@ function ConfirmDialog({
         className="w-[min(400px,100%)] animate-dialog-in rounded-ui border border-rl-border bg-white px-[22px] pt-5 pb-[18px] shadow-[0_1px_2px_rgb(16_35_61/10%),0_20px_48px_rgb(16_35_61/26%)]"
         role="alertdialog"
         aria-modal="true"
-        aria-labelledby="raw-litho-dialog-title"
-        aria-describedby="raw-litho-dialog-message"
+        aria-labelledby={`${id}-title`}
+        aria-describedby={`${id}-message`}
       >
         <h2
           className="m-0 mb-1.5 text-base font-[650] tracking-[-0.01em] text-rl-navy"
-          id="raw-litho-dialog-title"
+          id={`${id}-title`}
         >
           {title}
         </h2>
 
         <p
           className="m-0 text-[0.85rem] leading-normal text-rl-text-muted"
-          id="raw-litho-dialog-message"
+          id={`${id}-message`}
         >
           {message}
         </p>
@@ -126,7 +137,7 @@ function ConfirmDialog({
 
           <button
             ref={confirmButtonRef}
-            className={`${DIALOG_BUTTON} border-transparent bg-rl-danger text-white shadow-[0_1px_2px_rgb(180_35_24/30%)] focus-visible:outline-rl-danger enabled:hover:bg-rl-danger-dark enabled:hover:shadow-[0_2px_8px_rgb(180_35_24/32%)]`}
+            className={`${DIALOG_BUTTON} ${CONFIRM_TONE[tone]}`}
             type="button"
             onClick={onConfirm}
             disabled={isBusy}

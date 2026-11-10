@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import type { ImportResult } from "../../types/domain";
 import ConfirmDialog from "./ConfirmDialog";
+import PageTitle from "../../components/PageTitle";
 import RawLithoFilters from "./RawLithoFilters";
 import RawLithoTable from "./RawLithoTable";
 import Toast from "../../components/Toast";
@@ -210,9 +211,7 @@ function RawLitho() {
         />
       )}
 
-      <h1 className="m-0 mb-1 text-[1.3rem] font-[650] tracking-[-0.01em] text-rl-navy">
-        {rawLithoConfig.title}
-      </h1>
+      <PageTitle>{rawLithoConfig.title}</PageTitle>
 
       <RawLithoFilters
         drillholes={selectorList.drillholes}

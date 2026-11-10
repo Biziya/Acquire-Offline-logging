@@ -236,7 +236,8 @@ with the messages as a tooltip, and the summary shows the counts.
 
 ```text
 Upload to Database → handleImportRequest()   re-validate; blocking errors → warning toast, stop
-                   → confirmation panel      "Upload N records to the database?"  Back / Confirm upload
+                   → ConfirmDialog (modal)   "Confirm Database Upload"  Cancel (focused) / Confirm Upload
+                   (Cancel, Escape, or Enter on Cancel: no request; file and preview kept)
                    (the button reads "Uploading…" while the request runs)
 Confirm     → handleImport()
   unchanged → the original file (picked in this visit)
