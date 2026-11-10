@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef } from "react";
+import { DIALOG_TITLE } from "../../components/uiStyles";
 
 interface ConfirmDialogProps {
   title: string;
@@ -19,7 +20,7 @@ interface ConfirmDialogProps {
 // Shared by both buttons; each adds its colours. The disabled look wins over
 // either colour scheme while a confirmed action is in flight.
 const DIALOG_BUTTON = [
-  "h-[34px] cursor-pointer rounded-ui border px-4 text-[0.85rem] font-semibold",
+  "h-8 cursor-pointer rounded-ui border px-4 text-[0.8rem] font-semibold",
   "transition-[background-color,border-color,color,box-shadow,transform] duration-140",
   "focus-visible:outline-2 focus-visible:outline-offset-1",
   "enabled:active:translate-y-px enabled:active:shadow-none",
@@ -105,7 +106,7 @@ function ConfirmDialog({
         aria-describedby={`${id}-message`}
       >
         <h2
-          className="m-0 mb-1.5 text-base font-[650] tracking-[-0.01em] text-rl-navy"
+          className={`${DIALOG_TITLE} mb-1.5`}
           id={`${id}-title`}
         >
           {title}

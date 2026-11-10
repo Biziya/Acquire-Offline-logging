@@ -53,9 +53,9 @@ const CELL_STATES = {
   duplicate:
     "raw-litho-cell--duplicate bg-[#fff3e6] shadow-[inset_0_0_0_2px_#d97a1f] focus-within:bg-[#fffaf4] focus-within:shadow-[inset_0_0_0_2px_var(--color-rl-cell-ring),inset_0_0_0_4px_rgb(217_122_31/45%)]",
   rule:
-    "raw-litho-cell--rule bg-[#fdf4f3] shadow-[inset_0_0_0_2px_var(--color-rl-danger)] focus-within:bg-[#fffafa] focus-within:shadow-[inset_0_0_0_2px_var(--color-rl-cell-ring),inset_0_0_0_4px_rgb(192_57_47/32%)]",
+    "raw-litho-cell--rule bg-rl-danger-soft shadow-[inset_0_0_0_2px_var(--color-rl-danger)] focus-within:bg-[#fffafa] focus-within:shadow-[inset_0_0_0_2px_var(--color-rl-cell-ring),inset_0_0_0_4px_rgb(192_57_47/32%)]",
   missing:
-    "raw-litho-cell--missing bg-[#fdf4f3] shadow-[inset_0_0_0_2px_var(--color-rl-required-soft)] focus-within:bg-[#fffafa] focus-within:shadow-[inset_0_0_0_2px_var(--color-rl-cell-ring),inset_0_0_0_4px_rgb(192_57_47/32%)] [&_input]:placeholder:text-rl-required/75",
+    "raw-litho-cell--missing bg-rl-danger-soft shadow-[inset_0_0_0_2px_var(--color-rl-required-soft)] focus-within:bg-[#fffafa] focus-within:shadow-[inset_0_0_0_2px_var(--color-rl-cell-ring),inset_0_0_0_4px_rgb(192_57_47/32%)] [&_input]:placeholder:text-rl-required/75",
   normal:
     "focus-within:bg-white focus-within:shadow-[inset_0_0_0_2px_var(--color-rl-cell-ring)]",
 };

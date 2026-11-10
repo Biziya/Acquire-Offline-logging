@@ -50,7 +50,7 @@ import {
   OUTLINE_BUTTON,
   OUTLINE_BUTTON_DISABLED,
   OUTLINE_BUTTON_NAVY,
-} from "./rawLithoStyles";
+} from "../../components/uiStyles";
 
 interface RawLithoTableProps {
   rows: RawLithoRowRecord[];

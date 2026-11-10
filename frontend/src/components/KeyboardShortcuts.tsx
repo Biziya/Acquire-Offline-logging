@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { DIALOG_TITLE } from "./uiStyles";
 
 type Separator = "+" | "/" | "then";
 interface Shortcut {
@@ -111,7 +112,7 @@ export default function KeyboardShortcuts() {
             event.stopPropagation();
           }}>
           <div className="mb-2 flex items-center justify-between gap-3">
-            <h2 id={`${id}-title`} className="m-0 text-sm font-semibold text-rl-navy">Keyboard shortcuts</h2>
+            <h2 id={`${id}-title`} className={DIALOG_TITLE}>Keyboard shortcuts</h2>
             <button ref={closeRef} type="button" className={ICON_BUTTON} aria-label="Close keyboard shortcuts" onClick={close}>
               <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
             </button>

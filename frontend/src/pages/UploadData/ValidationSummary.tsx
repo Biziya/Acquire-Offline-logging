@@ -1,9 +1,10 @@
 import type { UploadValidation } from "./uploadDataValidation";
+import { HELPER_TEXT, SECTION_TITLE } from "../../components/uiStyles";
+import { FIELD_LABEL } from "../../components/fieldStyles";
 import {
   SECTION,
   SECTION_HEADING,
-  SECTION_TEXT,
-  SECTION_TITLE,
+  SECTION_HEADING_TEXT,
   STEP_NUMBER,
 } from "./uploadDataStyles";
 
@@ -15,8 +16,8 @@ const numberFormat = new Intl.NumberFormat("en-US");
 
 const COUNTS = [
   ["total", "Total records", "text-rl-text"],
-  ["valid", "Valid", "text-[#1e7a54]"],
-  ["warning", "Warnings", "text-[#b7791f]"],
+  ["valid", "Valid", "text-rl-success"],
+  ["warning", "Warnings", "text-rl-warning"],
   ["error", "Invalid", "text-rl-danger"],
 ] as const;
 
@@ -27,24 +28,24 @@ function ValidationSummary({ validation }: ValidationSummaryProps) {
     <section className={SECTION} aria-labelledby="validation-summary-title">
       <div className={SECTION_HEADING}>
         <span className={STEP_NUMBER}>4</span>
-        <div>
+        <div className={SECTION_HEADING_TEXT}>
           <h2 id="validation-summary-title" className={SECTION_TITLE}>
             Validation Summary
           </h2>
-          <p className={SECTION_TEXT}>
+          <p className={HELPER_TEXT}>
             Invalid records block the import. Warnings are allowed.
           </p>
         </div>
       </div>
 
-      <dl className="m-0 grid grid-cols-4 gap-3 max-[680px]:grid-cols-2">
+      <dl className="m-0 grid grid-cols-4 gap-2 max-[680px]:grid-cols-2">
         {COUNTS.map(([key, label, color]) => (
           <div
             key={key}
-            className="rounded-ui border border-[#e4e9f0] px-[15px] py-3"
+            className="rounded-ui border border-rl-grid bg-rl-navy-softer px-2.5 py-1.5"
           >
-            <dt className="text-[0.85rem] text-[#667389]">{label}</dt>
-            <dd className={`m-0 text-[1.35rem] font-bold ${color}`}>
+            <dt className={FIELD_LABEL}>{label}</dt>
+            <dd className={`m-0 text-[1.1rem] font-[650] ${color}`}>
               {validation ? numberFormat.format(validation.counts[key]) : "—"}
             </dd>
           </div>
@@ -52,14 +53,14 @@ function ValidationSummary({ validation }: ValidationSummaryProps) {
       </dl>
 
       {documentIssues.length > 0 && (
-        <ul className="mt-3.5 mb-0 grid list-none gap-1.5 p-0 text-[0.86rem]">
+        <ul className="mt-2 mb-0 grid list-none gap-1.5 p-0 text-[0.8rem]">
           {documentIssues.map((issue) => (
             <li
               key={issue.message}
               className={
                 issue.severity === "error"
-                  ? "rounded-ui border border-[#fca5a5] bg-[#fef2f2] px-3 py-2 text-[#b42318]"
-                  : "rounded-ui border border-[#f3d18b] bg-[#fffbeb] px-3 py-2 text-[#8a5a00]"
+                  ? "rounded-ui border border-rl-required-soft bg-rl-danger-soft px-2.5 py-1.5 text-rl-danger"
+                  : "rounded-ui border border-rl-warning-border bg-rl-warning-soft px-2.5 py-1.5 text-rl-warning"
               }
             >
               <strong>{issue.severity === "error" ? "Error: " : "Warning: "}</strong>

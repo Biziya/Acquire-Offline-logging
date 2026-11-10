@@ -1,20 +1,8 @@
 /*
  * Tailwind class lists used by more than one Raw Litho component. Everything
- * else is written inline where it is used.
+ * else is written inline where it is used. Buttons and other roles shared
+ * with the other pages live in components/uiStyles.ts.
  */
-
-// Outline button: Import JSON, pagination, Add Row / Remove Last Row.
-// Callers add the size and a disabled look (OUTLINE_BUTTON_DISABLED, or a
-// plain opacity for Import JSON).
-export const OUTLINE_BUTTON = [
-  "cursor-pointer rounded-ui border border-rl-border-strong bg-white font-[550]",
-  "transition-[background-color,border-color,color,box-shadow] duration-140",
-  "enabled:active:translate-y-px",
-  "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-rl-cell-ring",
-].join(" ");
-
-export const OUTLINE_BUTTON_NAVY =
-  "text-rl-navy enabled:hover:border-rl-navy enabled:hover:bg-rl-navy-soft enabled:hover:text-rl-navy-dark";
 
 // Table cell input (plain and lookup). The cell itself draws the focus ring.
 export const CELL_INPUT = [
@@ -22,6 +10,3 @@ export const CELL_INPUT = [
   "outline-none focus:font-[550] focus:text-[#0f172a]",
   "disabled:cursor-not-allowed disabled:bg-transparent disabled:text-[#93a1b5]",
 ].join(" ");
-
-export const OUTLINE_BUTTON_DISABLED =
-  "disabled:cursor-not-allowed disabled:border-rl-border disabled:bg-rl-navy-softer disabled:text-rl-disabled";

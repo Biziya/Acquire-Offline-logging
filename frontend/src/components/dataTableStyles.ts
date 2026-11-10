@@ -1,3 +1,5 @@
+import { PANEL } from "./uiStyles";
+
 /*
  * The look of every data table (Raw Litho, Upload Data, Database Viewer), so
  * the three pages cannot drift apart. Values only — no behaviour.
@@ -9,7 +11,7 @@
 // against the page, escapes every `overflow` box and makes the whole document
 // scroll — an extra scrollbar and blank space below the page.
 export const TABLE_FRAME =
-  "relative min-h-0 w-full max-w-full flex-1 overflow-auto rounded-ui border border-rl-border bg-white shadow-[0_1px_2px_rgb(16_35_61/6%)]";
+  `relative min-h-0 w-full max-w-full flex-1 overflow-auto ${PANEL}`;
 
 export const TABLE = "w-full table-fixed border-collapse bg-white";
 

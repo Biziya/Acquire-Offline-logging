@@ -1,20 +1,17 @@
-/*
- * Tailwind class lists shared by the Upload Data sections. Everything else is
- * written inline where it is used.
- */
-export const SECTION =
-  "rounded-ui border border-[#dce3ed] bg-white p-[22px] shadow-[0_2px_8px_rgb(23_32_51/5%)] max-[680px]:px-3.5 max-[680px]:py-[18px]";
-export const SECTION_HEADING = "mb-[18px] flex items-start gap-3.5";
-export const STEP_NUMBER =
-  "grid size-[30px] flex-none place-items-center rounded-full bg-[#eaf1ff] font-bold text-[#245fc5]";
-export const SECTION_TITLE = "m-0 mb-1 text-[1.1rem] font-bold";
-export const SECTION_TEXT = "m-0 text-[0.9rem] leading-[1.45] text-[#738095]";
+import { PANEL } from "../../components/uiStyles";
 
-const BUTTON =
-  "min-h-10 cursor-pointer rounded-ui border px-4 py-[9px] font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2563eb] disabled:cursor-not-allowed disabled:border-transparent disabled:bg-[#cbd5e1] disabled:text-[#64748b] disabled:opacity-80";
-export const BUTTON_SECONDARY = `${BUTTON} border-[#cbd5e1] bg-white text-[#27364d] enabled:hover:bg-[#f8fafc]`;
-export const BUTTON_PRIMARY = `${BUTTON} border-transparent bg-[#2563eb] text-white enabled:hover:bg-[#1d4ed8]`;
-// Small square "×" next to a value (Remove selected file); same focus ring and
-// disabled look as the buttons above.
+/*
+ * Tailwind class lists shared by the Upload Data sections. Titles, helper
+ * text and buttons come from components/uiStyles.ts so this page matches Raw
+ * Litho and Database Viewer; only the section frame and step badge are local.
+ */
+export const SECTION = `${PANEL} p-3`;
+export const SECTION_HEADING = "mb-2.5 flex items-start gap-2";
+export const SECTION_HEADING_TEXT = "grid gap-0.5";
+export const STEP_NUMBER =
+  "grid size-5 flex-none place-items-center rounded-full bg-rl-navy-soft text-[0.7rem] font-semibold text-rl-navy";
+
+// Small square "×" next to a value (Remove selected file): the outline button
+// look, with a danger hover because it removes the file.
 export const ICON_BUTTON =
-  "grid size-7 flex-none cursor-pointer place-items-center rounded-ui border border-[#cbd5e1] bg-white p-0 text-[1.1rem] leading-none text-[#475569] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2563eb] enabled:hover:border-[#b42318] enabled:hover:bg-[#fef3f2] enabled:hover:text-[#b42318] disabled:cursor-not-allowed disabled:opacity-50";
+  "grid size-7 flex-none cursor-pointer place-items-center rounded-ui border border-rl-border-strong bg-white p-0 text-[1.1rem] leading-none text-rl-text-muted focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-rl-cell-ring enabled:hover:border-rl-danger enabled:hover:bg-rl-danger-soft enabled:hover:text-rl-danger disabled:cursor-not-allowed disabled:opacity-55";

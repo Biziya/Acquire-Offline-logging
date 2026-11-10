@@ -39,12 +39,16 @@ import Toast from "../../components/Toast";
 import PageTitle from "../../components/PageTitle";
 import ConfirmDialog from "../RawLitho/ConfirmDialog";
 import {
-  BUTTON_PRIMARY,
-  BUTTON_SECONDARY,
+  HELPER_TEXT,
+  PRIMARY_BUTTON,
+  SECONDARY_BUTTON,
+  SECTION_TITLE,
+} from "../../components/uiStyles";
+import { FIELD, FIELD_CONTROL, FIELD_LABEL } from "../../components/fieldStyles";
+import {
   SECTION,
   SECTION_HEADING,
-  SECTION_TEXT,
-  SECTION_TITLE,
+  SECTION_HEADING_TEXT,
   STEP_NUMBER,
 } from "./uploadDataStyles";
 
@@ -56,8 +60,7 @@ interface FileInfo {
 }
 
 const numberFormat = new Intl.NumberFormat("en-US");
-const CONTROL =
-  "h-9 rounded-ui border border-[#cbd5e1] bg-white px-2.5 text-[0.9rem] focus:border-[#2563eb] focus:shadow-[0_0_0_3px_rgb(37_99_235/18%)] focus:outline-none";
+const CONTROL = `${FIELD_CONTROL} px-2.5`;
 
 function isJsonDocument(dataset: unknown): dataset is Record<string, unknown> {
   return (
@@ -446,7 +449,7 @@ function UploadData() {
   };
 
   return (
-    <section className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden text-[#172033]">
+    <section className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden text-rl-text">
       {/*
         The title stays outside the scroll area, like Raw Litho and Database
         Viewer, so the page scrollbar starts below the header row and never
@@ -461,7 +464,7 @@ function UploadData() {
           minmax(0, …) lets a wide table scroll inside its frame instead of
           widening the page.
         */}
-        <div className="grid grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] xl:[&>*:nth-child(n+3)]:col-span-2">
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-3 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] xl:[&>*:nth-child(n+3)]:col-span-2">
           <UploadFileSection
             onFileSelect={handleFileSelect}
             onFileReject={(message) => showToast({ type: "warning", message })}
@@ -475,16 +478,16 @@ function UploadData() {
           <section className={SECTION} aria-labelledby="json-preview-title">
             <div className={SECTION_HEADING}>
               <span className={STEP_NUMBER}>3</span>
-              <div>
+              <div className={SECTION_HEADING_TEXT}>
                 <h2 id="json-preview-title" className={SECTION_TITLE}>
                   Editable JSON Preview
                 </h2>
-                <p className={SECTION_TEXT}>
+                <p className={HELPER_TEXT}>
                   Review and correct records before import. Changes are kept on
                   this device until the import succeeds or you Cancel.
                 </p>
                 {draft.saveFailed && (
-                  <p className="m-0 mt-1 text-[0.8rem] text-[#b42318]" role="status">
+                  <p className="m-0 text-[0.8rem] text-rl-danger" role="status">
                     Draft not saved
                   </p>
                 )}
@@ -493,9 +496,9 @@ function UploadData() {
 
             {workingDocument ? (
               <>
-                <div className="mb-2.5 flex flex-wrap items-end gap-3">
-                  <label className="grid gap-1 text-[0.8rem] font-semibold text-[#667389]">
-                    Search
+                <div className="mb-2 flex flex-wrap items-end gap-2.5">
+                  <label className={FIELD}>
+                    <span className={FIELD_LABEL}>Search</span>
                     <input
                       className={`${CONTROL} w-[220px] max-w-full`}
                       type="search"
@@ -504,8 +507,8 @@ function UploadData() {
                       onChange={(event) => setSearchInput(event.target.value)}
                     />
                   </label>
-                  <label className="grid gap-1 text-[0.8rem] font-semibold text-[#667389]">
-                    Show
+                  <label className={FIELD}>
+                    <span className={FIELD_LABEL}>Show</span>
                     <select
                       className={CONTROL}
                       value={statusFilter}
@@ -521,13 +524,13 @@ function UploadData() {
                     </select>
                   </label>
                   <p
-                    className="m-0 ml-auto text-[0.86rem] font-semibold text-[#334155]"
+                    className={`${HELPER_TEXT} ml-auto`}
                     aria-live="polite"
                   >
                     Showing {numberFormat.format(visibleRows.length)} of{" "}
                     {numberFormat.format(rows.length)} records
                     {isEdited && (
-                      <span className="ml-2 rounded-full bg-[#eaf1ff] px-2 py-0.5 text-[0.75rem] text-[#245fc5]">
+                      <span className="ml-2 rounded-full bg-rl-navy-soft px-2 py-0.5 text-[0.7rem] font-semibold text-rl-navy">
                         Edited
                       </span>
                     )}
@@ -545,7 +548,7 @@ function UploadData() {
                 />
               </>
             ) : (
-              <p className="m-0 text-[0.9rem] text-[#738095]">
+              <p className={HELPER_TEXT}>
                 {draft.isRestoring
                   ? "Restoring saved data…"
                   : "Select a JSON file to preview its records."}
@@ -591,16 +594,16 @@ function UploadData() {
           />
         )}
 
-        <div className="mt-4 flex justify-between gap-3 max-[680px]:flex-col-reverse">
+        <div className="mt-3 flex justify-between gap-2 max-[680px]:flex-col-reverse">
           <button
-            className={`${BUTTON_SECONDARY} max-[680px]:w-full`}
+            className={`${SECONDARY_BUTTON} max-[680px]:w-full`}
             type="button"
             onClick={handleCancel}
           >
             Cancel
           </button>
           <button
-            className={`${BUTTON_PRIMARY} max-[680px]:w-full`}
+            className={`${PRIMARY_BUTTON} max-[680px]:w-full`}
             type="button"
             onClick={handleImportRequest}
             disabled={!workingDocument || isImporting || isConfirmOpen}

@@ -54,16 +54,16 @@ const CELL_STATES = {
   selected:
     "upload-cell--selected bg-[#dbeafe] shadow-[inset_0_0_0_2px_#2563eb]",
   error:
-    "upload-cell--error bg-[#fdf4f3] shadow-[inset_0_0_0_2px_var(--color-rl-required-soft)] focus-within:shadow-[inset_0_0_0_2px_var(--color-rl-cell-ring),inset_0_0_0_4px_rgb(192_57_47/32%)]",
+    "upload-cell--error bg-rl-danger-soft shadow-[inset_0_0_0_2px_var(--color-rl-required-soft)] focus-within:shadow-[inset_0_0_0_2px_var(--color-rl-cell-ring),inset_0_0_0_4px_rgb(192_57_47/32%)]",
   warning:
-    "upload-cell--warning bg-[#fff8e8] shadow-[inset_0_0_0_2px_#e8c27a] focus-within:shadow-[inset_0_0_0_2px_var(--color-rl-cell-ring),inset_0_0_0_4px_rgb(232_194_122/60%)]",
+    "upload-cell--warning bg-rl-warning-soft shadow-[inset_0_0_0_2px_var(--color-rl-warning-border)] focus-within:shadow-[inset_0_0_0_2px_var(--color-rl-cell-ring),inset_0_0_0_4px_rgb(232_194_122/60%)]",
   normal:
     "focus-within:bg-white focus-within:shadow-[inset_0_0_0_2px_var(--color-rl-cell-ring)]",
 };
 
 const STATUS_MARKS: Record<RowStatus, { glyph: string; className: string; text: string }> = {
-  valid: { glyph: "✓", className: "text-[#1e7a54]", text: "Valid" },
-  warning: { glyph: "!", className: "text-[#b7791f]", text: "Warning" },
+  valid: { glyph: "✓", className: "text-rl-success", text: "Valid" },
+  warning: { glyph: "!", className: "text-rl-warning", text: "Warning" },
   error: { glyph: "✕", className: "text-rl-danger", text: "Invalid" },
 };
 

@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
+import { HELPER_TEXT, SECONDARY_BUTTON, SECTION_TITLE } from "../../components/uiStyles";
 import {
-  BUTTON_SECONDARY,
   ICON_BUTTON,
   SECTION,
   SECTION_HEADING,
-  SECTION_TITLE,
+  SECTION_HEADING_TEXT,
   STEP_NUMBER,
 } from "./uploadDataStyles";
 
@@ -113,7 +113,7 @@ function UploadFileSection({
     <section className={SECTION} aria-labelledby="upload-file-title">
       <div className={SECTION_HEADING}>
         <span className={STEP_NUMBER}>1</span>
-        <div>
+        <div className={SECTION_HEADING_TEXT}>
           <h2 id="upload-file-title" className={SECTION_TITLE}>
             File Selection
           </h2>
@@ -121,12 +121,12 @@ function UploadFileSection({
       </div>
 
       <div
-        className={`grid justify-items-center gap-2 rounded-ui border-2 px-4 py-7 text-center transition-colors duration-140 ${
+        className={`grid justify-items-center gap-1.5 rounded-ui border-2 px-4 py-5 text-center text-[0.85rem] text-rl-text transition-colors duration-140 ${
           isDragging
-            ? "upload-drop-zone--active border-dashed border-[#2563eb] bg-[#eff6ff]"
+            ? "upload-drop-zone--active border-dashed border-rl-navy bg-rl-navy-soft"
             : isLoaded
-              ? "upload-drop-zone--loaded border-solid border-[#86efac] bg-[#f0fdf4]"
-              : "border-dashed border-[#c7d2e3] bg-[#f8fafc]"
+              ? "upload-drop-zone--loaded border-solid border-rl-border bg-rl-navy-softer"
+              : "border-dashed border-rl-border-strong bg-rl-navy-softer"
         }`}
         data-testid="upload-drop-zone"
         onDragEnter={handleDragOver}
@@ -145,16 +145,16 @@ function UploadFileSection({
           // Loaded: confirm the file. Dropping another file still replaces it.
           <>
             <span
-              className="grid size-[42px] place-items-center rounded-full bg-[#dcfce7] text-[1.4rem] font-bold text-[#15803d]"
+              className="grid size-9 place-items-center rounded-full bg-rl-success-soft text-[1.2rem] font-bold text-rl-success"
               aria-hidden="true"
             >
               ✓
             </span>
-            <strong className="text-[#166534]" role="status">
+            <strong className="font-semibold text-rl-success" role="status">
               JSON File Loaded
             </strong>
             <span className="flex max-w-full items-center gap-2">
-              <span className="min-w-0 font-semibold [overflow-wrap:anywhere] text-[#334155]">
+              <span className="min-w-0 font-semibold [overflow-wrap:anywhere] text-rl-text">
                 {selectedFileName}
               </span>
               <button
@@ -168,12 +168,12 @@ function UploadFileSection({
                 ×
               </button>
             </span>
-            <span className="text-[0.86rem] text-[#4b5563]">
+            <span className={HELPER_TEXT}>
               {recordFormat.format(recordCount)}{" "}
               {recordCount === 1 ? "record" : "records"}
             </span>
             <button
-              className={BUTTON_SECONDARY}
+              className={SECONDARY_BUTTON}
               type="button"
               onClick={openFilePicker}
             >
@@ -183,23 +183,23 @@ function UploadFileSection({
         ) : (
           <>
             <span
-              className="grid size-[42px] place-items-center rounded-full bg-[#eaf1ff] text-[1.5rem] font-bold text-[#2563eb]"
+              className="grid size-9 place-items-center rounded-full bg-rl-navy-soft text-[1.3rem] font-bold text-rl-navy"
               aria-hidden="true"
             >
               ⇧
             </span>
-            <strong>
+            <strong className="font-semibold">
               {isDragging ? "Drop the JSON file here" : "Drag and drop your JSON file"}
             </strong>
-            <span className="text-[0.86rem] text-[#738095]">or</span>
+            <span className={HELPER_TEXT}>or</span>
             <button
-              className={BUTTON_SECONDARY}
+              className={SECONDARY_BUTTON}
               type="button"
               onClick={openFilePicker}
             >
               Browse Files
             </button>
-            <span className="text-[0.86rem] text-[#738095]">
+            <span className={HELPER_TEXT}>
               Supported format: .json
             </span>
           </>

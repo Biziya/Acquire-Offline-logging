@@ -12,7 +12,7 @@ import { useToast } from "../../hooks/useToast";
 import Toast from "../../components/Toast";
 // The Raw Litho drillhole selector, reused as it is.
 import RawLithoFilters from "../RawLitho/RawLithoFilters";
-import { OUTLINE_BUTTON, OUTLINE_BUTTON_NAVY } from "../RawLitho/rawLithoStyles";
+import { OUTLINE_BUTTON, OUTLINE_BUTTON_NAVY, SECTION_TITLE, HELPER_TEXT } from "../../components/uiStyles";
 import PageTitle from "../../components/PageTitle";
 
 const { title } = databaseViewerConfig;
@@ -83,10 +83,10 @@ function DatabaseViewer() {
       />
 
       <div className="mb-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1">
-        <h2 className="m-0 text-[0.85rem] font-semibold text-rl-text">
+        <h2 className={SECTION_TITLE}>
           Database Records
         </h2>
-        <p className="m-0 text-[0.8rem] text-rl-text-muted" aria-live="polite">
+        <p className={HELPER_TEXT} aria-live="polite">
           {recordStatus}
         </p>
         {loaded && loaded.storedBy.length > 0 && (
