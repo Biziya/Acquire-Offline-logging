@@ -1,27 +1,54 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-// Keep everyday shortcuts concise; detailed behavior lives with the handlers.
-const GROUPS = [
+type Separator = "+" | "/" | "then";
+interface Shortcut {
+  keys: string[];
+  description: string;
+  separator?: Separator;
+  // Set when a shortcut works on one page only.
+  scope?: "Raw Litho" | "Upload Data";
+}
+
+// Only shortcuts the handlers implement; Database Viewer has none. Detailed
+// behavior lives with the handlers (tableNavigation.ts, useRawLithoShortcuts.ts,
+// LookupAutocomplete.tsx, RawLithoTable.tsx, UploadDataTable.tsx).
+const GROUPS: { title: string; items: Shortcut[] }[] = [
   {
-    title: "Table editing",
+    title: "Table navigation",
     items: [
-      [["Tab"], "Next cell", false],
-      [["Shift", "Tab"], "Previous cell", true],
-      [["↑", "↓", "←", "→"], "Move between cells", false],
-      [["Enter"], "Confirm / next row", false],
-      [["Esc"], "Close / exit editing", false],
+      { keys: ["Tab"], description: "Next cell" },
+      { keys: ["Shift", "Tab"], description: "Previous cell", separator: "+" },
+      { keys: ["←", "→"], description: "Previous / next cell at text edge", separator: "/" },
+      { keys: ["↑", "↓"], description: "Previous / next row", separator: "/" },
+      { keys: ["Enter"], description: "Next row", scope: "Upload Data" },
+      { keys: ["PgUp", "PgDn"], description: "Previous / next page", separator: "/", scope: "Raw Litho" },
+      { keys: ["Esc", "Tab"], description: "Leave the table", separator: "then", scope: "Raw Litho" },
     ],
   },
   {
-    title: "Selection and clipboard",
+    title: "Editing and selection",
     items: [
-      [["Ctrl", "Click"], "Select multiple cells", true],
-      [["Ctrl", "C"], "Copy", true],
-      [["Ctrl", "V"], "Paste", true],
+      { keys: ["Enter"], description: "Open list / confirm value", scope: "Raw Litho" },
+      { keys: ["F2"], description: "Browse list with ↑ ↓", scope: "Raw Litho" },
+      { keys: ["Esc"], description: "Close list, clear selection" },
+      { keys: ["Delete"], description: "Clear cell", scope: "Raw Litho" },
+      { keys: ["Ctrl", "Click"], description: "Select multiple cells", separator: "+" },
+      { keys: ["Ctrl", "C"], description: "Copy", separator: "+" },
+      { keys: ["Ctrl", "V"], description: "Paste", separator: "+" },
     ],
   },
-] satisfies { title: string; items: [string[], string, boolean][] }[];
+  {
+    title: "Rows",
+    items: [
+      { keys: ["F4"], description: "Add row", scope: "Raw Litho" },
+      { keys: ["Tab", "↓"], description: "Add row from the last cell", separator: "/", scope: "Raw Litho" },
+      { keys: ["F5"], description: "Remove last row", scope: "Raw Litho" },
+    ],
+  },
+];
+
+const SEPARATOR_LABEL: Record<Separator, string> = { "+": " + ", "/": " / ", then: " then " };
 
 const ICON_BUTTON = "grid size-7 shrink-0 cursor-pointer place-items-center rounded-ui border border-rl-border-strong bg-white text-rl-navy hover:bg-rl-navy-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rl-cell-ring";
 
@@ -89,19 +116,22 @@ export default function KeyboardShortcuts() {
               <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
             </button>
           </div>
-          <p className="m-0 mb-3 text-xs text-rl-text-muted">Raw Litho / Upload Data</p>
+          <p className="m-0 mb-3 text-xs text-rl-text-muted">Raw Litho and Upload Data tables</p>
           <div className="grid gap-3">
             {GROUPS.map(group => <section key={group.title}>
               <h3 className="m-0 mb-2 text-xs font-semibold text-rl-navy">{group.title}</h3>
               <dl className="m-0 grid gap-2 text-xs">
-                {group.items.map(([keys, description, combined]) => <div key={description} className="grid grid-cols-[8rem_minmax(0,1fr)] items-start gap-2">
-                  <dt className="flex flex-wrap items-center gap-1" aria-label={keys.join(combined ? " + " : " ")}>
+                {group.items.map(({ keys, description, separator, scope }) => <div key={`${keys.join()} ${description}`} className="grid grid-cols-[8rem_minmax(0,1fr)] items-start gap-2">
+                  <dt className="flex flex-wrap items-center gap-1" aria-label={keys.join(separator ? SEPARATOR_LABEL[separator] : " ")}>
                     {keys.map((key, index) => <span key={key} className="inline-flex items-center gap-1">
-                      {combined && index > 0 && <span aria-hidden="true" className="text-rl-text-muted">+</span>}
+                      {separator && index > 0 && <span aria-hidden="true" className="text-rl-text-muted">{separator}</span>}
                       <kbd className="rounded-ui border border-rl-border bg-rl-navy-softer px-1 py-0.5 font-sans text-xs">{key}</kbd>
                     </span>)}
                   </dt>
-                  <dd className="m-0 leading-relaxed">{description}</dd>
+                  <dd className="m-0 leading-relaxed">
+                    {description}
+                    {scope && <span className="ml-1 text-rl-text-muted">· {scope}</span>}
+                  </dd>
                 </div>)}
               </dl>
             </section>)}

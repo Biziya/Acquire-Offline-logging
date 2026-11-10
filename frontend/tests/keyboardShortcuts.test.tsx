@@ -32,25 +32,31 @@ describe("keyboard shortcuts popup", () => {
     await user.click(trigger);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     await user.click(trigger);
-    await user.click(screen.getByText("Table editing"));
+    await user.click(screen.getByText("Table navigation"));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Outside" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Outside" })).toHaveFocus();
   });
 
-  it("shows concise everyday actions with explicit combination separators", async () => {
+  it("lists the implemented shortcuts in groups with explicit separators", async () => {
     const user = userEvent.setup();
     render(<KeyboardShortcuts />);
     await user.click(screen.getByRole("button", { name: "Keyboard shortcuts" }));
     const popup = screen.getByRole("dialog");
+    expect(within(popup).getAllByRole("heading", { level: 3 }).map(h => h.textContent))
+      .toEqual(["Table navigation", "Editing and selection", "Rows"]);
     const shiftTab = popup.querySelector('[aria-label="Shift + Tab"]')!;
     expect(shiftTab).toHaveTextContent("Shift+Tab");
     expect(within(shiftTab as HTMLElement).getByText("+")).toBeInTheDocument();
-    expect(popup.querySelector('[aria-label="Ctrl + Click"]')).toBeInTheDocument();
-    expect(popup.querySelector('[aria-label="↑ ↓ ← →"]')).toBeInTheDocument();
-    expect(within(popup).getAllByRole("definition")).toHaveLength(8);
-    expect(within(popup).queryByText("F5")).not.toBeInTheDocument();
+    for (const label of ["Ctrl + Click", "Ctrl + C", "Ctrl + V", "↑ / ↓", "← / →",
+      "PgUp / PgDn", "Esc then Tab", "F2", "Delete", "F4", "F5", "Tab / ↓"]) {
+      expect(popup.querySelector(`[aria-label="${label}"]`), label).toBeInTheDocument();
+    }
+    expect(within(popup).getAllByRole("definition")).toHaveLength(17);
+    // Every row is unique: no duplicate key + description pairs.
+    const rows = [...popup.querySelectorAll("dl > div")].map(row => row.textContent);
+    expect(new Set(rows).size).toBe(rows.length);
   });
 
   it("keeps popup key presses away from window table shortcuts and removes listeners when closed", async () => {

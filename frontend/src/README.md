@@ -62,9 +62,12 @@ src/
 sidebar stays mounted while the route changes.
 
 `KeyboardShortcuts.tsx` provides the compact top-right keyboard icon on all
-three routes. Its non-modal popup lists eight everyday table and clipboard
-shortcuts, with plus signs between combined keys and grouped arrows. It
-scrolls within the viewport and closes through its trigger, Close,
+three routes. Its non-modal popup lists every implemented table shortcut in
+three groups (navigation, editing and selection, rows), marking the ones that
+work on Raw Litho or Upload Data only. Database Viewer has no shortcuts. Keep
+the list in step with the handlers. Combined keys use `+`, alternatives `/`,
+and sequences `then`. Pages keep their `h1` outside their scroll area so a page
+scrollbar never runs under the absolutely positioned icon. The popup scrolls within the viewport and closes through its trigger, Close,
 outside pointer clicks, or Escape. Opening focuses Close; explicit dismissal
 returns focus to the trigger. Popup key presses do not reach Raw Litho's window
 shortcuts. There is no persistent right-side shortcuts panel in this shell.
