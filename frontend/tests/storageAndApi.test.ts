@@ -26,6 +26,8 @@ import {
 } from "../src/pages/RawLitho/rawLithoImportService";
 import { createBlankDocument } from "../src/pages/RawLitho/rawLithoDocumentOperations";
 afterEach(() => vi.unstubAllGlobals());
+const UPLOADER = "BDOM\\jsmith";
+
 describe("IndexedDB compatibility", () => {
   it.each(["document", "snapshot", "draft", "value"])(
     "reads legacy %s wrappers from the unchanged database",
@@ -90,6 +92,7 @@ describe("external response validation", () => {
     await expect(getDrillholes()).rejects.toThrow("invalid response");
     await expect(getDrillholes()).rejects.toThrow("duplicate");
     expect(fetch).toHaveBeenCalledWith("/api/drillholes", {
+      credentials: "include",
       signal: undefined,
     });
   });
@@ -143,7 +146,7 @@ describe("external response validation", () => {
       .mockResolvedValueOnce(new Response('{"message":42}'));
     vi.stubGlobal("fetch", fetch);
     const file = new File(["{}"], "data.json", { type: "application/json" });
-    expect(await importUploadData(file)).toEqual({
+    expect(await importUploadData(file, UPLOADER)).toEqual({
       message: "Imported",
       count: 2,
     });
@@ -154,7 +157,9 @@ describe("external response validation", () => {
     const uploadedFile = body.get("file");
     if (!(uploadedFile instanceof File)) throw new Error("Expected an uploaded file.");
     expect(uploadedFile.name).toBe("data.json");
-    await expect(importUploadData(file)).rejects.toThrow(
+    // Only compared by the backend; usr comes from Windows authentication.
+    expect(body.get("expectedUser")).toBe(UPLOADER);
+    await expect(importUploadData(file, UPLOADER)).rejects.toThrow(
       "Invalid upload response",
     );
   });
@@ -183,11 +188,11 @@ describe("external response validation", () => {
         ),
     );
 
-    await expect(importUploadData(file)).rejects.toThrow(
+    await expect(importUploadData(file, UPLOADER)).rejects.toThrow(
       "Invalid lithology data. Row 3: lithoFrom must be less than lithoTo. (and other errors)",
     );
-    await expect(importUploadData(file)).rejects.toThrow("Database upload failed.");
-    await expect(importUploadData(file)).rejects.toThrow(/^Upload failed$/);
+    await expect(importUploadData(file, UPLOADER)).rejects.toThrow("Database upload failed.");
+    await expect(importUploadData(file, UPLOADER)).rejects.toThrow(/^Upload failed$/);
   });
 
   it("reports a missing Windows sign-in and a user SQL Server did not authorize", async () => {
@@ -208,10 +213,10 @@ describe("external response validation", () => {
         ),
     );
 
-    await expect(importUploadData(file)).rejects.toThrow(
+    await expect(importUploadData(file, UPLOADER)).rejects.toThrow(
       "Windows sign-in required: your account could not be verified.",
     );
-    await expect(importUploadData(file)).rejects.toThrow(
+    await expect(importUploadData(file, UPLOADER)).rejects.toThrow(
       "BDOM\\jsmith is not authorized to upload data. Contact the database administrator.",
     );
   });
@@ -228,11 +233,11 @@ describe("external response validation", () => {
     );
 
     try {
-      await expect(importUploadData(file)).rejects.toThrow("Upload timed out");
+      await expect(importUploadData(file, UPLOADER)).rejects.toThrow("Upload timed out");
       // A user Cancel is still an abort, not a timeout.
       timeout.mockRestore();
       const cancelled = Object.assign(new Error("Cancelled"), { name: "AbortError" });
-      await expect(importUploadData(file, AbortSignal.abort(cancelled))).rejects.toBe(
+      await expect(importUploadData(file, UPLOADER, AbortSignal.abort(cancelled))).rejects.toBe(
         cancelled,
       );
     } finally {

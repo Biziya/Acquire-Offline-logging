@@ -27,11 +27,22 @@ const CURRENT_USER_PATH = "/api/status?includeUser=true";
 const MAX_USER_NAME_LENGTH = 256;
 const VERIFIED_USER_TTL_MS = 60_000;
 
-let request: Promise<string | null> | null = null;
+/*
+ * userName: the display form ("BEK" for a local account, "CORP\jdoe" for a
+ * domain account). fullUsername: the account exactly as the backend
+ * authenticated it ("DESKTOP-1\BEK", "CORP\jdoe"), which is what the backend
+ * compares and stores in usr.
+ */
+export interface VerifiedWindowsIdentity {
+  userName: string;
+  fullUsername: string;
+}
+
+let request: Promise<VerifiedWindowsIdentity | null> | null = null;
 let verifiedUntil = 0;
 let isPending = false;
 
-async function requestCurrentUser(): Promise<string | null> {
+async function requestCurrentUser(): Promise<VerifiedWindowsIdentity | null> {
   // Initialize/read IndexedDB before contacting the backend. Cached data is
   // display-only and must never be returned as a verified user.
   const cached = await readCachedWindowsIdentity().catch(() => null);
@@ -50,12 +61,14 @@ async function requestCurrentUser(): Promise<string | null> {
 
     if (!userName || userName.length > MAX_USER_NAME_LENGTH) return null;
     // Cache failure must never hide a successfully authenticated identity.
-    const fullUsername = isRecord(body) && typeof body.fullUsername === "string"
-      ? body.fullUsername.trim() : userName;
-    if (fullUsername && fullUsername.length <= MAX_USER_NAME_LENGTH) {
-      await cacheVerifiedWindowsIdentity(fullUsername, cached).catch(() => undefined);
-    }
-    return userName;
+    const reportedFullUsername = isRecord(body) && typeof body.fullUsername === "string"
+      ? body.fullUsername.trim() : "";
+    const fullUsername =
+      reportedFullUsername && reportedFullUsername.length <= MAX_USER_NAME_LENGTH
+        ? reportedFullUsername
+        : userName;
+    await cacheVerifiedWindowsIdentity(fullUsername, cached).catch(() => undefined);
+    return { userName, fullUsername };
   } catch {
     return null;
   }
@@ -68,6 +81,17 @@ async function requestCurrentUser(): Promise<string | null> {
  * refresh.
  */
 export function getCurrentWindowsUser(forceRefresh = false): Promise<string | null> {
+  return getVerifiedWindowsIdentity(forceRefresh).then((identity) => identity?.userName ?? null);
+}
+
+/*
+ * The same shared lookup, with the full account name. Upload Data calls it
+ * with forceRefresh right before uploading, so a database write is never
+ * based on the IndexedDB display cache or on a stale verification.
+ */
+export function getVerifiedWindowsIdentity(
+  forceRefresh = false,
+): Promise<VerifiedWindowsIdentity | null> {
   if (!request || (!isPending && (forceRefresh || Date.now() >= verifiedUntil))) {
     isPending = true;
     const pending = requestCurrentUser();

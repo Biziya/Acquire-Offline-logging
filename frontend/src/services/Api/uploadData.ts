@@ -43,21 +43,29 @@ function getErrorMessage(body: unknown): string {
   return `${message} ${errors[0]}${errors.length > 1 ? " (and other errors)" : ""}`;
 }
 
+/*
+ * expectedUser: the account the page just verified (fullUsername). The
+ * backend only compares it with the account the request authenticates as
+ * and refuses the upload (409) when they differ; usr is always the backend's
+ * verified account, never this value.
+ */
 export async function importUploadData(
   file: File,
+  expectedUser: string,
   signal?: AbortSignal,
 ): Promise<UploadResponse> {
   let response;
   const formData = new FormData();
   formData.append("file", file, file.name);
+  formData.append("expectedUser", expectedUser);
   const timeout = AbortSignal.timeout(UPLOAD_TIMEOUT_MS);
 
   try {
     response = await fetch(buildApiUrl("/api/upload-data"), {
       method: "POST",
       body: formData,
-      // The backend requires Windows authentication and takes the uploader
-      // from it; no user name is ever sent in the body.
+      // The backend requires Windows authentication and stores the uploader
+      // from it (usr); expectedUser is only checked against it.
       credentials: "include",
       signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
     });

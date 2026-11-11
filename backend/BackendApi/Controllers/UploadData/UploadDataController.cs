@@ -46,10 +46,12 @@ public sealed class UploadDataController : ControllerBase
     [ProducesResponseType<UploadDataResponse>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<UploadDataResponse>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<UploadDataResponse>(StatusCodes.Status409Conflict)]
     [ProducesResponseType<UploadDataResponse>(StatusCodes.Status413PayloadTooLarge)]
     [ProducesResponseType<UploadDataResponse>(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<UploadDataResponse>> UploadAsync(
         IFormFile? file,
+        [FromForm] string? expectedUser,
         CancellationToken cancellationToken)
     {
         // The uploader is the Windows user Negotiate (Kerberos/NTLM) verified,
@@ -58,6 +60,24 @@ public sealed class UploadDataController : ControllerBase
         if (User.Identity is not { IsAuthenticated: true, Name: { Length: > 0 } userName })
         {
             return Challenge(NegotiateDefaults.AuthenticationScheme);
+        }
+
+        // expectedUser (optional) is the account the page verified and shows.
+        // It is only compared, never stored: when it differs from the account
+        // this request authenticated as, nothing is uploaded, so the user is
+        // never surprised by the name recorded in usr.
+        if (!string.IsNullOrWhiteSpace(expectedUser)
+            && !string.Equals(expectedUser.Trim(), userName, StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogWarning(
+                "Upload refused: the page showed {ExpectedUser} but the request authenticated as {WindowsUser}.",
+                expectedUser.Trim(),
+                userName);
+
+            return Failure(
+                StatusCodes.Status409Conflict,
+                $"You are signed in as {userName}, but this page shows {expectedUser.Trim()}. " +
+                "Reload the page and upload again.");
         }
 
         if (userName.Length > UploadDataRepository.UserSize)

@@ -12,6 +12,7 @@ import DatasetSummary from "./DatasetSummary";
 import ValidationSummary from "./ValidationSummary";
 import UploadDataTable from "./UploadDataTable";
 import { importUploadData } from "../../services/Api/uploadData";
+import { getVerifiedWindowsIdentity } from "../../services/currentUser";
 import { getRawLithoLookup } from "../../services/Api/rawLithoApi";
 import {
   RAW_LITHO_ALL_LOOKUPS,
@@ -418,7 +419,22 @@ function UploadData() {
     setIsImporting(true);
 
     try {
-      const response = await importUploadData(file, controller.signal);
+      // Verify the Windows user now, against the backend. The sidebar's
+      // cached (IndexedDB) identity is display-only and never authorizes an
+      // upload; without a verified user nothing is sent, so usr can never be
+      // written for the wrong person.
+      const uploader = await getVerifiedWindowsIdentity(true);
+      if (requestControllerRef.current !== controller || controller.signal.aborted) return;
+      if (!uploader) {
+        showToast({
+          type: "error",
+          message:
+            "Windows sign-in could not be verified (server unavailable or not signed in). Nothing was uploaded.",
+        });
+        return;
+      }
+
+      const response = await importUploadData(file, uploader.fullUsername, controller.signal);
       if (requestControllerRef.current === controller) {
         // Confirmed by the backend. The data stays on screen (and in the
         // draft) for checking or a corrected re-upload; Cancel clears it.

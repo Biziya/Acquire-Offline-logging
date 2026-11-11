@@ -140,6 +140,11 @@ when nothing was stored. The importer is recorded by the backend instead: the
 upload requires Windows sign-in, and the verified user (not anything in the
 file) is sent to the procedure as `@usr`, which SQL Server checks against the
 uploaders' AD group (backend README, *Uploader identity and authorization*).
+Right before each upload the page verifies the Windows user again
+(`getVerifiedWindowsIdentity(true)`); without one nothing is sent and an
+error toast says so, and the preview and draft stay. The verified
+`DOMAIN\user` goes along as `expectedUser`, which the backend only compares
+(409 when the request authenticated as someone else).
 Unknown fields such as `created_by` are ignored by the server, so they never
 break an upload.
 
@@ -151,6 +156,8 @@ break an upload.
 | 400 | the validation message and the first row error |
 | 401 | "Windows sign-in required: your account could not be verified." |
 | 403 | "`<user>` is not authorized to upload data. Contact the database administrator." |
+| 409 | "You are signed in as `<user>`, but this page shows `<other>`. Reload the page and upload again." |
+| (no request) | "Windows sign-in could not be verified (server unavailable or not signed in). Nothing was uploaded." |
 | 500 | "Database upload failed." (or the permissions message) — never database details |
 
 ## Scrolling

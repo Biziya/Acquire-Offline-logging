@@ -240,6 +240,38 @@ public sealed class UploadDataApiTests : IClassFixture<ApiFactory>
         Assert.Equal(@"BDOM\adoe", Assert.Single(repository.Calls).UserName);
     }
 
+    [Theory]
+    [InlineData(@"BDOM\jsmith")]
+    [InlineData(@" bdom\JSMITH ")]
+    public async Task UploadsWhenThePagesUserMatchesTheVerifiedUser(string expectedUser)
+    {
+        var repository = new FakeUploadDataRepository();
+        var content = FileContent(TestDocuments.Valid().ToJsonString());
+        content.Add(new StringContent(expectedUser), "expectedUser");
+
+        var response = await CreateClient(repository).PostAsync(Route, content);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        // usr is always the verified account, never the form value.
+        Assert.Equal(@"BDOM\jsmith", Assert.Single(repository.Calls).UserName);
+    }
+
+    [Fact]
+    public async Task RefusesTheUploadWhenThePagesUserDiffers()
+    {
+        var repository = new FakeUploadDataRepository();
+        var content = FileContent(TestDocuments.Valid().ToJsonString());
+        content.Add(new StringContent(@"BDOM\adoe"), "expectedUser");
+
+        var response = await CreateClient(repository).PostAsync(Route, content);
+
+        await AssertFailure(
+            response,
+            HttpStatusCode.Conflict,
+            @"You are signed in as BDOM\jsmith, but this page shows BDOM\adoe. Reload the page and upload again.");
+        Assert.Empty(repository.Calls);
+    }
+
     [Fact]
     public async Task ReportsAUserSqlServerDoesNotAuthorizeAs403()
     {

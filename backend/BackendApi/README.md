@@ -516,16 +516,27 @@ procedure: is BDOM\jsmith in the uploaders' AD group?  no → THROW 51001 (nothi
   user is not a member. The API rolls back and answers `403`
   "`<user>` is not authorized to upload data. Contact the database
   administrator." Other SQL errors stay `500` without details.
-- The SQL connection stays `userAcquire`: no impersonation, no delegation.
-  SQL Server therefore trusts the API to pass the verified name; keep the
-  `userAcquire` password out of Git (see *Production password*).
+- The SQL connection stays `userAcquire` unless `Database:ImpersonateWindowsUser`
+  is on. SQL Server therefore trusts the API to pass the verified name; keep
+  the `userAcquire` password out of Git (see *Production password*).
+- The page re-verifies the Windows user (`/api/status?includeUser=true`)
+  right before every upload and sends it as the optional form field
+  `expectedUser`. It is only compared: if it differs from the account the
+  upload request authenticated as, the API answers `409` "You are signed in
+  as … but this page shows …" and the database is not called. Without a
+  verified user the page sends nothing. The IndexedDB identity in the
+  sidebar is display-only and never authorizes an upload.
 
-**Database side (not applied by this repository):**
-`Sql/UploadDataUserAuthorization.sql` holds the read-only checks, the
-procedure change (stop `SELECT @usr = SUSER_NAME();`, add the group check),
-the `xp_logininfo` grant and development-only tests. Until a DBA applies it,
-the procedure still replaces `@usr` with `SUSER_NAME()` (`usr` =
-`userAcquire`) and authorizes everyone the API lets through.
+**Why `usr` is `userAcquire` today, and the fix (not applied by this repository):**
+the API sends the right `@usr`, but the procedure's 'Raw core import_JSON'
+branch overwrites it with `SUSER_NAME()`, the SQL login `userAcquire`.
+- `Sql/UploadDataUsrFix.sql`: the minimal one-line procedure change (keep
+  `@usr`, fall back to `SUSER_SNAME()` only when it is empty), with checks and
+  rollback tests. This alone makes `usr` = `DOMAIN\user`.
+- `Sql/UploadDataUserAuthorization.sql`: the same change plus the uploaders'
+  AD group check (error 51001), if only that group may upload.
+- No procedure change: turn on `Database:ImpersonateWindowsUser` (see
+  *Running as the Windows user*), so `SUSER_NAME()` is the user itself.
 
 **Careful with `usr` in the match key:** once `usr` is the real user,
 re-uploading a drillhole stored under `userAcquire` adds rows instead of

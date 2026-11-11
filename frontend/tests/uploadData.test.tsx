@@ -5,7 +5,7 @@ import UploadData from "../src/pages/UploadData/UploadData";
 import { stubDesktopViewport } from "./viewport";
 import { deferred } from "./deferred";
 import { importUploadData } from "../src/services/Api/uploadData";
-import { getCurrentWindowsUser } from "../src/services/currentUser";
+import { getCurrentWindowsUser, getVerifiedWindowsIdentity } from "../src/services/currentUser";
 import { applyCellEdits } from "../src/pages/UploadData/uploadDataDocument";
 import {
   validateUploadDocument,
@@ -26,6 +26,8 @@ vi.mock("../src/services/Api/rawLithoApi", () => ({
 // No trusted identity by default, as in the real application today.
 vi.mock("../src/services/currentUser", () => ({
   getCurrentWindowsUser: vi.fn(async () => null),
+  // The backend verifies this account right before each upload.
+  getVerifiedWindowsIdentity: vi.fn(async () => ({ userName: "BDOM\\jsmith", fullUsername: "BDOM\\jsmith" })),
 }));
 
 function row(id: number, from: number, to: number) {
@@ -135,7 +137,7 @@ describe("Upload Data page", () => {
 
     expect(screen.getByText("Showing 2 of 2 records")).toBeInTheDocument();
     await confirmImport(user);
-    expect(importUploadData).toHaveBeenCalledWith(file, expect.any(AbortSignal));
+    expect(importUploadData).toHaveBeenCalledWith(file, "BDOM\\jsmith", expect.any(AbortSignal));
     expect(await screen.findByText("Upload confirmed")).toBeInTheDocument();
   });
 
@@ -377,7 +379,7 @@ describe("Remove selected file", () => {
     // The same file can be chosen again and uploaded normally.
     await loadFile(file);
     await confirmImport(user);
-    expect(importUploadData).toHaveBeenCalledWith(file, expect.any(AbortSignal));
+    expect(importUploadData).toHaveBeenCalledWith(file, "BDOM\\jsmith", expect.any(AbortSignal));
   });
 
   it("cannot remove the file while an upload is running", async () => {
@@ -499,6 +501,25 @@ describe("Upload Data draft persistence", () => {
     // The file and the edited preview survive every cancel.
     expect(within(zone()).getByText("upload.json")).toBeInTheDocument();
     expect(comment(2)).toHaveValue("kept edit");
+  });
+
+  it("re-verifies the Windows user and sends nothing without one", async () => {
+    vi.mocked(getVerifiedWindowsIdentity).mockClear();
+    vi.mocked(getVerifiedWindowsIdentity).mockResolvedValueOnce(null);
+    const user = userEvent.setup();
+    await loadAndEdit();
+
+    await confirmImport(user);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Windows sign-in could not be verified",
+    );
+    // Verified against the backend now, not taken from the display cache.
+    expect(getVerifiedWindowsIdentity).toHaveBeenCalledWith(true);
+    expect(importUploadData).not.toHaveBeenCalled();
+    expect(comment(2)).toHaveValue("kept edit");
+    // Once the user is verified again, the same preview uploads.
+    await confirmImport(user);
+    await waitFor(() => expect(importUploadData).toHaveBeenCalledTimes(1));
   });
 
   it("keeps the draft when the upload fails", async () => {
