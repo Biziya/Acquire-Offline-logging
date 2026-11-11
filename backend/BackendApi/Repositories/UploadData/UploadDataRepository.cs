@@ -7,7 +7,10 @@ namespace BackendApi.Repositories.UploadData;
 
 public sealed class UploadDataRepository : IUploadDataRepository
 {
-    private const string StoredProcedureName = "dbo.InsertUpdateCoreDescr_WellCAD";
+    // Same logic and parameters as dbo.InsertUpdateCoreDescr_WellCAD
+    // ('Raw core import_JSON'), but it stores @usr instead of SUSER_NAME().
+    // Created by Sql/insertAcQuireOfflineBek.sql.
+    private const string StoredProcedureName = "dbo.insertAcQuireOfflineBek";
     private const string ActionName = "Raw core import_JSON";
 
     // Sizes of the procedure's parameters: @Hole varchar(20), @usr and
@@ -70,10 +73,7 @@ public sealed class UploadDataRepository : IUploadDataRepository
             {
                 command.Parameters.Add("@Action", SqlDbType.VarChar, 50).Value = ActionName;
                 command.Parameters.Add("@Hole", SqlDbType.VarChar, HoleSize).Value = request.Drillhole;
-                // The verified Windows user. The procedure checks it against the
-                // uploaders' AD group and stores it in usr once
-                // Sql/UploadDataUserAuthorization.sql is applied; before that
-                // it is replaced by SUSER_NAME() (the SQL login).
+                // The verified Windows user (BDOM\<user>); stored in usr.
                 command.Parameters.Add("@usr", SqlDbType.VarChar, UserSize).Value = request.UserName;
                 command.Parameters.Add("@fileName", SqlDbType.VarChar, FileNameSize).Value = request.FileName;
                 command.Parameters.Add("@str_json", SqlDbType.NVarChar, -1).Value = request.Json;
