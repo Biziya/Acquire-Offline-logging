@@ -532,7 +532,10 @@ the API sends the right `@usr`, but the procedure's 'Raw core import_JSON'
 branch overwrites it with `SUSER_NAME()`, the SQL login `userAcquire`.
 - `Sql/UploadDataUsrFix.sql`: the minimal one-line procedure change (keep
   `@usr`, fall back to `SUSER_SNAME()` only when it is empty), with checks and
-  rollback tests. This alone makes `usr` = `DOMAIN\user`.
+  rollback tests. This alone makes `usr` the `DOMAIN\user` of whoever uploads.
+  `Sql/UploadDataUsrFix.Apply.sql` applies that change in SSMS: preview with
+  `@Apply = 0`, then `@Apply = 1`; it changes nothing unless exactly one
+  line overwrites `@usr`.
 - `Sql/UploadDataUserAuthorization.sql`: the same change plus the uploaders'
   AD group check (error 51001), if only that group may upload.
 - No procedure change: turn on `Database:ImpersonateWindowsUser` (see

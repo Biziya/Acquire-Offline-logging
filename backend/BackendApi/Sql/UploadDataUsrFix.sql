@@ -77,6 +77,10 @@ GO
 -- PART B — CHANGE (commented out; apply in DEVELOPMENT first)
 -------------------------------------------------------------------------------
 /*
+ Easiest: run UploadDataUsrFix.Apply.sql (preview with @Apply = 0, then
+ @Apply = 1). It makes exactly the change below and stops without changing
+ anything if the procedure does not look as expected. By hand instead:
+
  In SSMS: Object Explorer → ACQMN01 → Programmability → Stored Procedures →
  dbo.InsertUpdateCoreDescr_WellCAD → Modify. In the 'Raw core import_JSON'
  branch, replace the line A1 found, e.g.
