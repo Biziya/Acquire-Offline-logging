@@ -44,7 +44,7 @@ WHERE o.name = N'InsertUpdateCoreDescr_WellCAD';
 
 -- D2. Fix applied?  FixApplied = 1 and a recent modify_date (D1) expected.
 SELECT CASE WHEN OBJECT_DEFINITION(OBJECT_ID(N'dbo.InsertUpdateCoreDescr_WellCAD'))
-                 LIKE N'%COALESCE(NULLIF(LTRIM(RTRIM(@usr))%'
+                 LIKE N'%NULLIF(LTRIM(RTRIM(@usr))%'
             THEN 1 ELSE 0 END AS FixApplied,
        CASE WHEN OBJECT_DEFINITION(OBJECT_ID(N'dbo.InsertUpdateCoreDescr_WellCAD')) IS NULL
             THEN N'Definition not visible: not a procedure here, or no VIEW DEFINITION permission'
@@ -119,6 +119,25 @@ EXEC dbo.InsertUpdateCoreDescr_WellCAD
      @fileName = 'usr-diagnose.json',
      @str_json = N'{"project":"ZOOVCH","drillhole":"USR_DIAG_TEST","rows":[{"lithoFrom":5,"lithoTo":10,"lithoCode":"0--","colorCode":"10G4/2","redoxCode":"0042_MN1","ca":"","om":"","ox":"","sedim":"","granulo":"","hardness":"","lithologyComments":"usr diagnose"}]}';
 SELECT DISTINCT usr AS StoredUsr, FileName AS StoredFileName, SUSER_SNAME() AS YourLogin
+FROM [MyApps].[CoreDescrData]
+WHERE HOLEID = 'USR_DIAG_TEST';
+ROLLBACK;
+GO
+
+-- D6b. The same call AS THE WEBSITE (login userAcquire). Needs IMPERSONATE on
+--      that login (sysadmin has it). ROLLED BACK.
+--      After the fix: StoredUsr 'BDOM\diagnose-test'. Before: 'userAcquire'.
+--      (D6 from your own SSMS login still stores your login: that is intended.)
+BEGIN TRAN;
+EXECUTE AS LOGIN = 'userAcquire';
+EXEC dbo.InsertUpdateCoreDescr_WellCAD
+     @Action   = 'Raw core import_JSON',
+     @Hole     = 'USR_DIAG_TEST',
+     @usr      = 'BDOM\diagnose-test',
+     @fileName = 'usr-diagnose.json',
+     @str_json = N'{"project":"ZOOVCH","drillhole":"USR_DIAG_TEST","rows":[{"lithoFrom":5,"lithoTo":10,"lithoCode":"0--","colorCode":"10G4/2","redoxCode":"0042_MN1","ca":"","om":"","ox":"","sedim":"","granulo":"","hardness":"","lithologyComments":"usr diagnose"}]}';
+REVERT;
+SELECT DISTINCT usr AS StoredUsr, SUSER_SNAME() AS YourLogin
 FROM [MyApps].[CoreDescrData]
 WHERE HOLEID = 'USR_DIAG_TEST';
 ROLLBACK;

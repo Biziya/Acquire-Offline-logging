@@ -83,15 +83,17 @@ GO
 
  In SSMS: Object Explorer → ACQMN01 → Programmability → Stored Procedures →
  dbo.InsertUpdateCoreDescr_WellCAD → Modify. In the 'Raw core import_JSON'
- branch, replace the line A1 found, e.g.
+ branch, replace the line
 
-     SELECT @usr = SUSER_NAME();
+     select @usr=suser_name()
 
  with:
 
-     -- The uploader, verified by the API (Windows authentication). Only a
-     -- call without @usr (e.g. from SSMS) records the caller's own login.
-     SET @usr = COALESCE(NULLIF(LTRIM(RTRIM(@usr)), ''), SUSER_SNAME());
+     -- Website (login userAcquire) keeps the uploader verified by Windows
+     -- authentication; every other caller records its own login, as before.
+     IF SUSER_SNAME() COLLATE Latin1_General_CI_AS <> N'userAcquire'
+        OR NULLIF(LTRIM(RTRIM(@usr)), '') IS NULL
+         SET @usr = SUSER_NAME();
 
  then Execute (ALTER PROCEDURE). If the procedure is signed with a
  certificate (UploadDataPermissions.sql, option B1), ALTER drops the
