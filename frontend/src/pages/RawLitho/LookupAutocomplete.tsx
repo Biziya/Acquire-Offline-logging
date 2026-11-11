@@ -1,5 +1,5 @@
 import type { LookupDefinition, LookupRecord } from "../../types/domain";
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   handleCellNavigation,
@@ -7,6 +7,14 @@ import {
   markKeyAsHandled,
 } from "./tableNavigation";
 import { CELL_INPUT } from "./rawLithoStyles";
+import {
+  DROPDOWN_MUTED,
+  DROPDOWN_OPTION_ACTIVE,
+  DROPDOWN_OPTION_HOVER,
+  TABLE_DROPDOWN_MENU,
+  TABLE_DROPDOWN_OPTION,
+} from "../../components/dropdownStyles";
+import { useAnchoredMenuStyle } from "../../components/useAnchoredMenuStyle";
 
 interface LookupAutocompleteProps {
   rowIndex: number;
@@ -27,9 +35,8 @@ interface LookupAutocompleteProps {
 const MATCH_LIMIT = 5;
 const LOOKUP_OPEN_EVENT = "raw-litho-lookup-open";
 
-const MENU_ITEM =
-  "overflow-hidden rounded px-[9px] py-[7px] text-ellipsis whitespace-nowrap";
-const MENU_STATUS = "text-[0.8rem] text-rl-text-muted";
+const MENU_ITEM = TABLE_DROPDOWN_OPTION;
+const MENU_STATUS = `text-[0.8rem] ${DROPDOWN_MUTED}`;
 const CELL_ERROR =
   "absolute top-[calc(100%+2px)] left-1 z-10 rounded-[3px] bg-[#fdf0ef] px-[5px] py-0.5 text-[0.7rem] whitespace-nowrap text-rl-danger";
 
@@ -76,7 +83,6 @@ function LookupAutocomplete({
   const [isOpen, setIsOpen] = useState(false);
   const [showAllOptions, setShowAllOptions] = useState(false);
   const [showInvalidSelection, setShowInvalidSelection] = useState(false);
-  const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
 
   const options = useMemo(() => {
     const seen = new Set();
@@ -153,29 +159,8 @@ function LookupAutocomplete({
       );
   }, [instanceId]);
 
-  useLayoutEffect(() => {
-    if (!showSuggestions) return undefined;
-
-    function positionMenu() {
-      const rect = inputRef.current?.getBoundingClientRect();
-      if (!rect) return;
-
-      setMenuStyle({
-        top: rect.bottom + 2,
-        left: rect.left,
-        width: Math.max(rect.width, 150),
-      });
-    }
-
-    positionMenu();
-    window.addEventListener("resize", positionMenu);
-    window.addEventListener("scroll", positionMenu, true);
-
-    return () => {
-      window.removeEventListener("resize", positionMenu);
-      window.removeEventListener("scroll", positionMenu, true);
-    };
-  }, [showSuggestions]);
+  const getAnchor = useCallback(() => inputRef.current, []);
+  const menuStyle = useAnchoredMenuStyle(showSuggestions, getAnchor);
 
   function openDropdown() {
     window.dispatchEvent(
@@ -304,7 +289,7 @@ function LookupAutocomplete({
     ? createPortal(
         <ul
           id={suggestionListId}
-          className="fixed z-[1000] m-0 max-h-[220px] max-w-[320px] min-w-[150px] list-none overflow-y-auto rounded-ui border border-rl-border bg-white p-1 text-left shadow-[0_10px_24px_rgb(16_35_61/16%)]"
+          className={TABLE_DROPDOWN_MENU}
           role="listbox"
           style={menuStyle}
         >
@@ -317,9 +302,12 @@ function LookupAutocomplete({
           {suggestions.map((suggestion, index) => (
             <li
               id={`${suggestionListId}-option-${index}`}
-              className={`${MENU_ITEM} cursor-pointer hover:bg-rl-navy-soft ${suggestion.code === "" ? "text-rl-text-muted" : "hover:text-rl-navy-dark"}${
+              className={`${MENU_ITEM} cursor-pointer ${
+                // The faded "Empty" option keeps its grey text when highlighted.
+                suggestion.code === "" ? `hover:bg-rl-navy-soft ${DROPDOWN_MUTED}` : DROPDOWN_OPTION_HOVER
+              }${
                 index === highlightedIndex
-                  ? ` raw-litho-lookup-suggestion--active bg-rl-navy-soft${suggestion.code === "" ? "" : " text-rl-navy-dark"}`
+                  ? ` raw-litho-lookup-suggestion--active ${suggestion.code === "" ? "bg-rl-navy-soft" : DROPDOWN_OPTION_ACTIVE}`
                   : ""
               }`}
               key={suggestion.code}
@@ -336,7 +324,7 @@ function LookupAutocomplete({
 
           {!isLoading && suggestions.length === 1 && Boolean(query.trim()) && !showAllOptions && (
             <li
-              className={`${MENU_ITEM} text-rl-text-muted`}
+              className={`${MENU_ITEM} ${DROPDOWN_MUTED}`}
               role="option"
               aria-disabled="true"
               aria-selected="false"

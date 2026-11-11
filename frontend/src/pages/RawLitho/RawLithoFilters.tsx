@@ -6,6 +6,12 @@ import {
   FIELD_LABEL,
   READONLY_VALUE,
 } from "../../components/fieldStyles";
+import {
+  DROPDOWN_MENU,
+  DROPDOWN_MUTED,
+  DROPDOWN_OPTION_ACTIVE,
+  DROPDOWN_OPTION_HOVER,
+} from "../../components/dropdownStyles";
 
 interface RawLithoFiltersProps {
   drillholes: Drillhole[];
@@ -254,7 +260,7 @@ function RawLithoFilters({
           {showSuggestionList && (
             <ul
               id={SUGGESTION_LIST_ID}
-              className="absolute inset-x-0 top-[calc(100%+4px)] z-20 m-0 max-h-[260px] list-none overflow-y-auto rounded-ui border border-rl-border bg-white p-1 shadow-[0_10px_24px_rgb(16_35_61/16%)]"
+              className={`${DROPDOWN_MENU} absolute inset-x-0 top-[calc(100%+4px)] z-20 max-h-[260px]`}
               role="listbox"
             >
               {suggestions.length > 0 ? (
@@ -275,9 +281,9 @@ function RawLithoFilters({
                   )}
                   <li
                     id={`drillhole-option-${index}`}
-                    className={`cursor-pointer rounded px-2.5 py-2 transition-colors duration-140 hover:bg-rl-navy-soft hover:text-rl-navy-dark${
+                    className={`cursor-pointer rounded px-2.5 py-2 transition-colors duration-140 ${DROPDOWN_OPTION_HOVER}${
                       index === activeSuggestionIndex
-                        ? " raw-litho-suggestion--active bg-rl-navy-soft text-rl-navy-dark"
+                        ? ` raw-litho-suggestion--active ${DROPDOWN_OPTION_ACTIVE}`
                         : ""
                     }`}
                     role="option"
@@ -293,7 +299,7 @@ function RawLithoFilters({
                 ))
               ) : (
                 <li
-                  className="rounded px-2.5 py-2 text-rl-text-muted"
+                  className={`rounded px-2.5 py-2 ${DROPDOWN_MUTED}`}
                   role="option"
                   aria-disabled="true"
                   aria-selected="false"

@@ -95,6 +95,13 @@
     min-height: 100%;
   }
 
+  /* The app is light only. Without this, native popups the browser draws
+     itself (the <select> option list, scrollbars) follow a dark OS theme and
+     open black over the white pages. */
+  :root {
+    color-scheme: light;
+  }
+
   body {
     min-height: 100vh;
     color: #1f2937;

@@ -1,5 +1,6 @@
 import type { RowField } from "../../types/domain";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { isRecord } from "../../types/validation";
 import { canLeaveCell } from "../RawLitho/tableNavigation";
@@ -15,6 +16,13 @@ import {
   bodyRowClass,
   toPercentWidths,
 } from "../../components/dataTableStyles";
+import {
+  DROPDOWN_OPTION_ACTIVE,
+  DROPDOWN_OPTION_HOVER,
+  TABLE_DROPDOWN_MENU,
+  TABLE_DROPDOWN_OPTION,
+} from "../../components/dropdownStyles";
+import { useAnchoredMenuStyle } from "../../components/useAnchoredMenuStyle";
 
 interface UploadDataTableProps {
   rows: readonly unknown[];
@@ -67,6 +75,30 @@ const STATUS_MARKS: Record<RowStatus, { glyph: string; className: string; text: 
   error: { glyph: "✕", className: "text-rl-danger", text: "Invalid" },
 };
 
+const LOOKUP_MENU_ID = "upload-data-lookup-menu";
+
+// The cell whose lookup menu is open, by record and field so a filter change
+// cannot move the menu to another cell.
+interface OpenMenu {
+  rowIndex: number;
+  field: RowField;
+}
+
+function normalize(text: string) {
+  return text.trim().toLocaleLowerCase();
+}
+
+/*
+ * The options the lookup menu lists for a cell: all of them while the cell is
+ * empty or holds an exact code, otherwise the codes containing the typed text
+ * (what the browser's <datalist> suggested before).
+ */
+function matchingOptions(options: readonly string[], text: string) {
+  const query = normalize(text);
+  if (!query || options.some((option) => normalize(option) === query)) return options;
+  return options.filter((option) => normalize(option).includes(query));
+}
+
 function selectionKey(rowIndex: number, field: RowField) {
   return `${rowIndex}:${field}`;
 }
@@ -99,6 +131,20 @@ function UploadDataTable({
   const pendingFocus = useRef<CellPosition | null>(null);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [notice, setNotice] = useState("");
+  const [openMenu, setOpenMenu] = useState<OpenMenu | null>(null);
+
+  const getMenuAnchor = useCallback(
+    () =>
+      openMenu
+        ? scrollRef.current?.querySelector<HTMLElement>(
+            `input[data-row-index="${openMenu.rowIndex}"][data-field="${openMenu.field}"]`,
+          ) ?? null
+        : null,
+    [openMenu],
+  );
+  // Closes when the row scrolls out of the virtualised window.
+  const closeMenu = useCallback(() => setOpenMenu(null), []);
+  const menuStyle = useAnchoredMenuStyle(Boolean(openMenu), getMenuAnchor, closeMenu);
 
   const virtualizer = useVirtualizer({
     count: visibleRows.length,
@@ -152,6 +198,7 @@ function UploadDataTable({
   function handleKeyDown(event: React.KeyboardEvent<HTMLTableSectionElement>) {
     if (event.key === "Escape") {
       setSelected(new Set());
+      setOpenMenu(null);
       return;
     }
     if (event.altKey || event.ctrlKey || event.metaKey) return;
@@ -322,6 +369,45 @@ function UploadDataTable({
     );
   }
 
+  // Raw Litho's lookup menu look, portalled so the table frame never clips it.
+  function renderLookupMenu({ rowIndex, field }: OpenMenu) {
+    const value = cellText(rows[rowIndex], field);
+    const options = matchingOptions(lookupOptions[field] ?? [], value);
+    if (options.length === 0) return null;
+
+    return createPortal(
+      <ul
+        id={LOOKUP_MENU_ID}
+        className={TABLE_DROPDOWN_MENU}
+        role="listbox"
+        style={menuStyle}
+      >
+        {options.map((option) => {
+          const isCurrent = normalize(option) === normalize(value);
+          return (
+            <li
+              key={option}
+              className={`${TABLE_DROPDOWN_OPTION} cursor-pointer ${DROPDOWN_OPTION_HOVER}${
+                isCurrent ? ` ${DROPDOWN_OPTION_ACTIVE}` : ""
+              }`}
+              role="option"
+              aria-selected={isCurrent}
+              onMouseDown={(event) => {
+                // Keep focus in the cell, as Raw Litho does.
+                event.preventDefault();
+                setOpenMenu(null);
+                if (option !== value) onEdit([{ rowIndex, field, text: option }]);
+              }}
+            >
+              {option}
+            </li>
+          );
+        })}
+      </ul>,
+      document.body,
+    );
+  }
+
   const items = virtualizer.getVirtualItems();
   const paddingTop = items[0]?.start ?? 0;
   const paddingBottom =
@@ -428,6 +514,9 @@ function UploadDataTable({
                     const isEditable =
                       isRecord(row) && isEditableValue(row[column.key]);
                     const hasOptions = Boolean(lookupOptions[column.key]?.length);
+                    const canOpenMenu = hasOptions && isEditable && !isReadOnly;
+                    const isMenuOpen =
+                      openMenu?.rowIndex === rowIndex && openMenu.field === column.key;
 
                     return (
                       <td
@@ -447,18 +536,30 @@ function UploadDataTable({
                           }
                           value={cellText(row, column.key)}
                           readOnly={isReadOnly || !isEditable}
-                          list={hasOptions ? `upload-data-lookup-${column.key}` : undefined}
+                          role={hasOptions ? "combobox" : undefined}
+                          aria-autocomplete={hasOptions ? "list" : undefined}
+                          aria-expanded={hasOptions ? isMenuOpen : undefined}
+                          aria-controls={isMenuOpen ? LOOKUP_MENU_ID : undefined}
                           autoComplete="off"
                           aria-label={`${column.label}, record ${rowIndex + 1}`}
                           aria-invalid={severity === "error" || undefined}
                           data-cell={`${item.index}:${columnIndex}`}
                           data-row-index={rowIndex}
                           data-field={column.key}
-                          onChange={(event) =>
+                          onChange={(event) => {
                             onEdit([
                               { rowIndex, field: column.key, text: event.target.value },
-                            ])
-                          }
+                            ]);
+                            if (canOpenMenu) setOpenMenu({ rowIndex, field: column.key });
+                          }}
+                          onClick={(event) => {
+                            if (canOpenMenu && !event.ctrlKey && !event.metaKey) {
+                              setOpenMenu({ rowIndex, field: column.key });
+                            }
+                          }}
+                          onBlur={() => {
+                            if (isMenuOpen) setOpenMenu(null);
+                          }}
                         />
                       </td>
                     );
@@ -486,16 +587,7 @@ function UploadDataTable({
         {notice}
       </p>
 
-      {columns.map((column) => {
-        const options = lookupOptions[column.key];
-        return options?.length ? (
-          <datalist key={column.key} id={`upload-data-lookup-${column.key}`}>
-            {options.map((option) => (
-              <option key={option} value={option} />
-            ))}
-          </datalist>
-        ) : null;
-      })}
+      {openMenu && renderLookupMenu(openMenu)}
     </>
   );
 }
