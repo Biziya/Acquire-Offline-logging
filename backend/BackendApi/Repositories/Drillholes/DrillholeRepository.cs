@@ -16,11 +16,11 @@ public sealed class DrillholeRepository : IDrillholeRepository
         FROM ZOOVCH_COLLAR_LIST
         """;
 
-    private readonly string _connectionString;
+    private readonly IDatabaseConnectionFactory _connections;
 
-    public DrillholeRepository(IConfiguration configuration)
+    public DrillholeRepository(IDatabaseConnectionFactory connections)
     {
-        _connectionString = configuration.GetRequiredConnectionString();
+        _connections = connections;
     }
 
     public Task<IReadOnlyList<DrillholeResponse>> GetAllAsync(
@@ -39,15 +39,14 @@ public sealed class DrillholeRepository : IDrillholeRepository
     {
         var drillholes = new List<DrillholeResponse>();
 
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand(query, connection);
+        await using var database = await _connections.OpenAsync(DatabaseTarget.Default, cancellationToken);
+        await using var command = new SqlCommand(query, database.Connection);
 
         if (holeId is not null)
         {
             command.Parameters.Add("@HoleId", SqlDbType.NVarChar, 50).Value = holeId;
         }
 
-        await connection.OpenAsync(cancellationToken);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
 
         var holeIdOrdinal = reader.GetOrdinal("HOLEID");

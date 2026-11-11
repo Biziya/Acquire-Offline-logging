@@ -61,6 +61,8 @@ function isDataViewerResponse(body: unknown): body is DataViewerResponse {
 async function getJson(path: string, signal?: AbortSignal): Promise<unknown> {
   const response = await fetch(buildApiUrl(path), {
     headers: { Accept: "application/json" },
+    // Windows credentials: the backend may read as the signed-in user.
+    credentials: "include",
     signal,
   });
 

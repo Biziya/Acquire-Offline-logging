@@ -1,10 +1,10 @@
 using System.Text;
 using System.Text.Json;
+using BackendApi.Data;
 using BackendApi.Models.UploadData;
 using BackendApi.Repositories.UploadData;
 using Microsoft.AspNetCore.Authentication.Negotiate;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Data.SqlClient;
 
 namespace BackendApi.Controllers.UploadData;
 
@@ -141,25 +141,27 @@ public sealed class UploadDataController : ControllerBase
                 StatusCodes.Status403Forbidden,
                 $"{exception.UserName} is not authorized to upload data. Contact the database administrator.");
         }
-        catch (SqlException exception) when (FindPermissionError(exception) is { } denied)
+        catch (Exception exception) when (DatabaseAccessErrors.Find(exception) is { } denied)
         {
-            // A database security setting, not a problem with the file. The
+            // A database security setting, not a problem with the file: the
+            // uploader's own permissions when running as the Windows user. The
             // server's message names the denied object and its database; it
             // holds no credentials and none of the uploaded JSON. The
             // repository has already logged the server, database and SQL login.
             _logger.LogError(
                 exception,
-                "Upload of {FileName} for drillhole {Drillhole} blocked by SQL Server permissions: " +
+                "Upload of {FileName} for drillhole {Drillhole} by {WindowsUser} blocked by SQL Server permissions: " +
                 "error {SqlErrorNumber} in procedure {Procedure}: {SqlMessage}",
                 fileName,
                 result.Drillhole,
+                userName,
                 denied.Number,
                 denied.Procedure,
                 denied.Message);
 
             return Failure(
-                StatusCodes.Status500InternalServerError,
-                "Database upload is blocked by SQL Server permissions. Contact the database administrator.");
+                StatusCodes.Status403Forbidden,
+                DatabaseAccessDenied.Message(this, "upload data"));
         }
         catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
         {
@@ -181,11 +183,6 @@ public sealed class UploadDataController : ControllerBase
             TotalRows = result.TotalRows
         });
     }
-
-    // 229: "The <permission> permission was denied on the object …";
-    // 230: the same, on a column.
-    private static SqlError? FindPermissionError(SqlException exception) =>
-        exception.Errors.Cast<SqlError>().FirstOrDefault(error => error.Number is 229 or 230);
 
     private ObjectResult Failure(int statusCode, string message) =>
         StatusCode(statusCode, new UploadDataResponse { Success = false, Message = message });

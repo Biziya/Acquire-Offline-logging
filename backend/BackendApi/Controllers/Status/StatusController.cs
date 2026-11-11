@@ -1,9 +1,13 @@
 using BackendApi.Models.Status;
 using Microsoft.AspNetCore.Authentication.Negotiate;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BackendApi.Controllers.Status;
 
+// The online check stays anonymous even when Database:ImpersonateWindowsUser
+// requires a Windows user everywhere else; includeUser=true challenges itself.
+[AllowAnonymous]
 [ApiController]
 [Route("api/status")]
 [Produces("application/json")]

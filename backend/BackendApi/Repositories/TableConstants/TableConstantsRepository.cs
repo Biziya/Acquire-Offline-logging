@@ -21,11 +21,11 @@ public sealed class TableConstantsRepository : ITableConstantsRepository
             'Min4Qty', 'Min3Qty', 'RedoxFacies', 'InternalStructure');
         """;
 
-    private readonly string _connectionString;
+    private readonly IDatabaseConnectionFactory _connections;
 
-    public TableConstantsRepository(IConfiguration configuration)
+    public TableConstantsRepository(IDatabaseConnectionFactory connections)
     {
-        _connectionString = configuration.GetRequiredConnectionString();
+        _connections = connections;
     }
 
     public async Task<TableConstantsResponse> GetAllAsync(
@@ -33,10 +33,9 @@ public sealed class TableConstantsRepository : ITableConstantsRepository
     {
         var rows = new List<LookupRow>();
 
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand(Query, connection);
+        await using var database = await _connections.OpenAsync(DatabaseTarget.Default, cancellationToken);
+        await using var command = new SqlCommand(Query, database.Connection);
 
-        await connection.OpenAsync(cancellationToken);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
 
         var fieldNameOrdinal = reader.GetOrdinal("FIELDNAME");

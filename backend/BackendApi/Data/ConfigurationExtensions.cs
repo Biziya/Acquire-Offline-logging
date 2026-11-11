@@ -14,6 +14,14 @@ public static class ConfigurationExtensions
     private const string CoreDescrDataDatabaseKey = "CoreDescrData:Database";
     private const string CoreDescrDataWindowsAuthenticationKey = "CoreDescrData:UseWindowsAuthentication";
 
+    // Every database call runs as the request's Windows user (EXECUTE AS
+    // LOGIN); see DatabaseConnectionFactory and Sql/WindowsUserImpersonation.sql.
+    public const string ImpersonateWindowsUserKey = "Database:ImpersonateWindowsUser";
+
+    /// <summary>True when database calls run as the request's Windows user.</summary>
+    public static bool ImpersonatesWindowsUser(this IConfiguration configuration) =>
+        configuration.GetValue<bool>(ImpersonateWindowsUserKey);
+
     /// <summary>
     /// Reads a named connection string and fails fast when it is missing.
     /// </summary>

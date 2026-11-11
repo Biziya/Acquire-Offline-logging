@@ -39,22 +39,20 @@ public sealed class DataViewerRepository : IDataViewerRepository
         ORDER BY [FROM], [TO], [PRIORITY], [PROJECTCODE], [usr], [NAME];
         """;
 
-    private readonly string _connectionString;
+    private readonly IDatabaseConnectionFactory _connections;
 
-    public DataViewerRepository(IConfiguration configuration)
+    public DataViewerRepository(IDatabaseConnectionFactory connections)
     {
         // The same database and login as Upload Data (CoreDescrData section).
-        _connectionString = configuration.GetCoreDescrDataConnectionString();
+        _connections = connections;
     }
 
     public async Task<IReadOnlyList<string>> GetHoleIdsAsync(CancellationToken cancellationToken = default)
     {
         var holeIds = new List<string>();
 
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand(HoleIdsQuery, connection);
-
-        await connection.OpenAsync(cancellationToken);
+        await using var database = await _connections.OpenAsync(DatabaseTarget.CoreDescrData, cancellationToken);
+        await using var command = new SqlCommand(HoleIdsQuery, database.Connection);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
 
         while (await reader.ReadAsync(cancellationToken))
@@ -71,11 +69,10 @@ public sealed class DataViewerRepository : IDataViewerRepository
     {
         var records = new List<DataViewerRecord>();
 
-        await using var connection = new SqlConnection(_connectionString);
-        await using var command = new SqlCommand(RecordsQuery, connection);
+        await using var database = await _connections.OpenAsync(DatabaseTarget.CoreDescrData, cancellationToken);
+        await using var command = new SqlCommand(RecordsQuery, database.Connection);
         command.Parameters.Add("@Drillhole", SqlDbType.VarChar, HoleIdSize).Value = holeId;
 
-        await connection.OpenAsync(cancellationToken);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
 
         while (await reader.ReadAsync(cancellationToken))

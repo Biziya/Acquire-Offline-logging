@@ -13,7 +13,11 @@ function isValidDrillhole(record: unknown): record is Drillhole {
 }
 
 export async function getDrillholes(signal?: AbortSignal) {
-  const response = await fetch(buildApiUrl("/api/drillholes"), { signal });
+  // Windows credentials: the backend may read as the signed-in user.
+  const response = await fetch(buildApiUrl("/api/drillholes"), {
+    credentials: "include",
+    signal,
+  });
 
   if (!response.ok) {
     throw new Error(`Drillhole request failed with status ${response.status}.`);

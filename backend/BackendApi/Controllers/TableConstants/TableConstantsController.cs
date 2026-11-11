@@ -1,3 +1,4 @@
+using BackendApi.Data;
 using BackendApi.Models.TableConstants;
 using BackendApi.Repositories.TableConstants;
 using Microsoft.AspNetCore.Mvc;
@@ -23,6 +24,7 @@ public sealed class TableConstantsController : ControllerBase
     /// <summary>All nine Raw Litho lookup lists in one response.</summary>
     [HttpGet]
     [ProducesResponseType<TableConstantsResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<TableConstantsResponse>> Get(
         CancellationToken cancellationToken)
@@ -30,6 +32,10 @@ public sealed class TableConstantsController : ControllerBase
         try
         {
             return Ok(await _repository.GetAllAsync(cancellationToken));
+        }
+        catch (Exception exception) when (DatabaseAccessErrors.Find(exception) is not null)
+        {
+            return DatabaseAccessDenied.Result(this, _logger, exception, "read table constants");
         }
         catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
         {

@@ -24,17 +24,18 @@ public sealed class UploadDataRepository : IUploadDataRepository
     // A whole drillhole is one call; allow more than the 30 s default.
     private const int CommandTimeoutSeconds = 120;
 
-    private readonly string _connectionString;
+    private readonly IDatabaseConnectionFactory _connections;
     private readonly string _database;
     private readonly ILogger<UploadDataRepository> _logger;
 
     public UploadDataRepository(
+        IDatabaseConnectionFactory connections,
         IConfiguration configuration,
         ILogger<UploadDataRepository> logger)
     {
         // The CoreDescrData section's database and login (see ConfigurationExtensions).
-        _connectionString = configuration.GetCoreDescrDataConnectionString();
-        _database = new SqlConnectionStringBuilder(_connectionString).InitialCatalog;
+        _connections = connections;
+        _database = new SqlConnectionStringBuilder(configuration.GetCoreDescrDataConnectionString()).InitialCatalog;
         _logger = logger;
     }
 
@@ -42,8 +43,10 @@ public sealed class UploadDataRepository : IUploadDataRepository
         UploadDataRequest request,
         CancellationToken cancellationToken = default)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync(cancellationToken);
+        // With Database:ImpersonateWindowsUser on, the session already runs as
+        // request.UserName, so the procedure's SUSER_NAME() is the uploader.
+        await using var database = await _connections.OpenAsync(DatabaseTarget.CoreDescrData, cancellationToken);
+        var connection = database.Connection;
 
         // Never write anywhere but the configured database.
         if (!string.Equals(connection.Database, _database, StringComparison.OrdinalIgnoreCase))
@@ -138,21 +141,25 @@ public sealed class UploadDataRepository : IUploadDataRepository
         CancellationToken cancellationToken)
     {
         await using var command = new SqlCommand(
-            "SELECT DB_NAME(), SUSER_SNAME(), USER_NAME();",
+            "SELECT DB_NAME(), SUSER_SNAME(), USER_NAME(), ORIGINAL_LOGIN();",
             connection,
             transaction);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
 
         if (await reader.ReadAsync(cancellationToken))
         {
+            // SqlLogin is who SQL Server checks permissions for; ConnectedAs
+            // is the account that opened the connection (they differ when
+            // running as the Windows user).
             _logger.LogInformation(
-                "Uploading drillhole {Drillhole} for {WindowsUser} to {Server}/{Database} as SQL login {SqlLogin} (database user {DatabaseUser}).",
+                "Uploading drillhole {Drillhole} for {WindowsUser} to {Server}/{Database} as SQL login {SqlLogin} (database user {DatabaseUser}, connected as {ConnectedAs}).",
                 request.Drillhole,
                 request.UserName,
                 connection.DataSource,
                 reader.GetString(0),
                 reader.GetString(1),
-                reader.GetString(2));
+                reader.GetString(2),
+                reader.GetString(3));
         }
     }
 }

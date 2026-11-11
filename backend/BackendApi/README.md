@@ -103,6 +103,39 @@ appsettings.Development.json  CoreDescrData:UseWindowsAuthentication  true    (d
   `web.config`, or in the Windows Event Log. `Windows authentication as …` or
   `Environment Development` there means the wrong settings are in effect.
 
+### Running as the Windows user (`Database:ImpersonateWindowsUser`)
+
+Off by default. When it is `true`, every database call (all four data APIs)
+runs on SQL Server **as the browser user's own Windows account**:
+
+1. Negotiate verifies the browser user (`BDOM\jsmith`). Requests without a
+   Windows user get `401` + `WWW-Authenticate: Negotiate` (only
+   `GET /api/status` stays anonymous). The frontend sends
+   `credentials: "include"` on every call.
+2. The API opens the connection with its own account (the connection string
+   as configured; a gMSA with `Integrated Security=True` is the goal, so no
+   password is stored anywhere).
+3. It then runs `EXECUTE AS LOGIN = N'BDOM\jsmith' WITH COOKIE INTO …`
+   (`Data/DatabaseConnectionFactory.cs`). From here SQL Server checks
+   permissions for the user, and `SUSER_SNAME()` / `SUSER_NAME()` return the
+   user, so the upload procedure stores the real uploader in `usr` on its
+   own. `ORIGINAL_LOGIN()` still shows the service account (logged on upload).
+4. Reads and the upload run; then `REVERT WITH COOKIE` returns the connection
+   to the service account before it goes back to the pool. If the revert
+   fails, the pool is cleared so no other request reuses that session.
+5. Permission errors (229, 230, 916, 15406, 15517) return `403`
+   `"<DOMAIN\user> has no database permission to …"`.
+
+Why not `Integrated Security` with the user's own credentials: the API (on
+BMNDULAAS01) and SQL Server (BMNULAADB02) are different machines, and Windows
+does not pass the browser user's credentials on to a second machine without
+Kerberos constrained delegation (the "double hop"). `EXECUTE AS LOGIN` needs
+no SPN, delegation or DNS change.
+
+Before turning it on, the DBA runs `Sql/WindowsUserImpersonation.sql` on
+development first. Set it on the server like the connection string:
+`Database__ImpersonateWindowsUser=true` as an IIS environment variable.
+
 ### Production password
 
 The password should not live in Git. On the server, set the whole connection
@@ -526,9 +559,9 @@ rows. The API never deletes rows.
 // 413 Payload Too Large
 { "success": false, "message": "File exceeds the 10 MB limit." }
 
-// 500 Internal Server Error — SQL Server denied a permission (error 229 / 230)
+// 403 Forbidden — SQL Server denied a permission (229, 230, 916, 15406, 15517)
 { "success": false,
-  "message": "Database upload is blocked by SQL Server permissions. Contact the database administrator." }
+  "message": "BDOM\\jsmith has no database permission to upload data. Contact the database administrator." }
 
 // 500 Internal Server Error — any other connection or procedure failure
 { "success": false, "message": "Database upload failed." }
@@ -555,8 +588,8 @@ database 'ACQMN01', schema 'MyApps'.   (Number 229, State 5, Class 14)
 ```
 
 This is a database authorization problem, not a JSON or parameter problem:
-the API returns `Database upload is blocked by SQL Server permissions. Contact
-the database administrator.` (HTTP 500) and logs the SQL error number, the
+the API returns `<DOMAIN\user> has no database permission to upload data.
+Contact the database administrator.` (HTTP 403) and logs the SQL error number, the
 procedure, the connected server/database and SQL Server's message — never the
 credentials or the uploaded JSON.
 

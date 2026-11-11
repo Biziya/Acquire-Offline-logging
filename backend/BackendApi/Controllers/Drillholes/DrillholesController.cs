@@ -1,3 +1,4 @@
+using BackendApi.Data;
 using BackendApi.Models.Drillholes;
 using BackendApi.Repositories.Drillholes;
 using Microsoft.AspNetCore.Mvc;
@@ -22,6 +23,7 @@ public sealed class DrillholesController : ControllerBase
 
     [HttpGet]
     [ProducesResponseType<IReadOnlyList<DrillholeResponse>>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<IReadOnlyList<DrillholeResponse>>> GetAll(
         CancellationToken cancellationToken)
@@ -29,6 +31,10 @@ public sealed class DrillholesController : ControllerBase
         try
         {
             return Ok(await _repository.GetAllAsync(cancellationToken));
+        }
+        catch (Exception exception) when (DatabaseAccessErrors.Find(exception) is not null)
+        {
+            return DatabaseAccessDenied.Result(this, _logger, exception, "read drillholes");
         }
         catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
         {

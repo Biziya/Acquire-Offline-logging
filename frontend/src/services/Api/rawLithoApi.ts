@@ -16,6 +16,8 @@ function getTableConstants(): Promise<Record<string, unknown>> {
   if (!tableConstantsRequest) {
     const request = fetch(buildApiUrl("/api/table-constants"), {
       headers: { Accept: "application/json" },
+      // Windows credentials: the backend may read as the signed-in user.
+      credentials: "include",
     })
       .then(async (response) => {
         if (!response.ok) {

@@ -1,3 +1,4 @@
+using BackendApi.Data;
 using BackendApi.Models.DataViewer;
 using BackendApi.Models.Drillholes;
 using BackendApi.Repositories.DataViewer;
@@ -31,12 +32,17 @@ public sealed class DataViewerController : ControllerBase
     /// </summary>
     [HttpGet("drillholes")]
     [ProducesResponseType<IReadOnlyList<string>>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<IReadOnlyList<string>>> GetDrillholes(CancellationToken cancellationToken)
     {
         try
         {
             return Ok(await _records.GetHoleIdsAsync(cancellationToken));
+        }
+        catch (Exception exception) when (DatabaseAccessErrors.Find(exception) is not null)
+        {
+            return DatabaseAccessDenied.Result(this, _logger, exception, "read drillholes");
         }
         catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
         {
@@ -55,6 +61,7 @@ public sealed class DataViewerController : ControllerBase
     [HttpGet]
     [ProducesResponseType<DataViewerResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<DataViewerResponse>> Get(
         [FromQuery] string? drillhole,
@@ -78,6 +85,10 @@ public sealed class DataViewerController : ControllerBase
         try
         {
             records = await _records.GetByHoleIdAsync(drillhole, cancellationToken);
+        }
+        catch (Exception exception) when (DatabaseAccessErrors.Find(exception) is not null)
+        {
+            return DatabaseAccessDenied.Result(this, _logger, exception, "read drillhole records");
         }
         catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
         {

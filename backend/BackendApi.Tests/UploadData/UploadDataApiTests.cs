@@ -172,8 +172,8 @@ public sealed class UploadDataApiTests : IClassFixture<ApiFactory>
 
         await AssertFailure(
             response,
-            HttpStatusCode.InternalServerError,
-            "Database upload is blocked by SQL Server permissions. Contact the database administrator.");
+            HttpStatusCode.Forbidden,
+            @"BDOM\jsmith has no database permission to upload data. Contact the database administrator.");
         var text = await response.Content.ReadAsStringAsync();
         Assert.DoesNotContain("CoreDescrData", text);
         Assert.DoesNotContain("ACQMN01", text);
