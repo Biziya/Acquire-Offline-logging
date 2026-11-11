@@ -129,9 +129,64 @@ GO
 --     same drillhole adds new rows instead of changing them (usr is part of
 --     the match key). Look at the rows of the newest upload only.
 /*
-SELECT FileName, usr, COUNT(*) AS Rows
+SELECT FileName, usr, COUNT(*) AS RowTotal
 FROM [MyApps].[CoreDescrData]
 WHERE HOLEID = '<drillhole you uploaded>'
 GROUP BY FileName, usr
 ORDER BY FileName, usr;
 */
+GO
+
+-- D8. MyApps.CoreDescrData: everything about the table (read-only).
+
+-- D8a. Columns: type, size, nullable, default, identity/computed.
+SELECT c.column_id,
+       c.name                                  AS ColumnName,
+       TYPE_NAME(c.user_type_id)               AS DataType,
+       CASE WHEN TYPE_NAME(c.user_type_id) IN (N'nvarchar', N'nchar') AND c.max_length > 0
+            THEN c.max_length / 2 ELSE c.max_length END AS MaxLength,   -- -1 = max
+       c.precision, c.scale,
+       c.is_nullable, c.is_identity, c.is_computed,
+       dc.definition                           AS DefaultValue,
+       c.collation_name
+FROM sys.columns AS c
+LEFT JOIN sys.default_constraints AS dc
+       ON dc.parent_object_id = c.object_id AND dc.parent_column_id = c.column_id
+WHERE c.object_id = OBJECT_ID(N'MyApps.CoreDescrData')
+ORDER BY c.column_id;
+
+-- D8b. Keys and indexes (primary key, unique, other indexes) with their columns.
+SELECT i.name AS IndexName, i.type_desc, i.is_primary_key, i.is_unique,
+       STRING_AGG(c.name, N', ') WITHIN GROUP (ORDER BY ic.key_ordinal) AS KeyColumns
+FROM sys.indexes AS i
+JOIN sys.index_columns AS ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id
+JOIN sys.columns AS c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
+WHERE i.object_id = OBJECT_ID(N'MyApps.CoreDescrData') AND ic.is_included_column = 0
+GROUP BY i.name, i.type_desc, i.is_primary_key, i.is_unique
+ORDER BY i.is_primary_key DESC, i.name;
+
+-- D8c. Constraints (check, foreign key) on the table.
+SELECT name, type_desc, OBJECT_DEFINITION(object_id) AS Definition
+FROM sys.objects
+WHERE parent_object_id = OBJECT_ID(N'MyApps.CoreDescrData')
+  AND type IN ('C', 'F', 'UQ', 'PK', 'D');
+
+-- D8d. Size and row count, plus the owner and creation dates.
+SELECT SCHEMA_NAME(t.schema_id) AS SchemaName, t.name AS TableName,
+       USER_NAME(COALESCE(t.principal_id, s.principal_id)) AS Owner,
+       t.create_date, t.modify_date,
+       SUM(CASE WHEN p.index_id IN (0, 1) THEN p.rows END) AS TotalRows,
+       CAST(SUM(a.total_pages) * 8 / 1024.0 AS decimal(12, 2)) AS TotalMB
+FROM sys.tables AS t
+JOIN sys.schemas AS s ON s.schema_id = t.schema_id
+JOIN sys.partitions AS p ON p.object_id = t.object_id
+JOIN sys.allocation_units AS a ON a.container_id = p.partition_id
+WHERE t.object_id = OBJECT_ID(N'MyApps.CoreDescrData')
+GROUP BY t.schema_id, t.name, t.principal_id, s.principal_id, t.create_date, t.modify_date;
+
+-- D8e. Who stored what: rows per usr (shows how many rows are 'userAcquire').
+SELECT usr, COUNT(*) AS RowTotal, COUNT(DISTINCT HOLEID) AS Drillholes,
+       SUM(CASE WHEN FileName IS NULL THEN 1 ELSE 0 END) AS RowsWithoutFileName
+FROM [MyApps].[CoreDescrData]
+GROUP BY usr
+ORDER BY RowTotal DESC;

@@ -67,10 +67,10 @@ WHERE c.object_id = OBJECT_ID(N'MyApps.CoreDescrData')
   AND c.name = N'usr';
 
 -- A3. What usr holds today, per drillhole.
-SELECT usr, COUNT(DISTINCT HOLEID) AS Drillholes, COUNT(*) AS Rows
+SELECT usr, COUNT(DISTINCT HOLEID) AS Drillholes, COUNT(*) AS RowTotal
 FROM [MyApps].[CoreDescrData]
 GROUP BY usr
-ORDER BY Rows DESC;
+ORDER BY RowTotal DESC;
 GO
 
 -------------------------------------------------------------------------------

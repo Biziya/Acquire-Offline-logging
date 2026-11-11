@@ -49,16 +49,20 @@ IF EXISTS (SELECT 1 FROM sys.sql_modules
            WHERE object_id = @ProcId AND (uses_ansi_nulls = 0 OR uses_quoted_identifier = 0))
     THROW 50000, N'Procedure uses ANSI_NULLS/QUOTED_IDENTIFIER OFF: edit it manually in SSMS instead.', 1;
 
+-- Text matching must ignore case: the procedure writes
+-- "select @usr=suser_name()" in lower case, and with a case-sensitive
+-- database collation an upper-case pattern would never match.
 -- 1. Lines that overwrite @usr with the SQL login.
 DECLARE @Matches int = (
     SELECT COUNT(*)
     FROM STRING_SPLIT(REPLACE(@Old, CHAR(13), N''), CHAR(10))
-    WHERE REPLACE(value, N' ', N'') LIKE N'%@usr=SUSER[_]NAME()%'
-       OR REPLACE(value, N' ', N'') LIKE N'%@usr=SUSER[_]SNAME()%');
+    WHERE REPLACE(REPLACE(value, N' ', N''), CHAR(9), N'') COLLATE Latin1_General_CI_AS LIKE N'%@usr=SUSER[_]NAME()%'
+       OR REPLACE(REPLACE(value, N' ', N''), CHAR(9), N'') COLLATE Latin1_General_CI_AS LIKE N'%@usr=SUSER[_]SNAME()%');
 
 SELECT value AS CurrentLine
 FROM STRING_SPLIT(REPLACE(@Old, CHAR(13), N''), CHAR(10))
-WHERE value LIKE N'%@usr%' OR value LIKE N'%SUSER[_]%';
+WHERE value COLLATE Latin1_General_CI_AS LIKE N'%@usr%'
+   OR value COLLATE Latin1_General_CI_AS LIKE N'%SUSER[_]%';
 
 IF @Matches <> 1
 BEGIN
@@ -67,24 +71,28 @@ BEGIN
     RETURN;
 END;
 
--- 2. Replace that one line (usual spellings, with and without spaces).
-SET @New = REPLACE(@New, N'SELECT @usr = SUSER_NAME()',  @Fix);
-SET @New = REPLACE(@New, N'SELECT @usr=SUSER_NAME()',    @Fix);
-SET @New = REPLACE(@New, N'SET @usr = SUSER_NAME()',     @Fix);
-SET @New = REPLACE(@New, N'SET @usr=SUSER_NAME()',       @Fix);
-SET @New = REPLACE(@New, N'SELECT @usr = SUSER_SNAME()', @Fix);
-SET @New = REPLACE(@New, N'SELECT @usr=SUSER_SNAME()',   @Fix);
-SET @New = REPLACE(@New, N'SET @usr = SUSER_SNAME()',    @Fix);
-SET @New = REPLACE(@New, N'SET @usr=SUSER_SNAME()',      @Fix);
+-- 2. Replace that one line (usual spellings, with and without spaces; any case).
+--    In ACQMN01 it is line 18:  select @usr=suser_name()
+SET @New = REPLACE(@New COLLATE Latin1_General_CI_AS, N'SELECT @usr = SUSER_NAME()',  @Fix);
+SET @New = REPLACE(@New COLLATE Latin1_General_CI_AS, N'SELECT @usr=SUSER_NAME()',    @Fix);
+SET @New = REPLACE(@New COLLATE Latin1_General_CI_AS, N'SET @usr = SUSER_NAME()',     @Fix);
+SET @New = REPLACE(@New COLLATE Latin1_General_CI_AS, N'SET @usr=SUSER_NAME()',       @Fix);
+SET @New = REPLACE(@New COLLATE Latin1_General_CI_AS, N'SELECT @usr = SUSER_SNAME()', @Fix);
+SET @New = REPLACE(@New COLLATE Latin1_General_CI_AS, N'SELECT @usr=SUSER_SNAME()',   @Fix);
+SET @New = REPLACE(@New COLLATE Latin1_General_CI_AS, N'SET @usr = SUSER_SNAME()',    @Fix);
+SET @New = REPLACE(@New COLLATE Latin1_General_CI_AS, N'SET @usr=SUSER_SNAME()',      @Fix);
 
-IF @New = @Old
+IF @New COLLATE Latin1_General_CS_AS = @Old COLLATE Latin1_General_CS_AS
 BEGIN
     SELECT N'The line is written in a form this script does not recognise. Nothing changed: edit it by hand (see CurrentLine).' AS Result;
     RETURN;
 END;
 
 -- 3. CREATE PROCEDURE → ALTER PROCEDURE (keeps the procedure's permissions).
-DECLARE @At int = PATINDEX(N'%CREATE%PROC%', @New);
+-- Look for the statement itself, not the first "create … proc" in a header
+-- comment such as "-- Create date: … procedure" (ACQMN01: line 7).
+DECLARE @At int = CHARINDEX(N'CREATE PROCEDURE', @New COLLATE Latin1_General_CI_AS);
+IF @At = 0 SET @At = CHARINDEX(N'CREATE PROC ', @New COLLATE Latin1_General_CI_AS);
 IF @At = 0
     THROW 50000, N'CREATE PROCEDURE not found in the definition. Nothing changed.', 1;
 SET @New = STUFF(@New, @At, LEN(N'CREATE'), N'ALTER');
@@ -92,7 +100,9 @@ SET @New = STUFF(@New, @At, LEN(N'CREATE'), N'ALTER');
 -- 4. Preview of the changed lines.
 SELECT value AS NewLine
 FROM STRING_SPLIT(REPLACE(@New, CHAR(13), N''), CHAR(10))
-WHERE value LIKE N'%@usr%' OR value LIKE N'%SUSER[_]%' OR value LIKE N'%ALTER%PROC%';
+WHERE value COLLATE Latin1_General_CI_AS LIKE N'%@usr%'
+   OR value COLLATE Latin1_General_CI_AS LIKE N'%SUSER[_]%'
+   OR value COLLATE Latin1_General_CI_AS LIKE N'%ALTER%PROC%';
 
 IF @Apply = 0
 BEGIN
