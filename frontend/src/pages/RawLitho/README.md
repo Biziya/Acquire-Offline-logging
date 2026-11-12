@@ -1,220 +1,200 @@
 # Raw Litho page
 
-Route: `/raw-litho` · Component: `RawLitho.tsx`
+Route: `/raw-litho`. Component: `RawLitho.tsx`.
 
-## Purpose
+Raw Litho is where a geologist logs raw lithology intervals for a drillhole. You
+pick a drillhole, then fill in one table row per depth interval. Everything you
+type is kept in the browser (IndexedDB) on this PC, and Save JSON downloads the
+finished file. The page never writes rows to the backend. Its API calls are
+read-only: `/api/drillholes` and `/api/table-constants` for the dropdown lists.
 
-Raw Litho is the data-entry page for raw lithology intervals. A geologist picks
-a drillhole, then fills in one table row per depth interval. The page is
-responsible for:
-
-- loading the drillhole list and the eleven dropdown lookups,
-- keeping an editable table of rows in memory and mirrored into IndexedDB,
-- keeping the rows ordered by Litho From, whatever order they were entered in,
-- enforcing the interval rules before a new row can be created,
-- keyboard-first navigation and shortcuts,
-- restoring the last drillhole and page after navigating away,
-- importing a JSON document (behind a confirmation dialog),
-- exporting the current document as a JSON file on Save JSON.
-
-The page never writes rows to the backend. All ten backend endpoints it uses are
-read-only.
-
----
-
-## Folder tree
+## Files
 
 ```text
 RawLitho/
-├── hooks/
-│   ├── useDrillholes.ts            loads /api/drillholes + the selection history
-│   ├── useWorkingDrillholes.ts     drillholes with saved IndexedDB working data
-│   ├── useRawLithoImport.ts        two-step JSON import (prepare → confirm)
-│   ├── useRawLithoLookups.ts       loads the 9 API lookups, cache-first
-│   ├── useRawLithoRowFocus.ts      row-id focus that survives reordering
-│   ├── useRawLithoShortcuts.ts     F4 / F5 / PageUp / PageDown
-│   ├── useRawLithoDraftPersistence.ts  restore, autosave and recovery
-│   ├── useRawLithoWorkspace.ts     the editable document + tryAddRow
-│   └── useRemoveRowConfirmation.ts remove-last-row confirmation flow
-├── ConfirmDialog.tsx               shared modal: import + remove confirmations
-├── LookupAutocomplete.tsx          one dropdown/autocomplete cell
-├── RawLitho.tsx                    page container
-├── RawLithoFilters.tsx             drillhole search + Project/Campaign output
-├── RawLithoRow.tsx                 one editable table row
-├── RawLithoTable.tsx               table + bottom bar (row actions, pagination, Save slot)
-├── README.md                       this file
-├── config.yaml                     title, rows per page, row height, columns
-├── config.ts                       typed, validated copy of config.yaml
-├── constants.ts                    columns, required keys, toasts, row factory
-├── drillholeOrdering.ts            recent-first / newest-first drillhole order
-├── rawLithoClipboard.ts            copy text + paste planning for selected cells
-├── rawLithoDocumentOperations.ts    storage-free document transformations
-├── rawLithoHelpers.ts             document normalisation, import read, export
-├── rawLithoImportService.ts        validates an import before touching storage
-├── rawLithoSorting.ts              row ordering by Litho From
-├── rawLithoStyles.ts               Tailwind class lists shared by components
-├── rawLithoValidation.ts           pure validation rules
-└── tableNavigation.ts              DOM focus + key-detection utilities
+  RawLitho.tsx                    page container, Save JSON, dialogs, toasts
+  RawLithoFilters.tsx             drillhole search, Project and Campaign
+  RawLithoTable.tsx               table, row buttons, paging, copy and paste
+  RawLithoRow.tsx                 one editable row and its cell highlights
+  LookupAutocomplete.tsx          dropdown cell (also used by Upload Data)
+  config.yaml / config.ts         title, rows per page, row height, columns
+  constants.ts                    visible columns, required fields, toasts
+  drillholeOrdering.ts            order of the drillhole list
+  rawLithoValidation.ts           validation and conditional rules (pure)
+  rawLithoSorting.ts              row order by Litho From (pure)
+  rawLithoDocumentOperations.ts   edit, add, remove, paste on a document
+  rawLithoHelpers.ts              normalising, import parsing, JSON export
+  rawLithoImportService.ts        checks an import before anything is written
+  rawLithoClipboard.ts            copy text and paste planning
+  tableNavigation.ts              arrow, Tab and Delete handling
+  hooks/
+    useRawLithoWorkspace.ts       the open document, add/remove/edit rows
+    useRawLithoDraftPersistence.ts  load, autosave and retry
+    useRawLithoImport.ts          two-step JSON import
+    useRawLithoLookups.ts         dropdown lists, cache first
+    useDrillholes.ts              drillhole list and selection history
+    useWorkingDrillholes.ts       which drillholes have saved data
+    useRawLithoShortcuts.ts       F4, F5, PageUp, PageDown
+    useRawLithoRowFocus.ts        keeps the caret on the right row
+    useRemoveRowConfirmation.ts   Remove last row confirmation
 ```
 
----
+## Logging a drillhole
 
-## File responsibilities
+### Choosing a drillhole
 
-```text
-RawLitho.tsx
-- page container; composes the four hooks
-- derives selectedDrillhole (project/campaign) for the filter bar
-- owns isSaving and handleSave (IndexedDB write + JSON export)
-- renders Toast, ConfirmDialog, filters, table; passes the Save button to the
-  table's bottom bar (`footerEnd`)
+Type in the Drillhole field or open its list. Until you pick one, the table is
+disabled. Project and Campaign come from the selected drillhole and are
+read-only.
 
-RawLithoTable.tsx
-- renders the header, the visible page of rows, pagination and row buttons
-- owns the tbody DOM ref and ALL focus movement
-- requestAddRow(): the single funnel for Add Row / F4 / Tab / ArrowDown
-- handleTableKeyDown(): page crossing for Tab / arrows, Tab and ArrowDown row
-  creation
-- owns the Ctrl + click cell selection and the copy / paste handlers
-- calls useRawLithoShortcuts
+With the field empty, the list starts with "Recently worked on" (up to three
+drillholes with saved data on this PC, most recent first), then "All
+drillholes", newest first. A drillhole counts as worked on only when its draft
+holds at least one value, so just selecting a hole does not add it. A fourth
+working drillhole moves down to "All drillholes". Once you type, the headings
+go away and drillholes are ranked by match (exact, prefix, substring, up to 10).
 
-RawLithoRow.tsx
-- renders one row: a plain input, or a LookupAutocomplete for lookup columns
-- tags each <td> with data-column so focus can target a named cell
-- applies required, missing-value and duplicate-interval cell classes
-- handles Delete-to-clear and arrow navigation for plain inputs
+`/api/drillholes` has no date, so "newest first" is the API order reversed
+(`sortDrillholesByNewestFirst()` in `drillholeOrdering.ts`). Switching
+drillholes saves pending edits first, and the table stays disabled until the
+new draft has loaded.
 
-components/Toast.tsx (shared by every page)
-- the single toast component; one notification at a time
-- renders the icon, accent colour and live-region role for its type
-- auto-dismisses after the duration for its type in `config/ui.yaml`,
-  fading out over the last 200ms
+### Adding and removing rows
 
-ConfirmDialog.tsx
-- the shared confirmation modal, used by JSON import and Remove Last Row
-- title, message, optional details, Cancel + destructive confirm button
-- Escape cancels; focus starts on Cancel unless initialFocus="confirm"
-- returns focus to whatever opened it when it closes
+Add a row with the Add row button, `F4`, `Tab` from the last cell of the last
+row, or `↓` on the last row. All four go through `tryAddRow()` in
+`useRawLithoWorkspace.ts`, so they validate and behave the same way. A new row
+is only created when the current last row is valid (see "Data rules" below). If
+it is not, no row is added, a warning toast appears, and the caret moves to the
+cell that needs fixing, switching page first if needed.
 
-hooks/useToast.ts (src/hooks, shared by every page)
-- holds the one active notification: showToast(notification) / hideToast(id)
-- each toast gets an incrementing id, used as the React key so a repeated
-  message restarts the timer instead of being swallowed
+A new row takes Litho From from the previous row's Litho To and copies
+`lithoCode`, `colorCode`, `redoxCode` and `ox` (`ROW_COPY_FIELD_KEYS` in
+`constants.ts`). Everything else starts empty. `createRowFromPrevious()` builds
+it on top of `createSchemaRow()` from `src/types/rawLithoSchema.ts`. Litho To
+starts empty, so holding a key down cannot create a run of blank rows.
 
-hooks/useRemoveRowConfirmation.ts
-- the single Remove Last Row flow shared by the button and F5
-- requestRemoveLastRow / cancelRemoveLastRow / confirmRemoveLastRow
-- shows "Row removed" only after the write resolves
+Remove last row (button or `F5`) always asks first with a "Remove last row?"
+dialog. Focus starts on Cancel, so Enter cannot delete a row by reflex. Cancel
+or Escape changes nothing. Remove deletes the row, waits for the IndexedDB
+write, then shows "Row removed". The table always keeps one row, so with a
+single row the button is disabled and F5 does nothing.
 
-LookupAutocomplete.tsx
-- combobox for the 11 lookup columns; filters, ranks and limits suggestions
-- highlights the closest match while typing; Enter or a mouse click confirms it
-- always lists an empty choice first; navigation never commits a suggestion
-- validates on blur: a non-matching value is flagged, not silently kept
-- closes sibling dropdowns via a window CustomEvent
-- renders the menu in a portal so the table's scroll container cannot clip it
-- F2 enters option-selection mode; Up / Down browse, Enter confirms, Escape cancels
+### Row order
 
-RawLithoFilters.tsx
-- drillhole search with ranked suggestions
-- renders the list in the order it is given; it does not re-sort
-- `recentCount`: the first N are headed "Recent Working Drillholes", the
-  rest "All Drillholes" (headings only while the field is empty)
-- read-only Project and Campaign values
+Rows are always shown and stored in Litho From order, whatever order you typed
+them in. `sortRowsByLithoFrom()` in `rawLithoSorting.ts` is the only sorting
+code. It compares numbers (2, 10, 100), uses Litho To as a tie-breaker, and puts
+rows with an empty or non-numeric Litho From at the bottom.
 
-drillholeOrdering.ts
-- the single owner of the drillhole selector's order
-- orderDrillholes(drillholes, recentHoleIds): promoted holes, then newest first
-- pickRecentWorkingHoleIds(): up to 3 holes with saved data, most recent first
-- hasWorkingData(): whether a stored draft holds any value
-- addRecentHoleId(): records a selection, most recent first
-- sortDrillholesByNewestFirst(): the one place the newest-first rule lives
-- pure; no React, no DOM, no storage
+Sorting waits until a depth is committed: on blur, on Enter, after adding a
+row, on paste, on import and on restore. It never runs while you type, so a row
+does not jump out from under the caret. Whole rows move together, and the caret
+follows its row by id, even across pages.
 
-constants.ts
-- columns (all 20 fields) and tableColumns (the visible ones, in config.yaml order)
-- REQUIRED_COLUMN_KEY_LIST / REQUIRED_COLUMN_KEYS
-- ROW_COPY_FIELD_KEYS, RAW_LITHO_ROWS_PER_PAGE, TOAST_NOTIFICATIONS
-- createEmptyRow(), createRowFromPrevious()
+### Paging
 
-rawLithoValidation.ts
-- pure rules: required fields, depth validity, duplicate intervals, row validity
-- findRowIssue() returns the first blocking issue and the cell to focus
-- no UI text
+The table shows 50 rows per page (`table.rowsPerPage` in `config.yaml`,
+exported as `RAW_LITHO_ROWS_PER_PAGE`). Use Previous and Next under the table,
+or `PageUp` and `PageDown`. Paging only slices the sorted rows for display, so
+edits on other pages are kept. Adding a row jumps to the page that holds it. The
+current page is remembered and restored when you come back.
 
-rawLithoSorting.ts
-- the single sorting helper: sortRowsByLithoFrom(rows)
-- isRowOrderSorted(), sortRawLithoDocumentRows() for restore and import
-- getPageForRowIndex() / findRowPage() so a row can be located by id
-- pure; no React, no DOM
+### Save JSON
 
-hooks/useRawLithoRowFocus.ts
-- keeps the caret on a logical row, addressed by row.id, not by index
-- requestFocus() for a row that does not exist in the DOM yet
-- focusRowCell() for now, switching page first when the row is off-page
-- restores focus dropped by a reorder; leaves deliberate focus moves alone
+Save JSON, at the bottom right, first checks every lookup code against its list
+and every row against the conditional rules. If either fails it stops with a
+warning (for a rule, one that names the row, such as "Row 4: CA is required for
+this Litho code."). Then it updates `modified_at`, writes the draft to
+IndexedDB, and downloads `<drillhole>.json`. If the write fails, the download
+still runs and the draft stays queued for retry.
 
-tableNavigation.ts
-- arrow-key cell navigation and Delete-to-clear detection
-- the "key already handled" marker shared by cell and table handlers
-- focusCellInRow(tbody, rowId, columnKey) and the row/column lookups it needs
-- hasLostFocus(): tells a dropped caret apart from a deliberate move
+### Import JSON
 
-rawLithoHelpers.ts
-- normalizeRawLithoDocument / touchRawLithoDocument (the canonical shape)
-- readRawLithoImport (parse + validate a file), exportRawLithoSnapshot
-- getNextRowId, isStandardRawLithoDocument (legacy-draft detection)
+Import JSON only works when no drillhole is selected, so an import cannot
+replace the hole you are editing by accident.
 
-rawLithoImportService.ts
-- prepareRawLithoImport: full validation with zero writes
-- applyRawLithoImport: writes only after confirmation
-- buildImportConfirmationMessage
-```
+First, `prepareRawLithoImport()` in `rawLithoImportService.ts` checks the file
+without writing anything. It is rejected ("Couldn't import the file") if it is
+not a readable JSON object, lacks any of `project`, `campaign`, `drillhole`,
+`created_at`, `modified_at` or `rows`, has a non-array `rows` or a row that is
+not an object, has an empty `drillhole`, has a `created_by` or `edited_by` that
+is not text, or holds a lookup code missing from the loaded lists (lists that
+failed to load are skipped).
 
----
+A valid file opens the "Import this JSON file?" dialog with the drillhole and
+row count, plus a warning if that drillhole already has saved data. Import
+writes the file through `rawLithoSaveQueue.commitImport`, shows "File
+imported", then opens the drillhole through `handleDrillholeChange` in
+`RawLitho.tsx`, the same as selecting it. Row fields become strings, unknown
+keys are dropped, bad row ids are replaced, and rows are sorted by Litho From.
 
-## Table columns
+## Data rules
 
-`rawLithoSchema.ts` defines all 20 persisted fields, their keyed column definitions
-and defaults. `constants.ts` re-exports `columns`; `tableColumns` controls which are
-displayed; it is built from `config.yaml` (order, label, width, compact,
-`visible`). Widths are proportions turned into percentages, so the table fits
-the page without horizontal scrolling; `table.minWidth` (760 px) is a readability
-floor below which the table scrolls inside its frame. The Database Viewer reads
-the same columns, so both tables always match. Six are intentionally `visible: false` and marked "do not delete" for
-future use (`extractionType`, `corePass`, `recoveryStart`, `recoveryEnd`,
-`coreEnd`, `lithologicalDescription`). They still exist in state, JSON, and
-IndexedDB.
+### Columns
 
-Displayed left to right, with `Ins` (the derived row number) first:
+`src/types/rawLithoSchema.ts` defines all 20 stored fields. `config.yaml`
+decides which are shown, in what order, with what label and width. Widths are
+proportions, so the table fits the page; below `table.minWidth` (760 px) it
+scrolls inside its frame. Six fields are hidden with `visible: false` and kept
+for later use: `extractionType`, `corePass`, `recoveryStart`, `recoveryEnd`,
+`coreEnd` and `lithologicalDescription`. They still exist in state, JSON and
+IndexedDB, so do not delete them. Visible columns, after the `Ins` row number:
 
-| Column | Field | Input | Required | Source |
+| Column | Field | Input | Required | List source |
 | --- | --- | --- | --- | --- |
-| Litho From (m) | `lithoFrom` | number | ✅ | — |
-| Litho To (m) | `lithoTo` | number | ✅ | — |
-| Litho Code | `lithoCode` | lookup | ✅ | `/api/table-constants` → `lithoCode` |
-| Color Code | `colorCode` | lookup | ✅ | `/api/table-constants` → `colourCode` |
-| CA | `ca` | lookup | | `/api/table-constants` → `caCode` |
-| OM | `om` | lookup | | `/api/table-constants` → `omCode` |
-| OM Facies | `omFacies` | lookup | | `/api/table-constants` → `omFaciesCode` |
-| PY | `py` | lookup | | `/api/table-constants` → `pyCode` |
-| OX | `ox` | lookup | | `/api/table-constants` → `oxCode` |
-| Sedim | `sedim` | lookup | | `/api/table-constants` → `sedimCode` |
-| Redox Code | `redoxCode` | lookup | ✅ | `/api/table-constants` → `redoxCode` |
-| Lithology Comments | `lithologyComments` | text | | — |
-| Granulo | `granulo` | lookup | | local digits 0–9 |
-| Hardness | `hardness` | lookup | | local digits 0–9 |
+| Litho From (m) | `lithoFrom` | number | yes | |
+| Litho To (m) | `lithoTo` | number | yes | |
+| Litho Code | `lithoCode` | lookup | yes | `lithoCode` |
+| Color Code | `colorCode` | lookup | yes | `colourCode` |
+| CA | `ca` | lookup | | `caCode` |
+| OM | `om` | lookup | | `omCode` |
+| OM Facies | `omFacies` | lookup | | `omFaciesCode` |
+| PY | `py` | lookup | | `pyCode` |
+| OX | `ox` | lookup | | `oxCode` |
+| Sedim | `sedim` | lookup | | `sedimCode` |
+| Redox Code | `redoxCode` | lookup | yes | `redoxCode` |
+| Lithology Comments | `lithologyComments` | text | | |
+| Granulo | `granulo` | lookup | | digits 0 to 9, local |
+| Hardness | `hardness` | lookup | | digits 0 to 9, local |
 
-Required columns show a red `*` in the header. An empty required cell gets the
-`raw-litho-cell--missing` class (pink fill and ring) while the page is enabled.
+The list source is the key in the `/api/table-constants` response (see
+`src/services/rawLithoLookupConfig.ts`).
 
----
+### Required fields
 
-## Conditional rules
+The required fields are `lithoFrom`, `lithoTo`, `lithoCode`, `colorCode` and
+`redoxCode` (`REQUIRED_COLUMN_KEY_LIST` in `constants.ts`). Required headers
+show a red `*`, and an empty required cell is filled pink. "Empty" has one
+definition, `hasValue()` in `rawLithoValidation.ts`: `"0"` counts as a value,
+while blank or whitespace-only text is empty.
 
-Four rules decide which attribute a row needs, or must leave empty, from its
-Litho and Redox codes. They live in one place, `findConditionalRuleIssues` in
-`rawLithoValidation.ts`, which Upload Data uses too.
+### Checks before a new row
+
+`findRowIssue()` in `rawLithoValidation.ts` checks the last row in this order
+and stops at the first problem:
+
+| Order | Problem | Caret goes to |
+| --- | --- | --- |
+| 1 | a required field is empty | the first empty required field |
+| 2 | a depth is not a number, or From is greater than To | Litho To |
+| 3 | the same From and To pair already exists | Litho To |
+
+Committing a depth that makes From greater than To puts the previous depth back.
+
+### Duplicate intervals
+
+Two rows may not share the same Litho From and Litho To. The comparison is
+numeric, so `120` and `120.0` match. Half-typed intervals are never duplicates,
+and overlapping intervals are allowed. Both rows of a pair get orange depth
+cells (`findDuplicateIntervalRowIds()`) until one of them changes.
+
+### Conditional rules
+
+Four rules decide which attribute a row needs, or must leave empty, based on its
+Litho and Redox codes. They live in `findConditionalRuleIssues()` in
+`rawLithoValidation.ts` (codes in `CONDITIONAL_RULE_CODES`), and Upload Data
+uses the same function.
 
 | Rule | When | Then |
 | --- | --- | --- |
@@ -223,1129 +203,185 @@ Litho and Redox codes. They live in one place, `findConditionalRuleIssues` in
 | 3 | Redox is `O` `Y` `lY` `lGrB` `GnRd` `BrGn` | OX is required |
 | 4 | Redox is `Bl` `dGn` `Gr` `WGr` `GrGn` `GnGr` | OX must be empty |
 
-- **Empty** has one definition, `hasValue`: `"0"` and `0` are values;
-  `null`, `undefined` and whitespace-only text are empty.
-- Codes match exactly (case-sensitive; surrounding spaces ignored).
-- **When.** Each row is checked on its current values whenever it renders, so
-  typing, choosing from a list, inserting a row, single and multi-cell paste
-  and import all behave the same, and a paste that sets Redox and OX together
-  is judged on the final combination. Only the rows on the page are checked
-  while editing; nothing scans the whole table per keystroke.
-- **Shown as** the cell that must change (OM Facies, CA or OX) in red
-  (`raw-litho-cell--rule`), the message as its tooltip. Fixing the value
-  clears it. Values are never changed or cleared automatically; copying
-  changes nothing.
-- **Save** (which also exports the final JSON) is blocked while any row breaks
-  a rule: a warning toast names the first row and rule. The draft keeps
-  autosaving with every edit intact. Upload Data treats a broken rule as a
-  blocking error.
+Codes match exactly (case-sensitive, surrounding spaces ignored). The cell that
+must change turns red and its tooltip gives the message. The page never fills
+in or clears a value for you. A broken rule does not stop editing or autosave;
+it only blocks Save JSON. Upload Data treats it as a blocking error.
 
-## Row ordering
+### Lookup codes
 
-Rows are always displayed and stored in **Litho From ascending** order,
-regardless of the order they were typed in.
+Each lookup cell only accepts a code from its list. The list opens on focus with
+an `Empty` choice first, which stores `""`. Typing filters and ranks matches;
+Enter or a mouse click confirms one. Tab and the arrow keys never accept a
+highlighted suggestion. Text that matches nothing is flagged "Select a valid
+value" when you leave the cell and is not saved over the old value. Pasted and
+imported codes match case-insensitively and are stored in the list's own
+spelling.
 
-```text
-entered                      shown and stored
-10 → 15                      10 → 15
-15 → 20        becomes       13 → 15
-13 → 15                      15 → 20
-```
+`LookupAutocomplete.tsx` is shared with Upload Data. `isEnabled` turns the
+cell on, and the optional `inputData` prop passes `data-*` attributes to the
+input. A cell with an empty list shows `No values` and is disabled.
 
-### The rule
+Lithology Comments drops leading spaces (`normalizeFieldValue()` in
+`rawLithoHelpers.ts`) and keeps the rest. Codes and depths are trimmed.
 
-`sortRowsByLithoFrom(rows)` in `rawLithoSorting.ts` is the only sorting code in
-the page. Everything else calls it.
+## Keyboard
 
-| Step | Key | Direction | Notes |
-| --- | --- | --- | --- |
-| 1 | `lithoFrom` | ascending | Compared as **numbers**: `2`, `10`, `100` — never as text. |
-| 2 | `lithoTo` | ascending | Tie-breaker only, used when two rows start at the same depth. Never the primary key. |
-| 3 | original position | — | `Array#sort` is stable, so rows that compare equal keep their relative order. Ordering is deterministic; nothing shuffles randomly. |
+The Shortcuts popup (the "Help and shortcuts" button,
+`src/components/KeyboardShortcuts.tsx`) is the source of truth for keys. If you change a handler, update that list too.
 
-Rows whose `lithoFrom` is empty — or not a number — sort to the **bottom**, so a
-new or half-filled row never pushes a valid interval down:
-
-```text
-10 → 15
-13 → 15
-15 → 20
-(empty)      ← stays last
-```
-
-An empty `lithoTo` sorts last *within* its own `lithoFrom` group, on the same
-principle.
-
-### Whole rows move
-
-The comparator reorders row objects, never individual values. When a row moves,
-every field travels with it — Litho Code, Colour Code, Redox, CA, OM, OM Facies,
-PY, OX, Sedim, Granulo, Hardness, comments, and the row's `id`. The same object
-reference is reused, so nothing can be copied to the wrong row.
-
-### When sorting runs
-
-| Trigger | Where |
+| Keys | What it does |
 | --- | --- |
-| Litho From / Litho To committed on **blur** | `commitDepthEdit` |
-| Litho From / Litho To committed with **Enter** | `commitDepth` in `RawLithoRow.tsx` → `commitDepthEdit` |
-| Moving to another cell (arrow keys, Tab) | the resulting blur |
-| Add Row button, **F4**, **Tab**, **ArrowDown** | `tryAddRow` |
-| JSON import | `readRawLithoImport` |
-| IndexedDB restore | the draft loader |
-
-### Not while typing
-
-Sorting never runs on a keystroke. `updateRow` — the per-character handler —
-does not sort, so a row cannot jump out from under the caret mid-edit. The value
-has to settle first (blur, Enter, or leaving the cell).
-
-`sortRowsByLithoFrom` returns the **same array reference** when nothing moved.
-Callers compare references and skip the state update entirely, so committing a
-value that does not change the order costs no re-render, no focus movement and
-no IndexedDB write.
-
-### Focus survives reordering
-
-Rows are keyed and addressed by `row.id`, never by array index. Each `<tr>`
-carries `data-row-id` and each `<td>` carries `data-column`, so any cell can be
-found again after the rows move.
-
-`useRawLithoRowFocus` tracks the cell the user is in (via the table body's
-`onFocus`) and, when the row order changes:
-
-1. does nothing if focus is still on a real element — a deliberate move to the
-   Save button or another cell is never stolen back;
-2. otherwise re-focuses the tracked cell **by row id**, because browsers drop
-   focus when a focused element is relocated in the DOM;
-3. if that row is now on another page, switches to that page first and focuses
-   once it has rendered.
-
-A row that moves across a page boundary therefore takes the caret with it.
-
-### Sorting happens before pagination
-
-The whole dataset is sorted in state; pagination only slices the sorted array
-for rendering. Pages are never sorted individually, so a row can never appear
-on the wrong page.
-
-```text
-all rows  →  sortRowsByLithoFrom  →  slice into pages of 50  →  render one page
-```
-
-`tryAddRow` computes the new row's page from its position *after* sorting, so
-the view follows a created row wherever it lands.
-
-### The stored order matches the view
-
-The sorted array is what the debounced auto-save writes, so IndexedDB and the
-table never disagree. Two extra guarantees:
-
-- **Import** is sorted inside `readRawLithoImport`, before the confirmed
-  document is written, so the stored draft and the rendered table come from the
-  same array.
-- **Restore** sorts the loaded draft, and rewrites it when the stored order was
-  stale — `needsDraftRewrite` triggers on a legacy shape *or* on
-  `!isRowOrderSorted(rows)`. Reordering on load does not bump `modified_at`;
-  it is not a user edit.
-
-### Interaction with validation
-
-Sorting cannot be used to slip past validation. The rules are unchanged and run
-on the sorted rows:
-
-- Duplicate `lithoFrom`/`lithoTo` pairs are still rejected, still warn, still
-  lock focus, and still block row creation.
-- Both rows in a duplicate pair keep their `raw-litho-cell--duplicate`
-  highlight after they move.
-- `tryAddRow` validates the **last** row, which after sorting is the deepest
-  interval — the natural row to continue from, and the row `createRowFromPrevious`
-  copies its values from.
-- A row whose `lithoFrom` was cleared sinks to the bottom and becomes the row
-  `tryAddRow` validates, so it blocks creation until it is fixed. That is
-  intended: it is an invalid row.
-- An inverted range (`lithoFrom > lithoTo`) is reverted first; the reorder then
-  runs on the corrected values.
-
-## Row creation
-
-### Required fields
-
-A new row is created only when **all five** required fields of the current last
-row are filled. Whitespace-only counts as empty.
-
-```text
-Litho From · Litho To · Litho Code · Color Code · Redox Code
-```
-
-`REQUIRED_COLUMN_KEY_LIST` in `constants.ts` is ordered, which is what lets
-validation report the *first* missing cell so focus can land on it.
-
-### Validation order
-
-`findRowIssue(row, rows)` in `rawLithoValidation.ts` returns the first blocking
-issue, or `null`. Order matters — the depth-range check only runs once both
-depth fields are non-empty.
-
-| Order | Issue | Condition | Cell focused | Toast |
-| --- | --- | --- | --- | --- |
-| 1 | `missingRequiredFields` | any required field empty | first missing field | "Fill Litho From, Litho To, Litho Code, Colour Code and Redox Code before adding a new row." |
-| 2 | `invalidDepthRange` | a depth is not finite, or `lithoFrom > lithoTo` | `lithoTo` | "Invalid Litho depth range" |
-| 3 | `duplicateInterval` | same `lithoFrom`/`lithoTo` pair exists in another row | `lithoTo` | "This Litho From / Litho To interval already exists. Please change the interval before continuing." |
-
-### Duplicate intervals
-
-The same Litho From / Litho To combination must not appear in two rows:
-
-```text
-Existing row:   Litho From = 120   Litho To = 150
-Current row:    Litho From = 120   Litho To = 150     ← rejected
-```
-
-Details of the rule (`isDuplicateInterval`):
-
-- Comparison is **numeric**, so `120` and `120.0` are the same interval.
-- A row is never a duplicate of itself (compared by `row.id`).
-- An **incomplete** interval is never a duplicate, so partially typed rows are
-  not flagged while the user is still typing.
-- Only the exact pair matters. Overlapping but unequal intervals are allowed.
-
-`findDuplicateIntervalRowIds(rows)` returns the ids of **every** row taking part
-in a duplicate, so both the original and the copy are highlighted with
-`raw-litho-cell--duplicate` (orange fill and ring) on their two depth cells.
-Values stay visible and editable.
-
-### Focus locking
-
-When creation is rejected, `requestAddRow` in `RawLithoTable.tsx`:
-
-1. does not create a row,
-2. calls `event.preventDefault()` so Tab and ArrowDown cannot move focus out,
-3. moves focus to `focusField` **in the row identified by `rowId`**,
-4. if that row is on a different page, switches page first and focuses the cell
-   once it has rendered.
-
-The user can only advance once the row is valid. Add Row, F4, Tab, and
-ArrowDown are all blocked identically.
-
-### Copied values
-
-`createRowFromPrevious(previousRow, id)` in `constants.ts` builds the new row:
-
-| New field | Value |
-| --- | --- |
-| `lithoFrom` | previous row's `lithoTo` (keeps intervals contiguous) |
-| `lithoCode` | copied |
-| `colorCode` | copied |
-| `redoxCode` | copied |
-| `ox` | copied |
-| everything else | `""` |
-
-The four copied fields are listed in `ROW_COPY_FIELD_KEYS`. `CA`, `OM`,
-`OM Facies`, `PY`, `Sedim`, `Granulo`, `Hardness`, and both comment fields are
-**not** copied. This applies to all four creation paths.
-
-```text
-Previous row:  From 10  To 15  Litho SS  Color GY  Redox OX  OX 3  CA CA1
-                   ↓ Add Row / F4 / Tab / ArrowDown
-New row:       From 15  To __  Litho SS  Color GY  Redox OX  OX 3  CA ___
-```
-
-Because `lithoTo` starts empty, the newly created row is immediately invalid,
-which stops a held-down key from creating a run of blank rows.
-
-The new row is then sorted into position with the rest. Since its `lithoFrom`
-continues the deepest row's `lithoTo`, it normally lands at the end — but if a
-row with an empty `lithoFrom` is sitting at the bottom, the new row is placed
-above it.
-
-### Centralised path
-
-All four routes converge on one function, so validation, warnings, copying, and
-persistence cannot drift apart:
-
-```text
-Add Row button ─┐
-F4             ─┤
-Tab            ─┼─▶ RawLithoTable.requestAddRow()   (owns focus)
-ArrowDown      ─┘        │
-                         ▼
-              useRawLithoWorkspace.tryAddRow()      (owns validation + state)
-                         │
-                         ├─ findRowIssue() → toast + { created: false, rowId, focusField }
-                         └─ createRowFromPrevious()
-                              → sortRowsByLithoFrom()
-                              → commitDocument → stage latest snapshot → debounced IndexedDB write
-```
-
-`tryAddRow()` returns `{ created, rowId, focusField }`. It is the only place
-that appends a row. `rowId` identifies the new row, or the row that blocked
-creation, so the caller moves focus by id rather than by position — positions
-change when the rows are reordered.
-
----
-
-## Notifications
-
-One toast component, one confirmation component, one message catalogue. No
-action builds its own notification.
-
-| Piece | Location |
-| --- | --- |
-| Toast component | `src/components/Toast.tsx` (Tailwind; keyframes in `css/index.css`) |
-| Toast state | `src/hooks/useToast.ts` (`showToast` / `hideToast`) |
-| Toast durations | `src/config/ui.yaml` → `uiConfig.toastDuration` |
-| Message catalogue | `TOAST_NOTIFICATIONS` in `constants.ts` |
-| Confirmation modal | `ConfirmDialog.tsx` |
-| Remove confirmation flow | `hooks/useRemoveRowConfirmation.ts` |
-| Both rendered by | `RawLitho.tsx` |
-
-### Showing a toast
-
-`showToast` takes an entry from the catalogue rather than a loose string, so
-the message and type always travel together. How long it stays is never set
-by the caller: it comes from `config/ui.yaml` by type (error 5000 ms, warning
-3000 ms, success 3000 ms, info 3000 ms), the same on every page:
-
-```js
-showToast(TOAST_NOTIFICATIONS.rowAdded);
-```
-
-`useToast` keeps **one** notification at a time; a new one replaces the current
-one. Each gets an incrementing id used as the React key, so showing the same
-message twice restarts the animation and timer instead of looking like nothing
-happened.
-
-Messages are 2-5 words. Detail belongs where it can be acted on — the pink
-missing-required cells, the orange duplicate cells, or a dialog — not in a
-toast.
-
-### Toast types
-
-| Type | Meaning | Icon | Accent |
-| --- | --- | --- | --- |
-| `success` | the action completed | ✓ | green |
-| `warning` | refused, the user can fix it | ! | amber |
-| `error` | something failed unexpectedly | ✕ | `--rl-danger` |
-| `info` | neutral status, nothing to act on | i | navy |
-
-Colour is never the only signal: each type has its own glyph. `error` and
-`warning` render as `role="alert"` with `aria-live="assertive"`; `success` and
-`info` as `role="status"` / `polite`.
-
-The toast is a white card with navy text, a coloured accent bar and a matching
-icon badge — pinned top-centre, capped at 360px (longer text wraps), and it slides down and fades
-in over 180ms. It sets `pointer-events: none` so it can never intercept a click
-on the table beneath it, and animations collapse to 1ms under
-`prefers-reduced-motion`.
-
-### Catalogue
-
-| Key | Message | Type | Raised when |
-| --- | --- | --- | --- |
-| `rowAdded` | Row added | success | a row was created |
-| `rowRemoved` | Row removed | success | the last row was removed and stored |
-| `saveSuccess` | Changes saved | success | Save wrote and exported |
-| `saveFailed` | Save failed | error | Save's write or export threw |
-| `actionFailed` | Action failed | error | a confirmed removal failed to persist |
-| `importSuccess` | Import complete | success | an import was applied |
-| `importFailed` | Import failed | error | the file was rejected |
-| `importCancelled` | Import cancelled | info | the import dialog was cancelled |
-| `importNeedsLookupCorrection` | Fix lookup codes | warning | imported rows hold unknown codes |
-| `cachedDrillholesLoaded` | Using offline data | info | drillholes came from the cache |
-| `drillholeCacheFailed` | Offline cache failed | warning | the drillhole cache write failed |
-| `draftSaveFailed` | Changes not saved | error | auto-save failed |
-| `draftLoadFailed` | Could not load data | error | the draft could not be read |
-| `missingRequiredFields` | Complete required fields | warning | a required cell is empty |
-| `duplicateInterval` | Duplicate interval | warning | the interval already exists |
-| `invalidDepthRange` | Invalid depth range | warning | Litho From is past Litho To |
-| `invalidLookupValue` | Invalid lookup codes | warning | Save blocked by unknown codes, or a paste holds one |
-| `cellsCopied` | Cells copied | info | selected cells were copied |
-| `invalidPasteValue` | Invalid pasted value | warning | a pasted depth is not a number |
-| `pasteShapeMismatch` | Selection does not match clipboard | warning | multi-value paste into a selection of another shape |
-| `pasteOutOfRange` | Paste exceeds table | warning | the pasted block runs past the last row or column |
-| `pasteNotEditable` | Cells not editable | warning | the pasted block covers a disabled cell |
-| `clipboardUnavailable` | Clipboard unavailable | error | the browser refused clipboard access |
-
-`missingRequiredFields`, `duplicateInterval` and `invalidDepthRange` are also
-raised by a rejected paste.
-
-### Row added
-
-`tryAddRow` raises `rowAdded` on the success path only — after validation has
-passed and the row is in state. All four creation routes go through it, so the
-Add Row button, F4, Tab and ArrowDown all report identically and none of them
-needs its own toast call.
-
-A rejected attempt shows the matching warning instead
-(`missingRequiredFields`, `duplicateInterval`, `invalidDepthRange`) and never a
-success toast.
-
-### Removing the last row
-
-Removal always asks first. The button and F5 both call
-`requestRemoveLastRow`, so neither can delete anything on its own:
-
-```text
-Remove Last Row button ─┐
-F5                     ─┴─▶ requestRemoveLastRow()
-                                    │
-                            confirmation dialog
-                            "Remove last row?"
-                            "This row will be deleted."
-                                    │
-              ┌─────────────────────┴─────────────────────┐
-           Cancel                                      Remove
-              │                                           │
-      dialog closes                            removeLastRow()
-      table untouched                          → row dropped
-      nothing written                          → draft written (awaited)
-      no toast                                          │
-                                              ┌─────────┴─────────┐
-                                          resolved true      resolved false
-                                              │                   │
-                                        "Row removed"      "Action failed"
-                                          (success)            (error)
-```
-
-`removeLastRow` in `useRawLithoWorkspace.ts` is `async` and resolves `true`
-only once `writeRawLithoDraft` has succeeded, which is what lets the flow
-promise that a "Row removed" toast means the change is actually stored. While
-the write is in flight the confirm button reads "Removing…" and both buttons
-are disabled.
-
-Escape cancels, exactly like the Cancel button. The table always keeps at least
-one row: at a single row the button is disabled and F5 does not even open the
-dialog.
-
-### Dialog appearance
-
-`ConfirmDialog` is shared, so both confirmations look the same: a 400px white
-card, 12px radius, navy title, muted message, layered shadow, on a navy
-translucent backdrop, sliding in over 180ms.
-
-The destructive action is unmistakable — Cancel is a neutral white/navy
-outline button, Remove is solid `--rl-danger` with a tinted shadow. Both have
-hover, active (1px press), and `:focus-visible` states on the shared
-`--rl-motion` transition; the Remove button's focus ring is red rather than
-navy.
-
-Focus starts on **Cancel** for the removal dialog, so Enter cannot delete a row
-by reflex. The import dialog passes `initialFocus="confirm"` and shows a replacement warning
-when the target drillhole already has a stored draft. Either way, focus returns to whatever opened the
-dialog when it closes.
-
-### Shortcuts are blocked behind a dialog
-
-`RawLitho.tsx` passes
-`isBlocked = pendingImport || removal.isConfirmOpen || isSaving` to the table,
-which stops F4, PageUp and PageDown while a modal is open. F5 is still
-swallowed so it can never refresh the browser.
-
-## Keyboard behaviour
-
-### Shortcuts
-
-Registered by `useRawLithoShortcuts.ts` on a `window` `keydown` listener added
-on mount and removed on unmount, so the shortcuts exist **only** while Raw Litho
-is the active route.
-
-| Key | Action | Notes |
+| `Tab` / `Shift`+`Tab` | next or previous cell |
+| `←` / `→` | cell left or right when the caret is at the edge of the text |
+| `↑` / `↓` | row above or below |
+| `PgUp` / `PgDn` | previous or next page |
+| `Esc` then `Tab` | leave the table |
+| `F2` | move through a dropdown list (Up and Down browse, Enter confirms, Esc cancels) |
+| `Delete` | clear the cell |
+| `Esc` | close a list, clear the cell selection |
+| `Ctrl`+click | select several cells |
+| `Ctrl`+`C` / `Ctrl`+`V` | copy or paste cells |
+| `F4` | add row |
+| `Tab` / `↓` from the last cell | add row |
+| `F5` | remove last row (asks first) |
+| `↑` / `↓`, `Esc` in drillhole search | move through or close the list |
+
+Navigation skips disabled cells, carries on to the next or previous row, and
+crosses pages; `Shift`+`Tab` stops at the first cell. A cell focused from the
+keyboard has its whole value selected, so one arrow press moves on; click into
+the text for normal editing. Enter in a depth cell commits and re-sorts without
+leaving the cell.
+
+`F4`, `F5`, `PageUp` and `PageDown` only work while Raw Litho is open
+(`useRawLithoShortcuts.ts`), and any modifier lets the key through, so
+`Ctrl`+`F5` still reloads. A plain `F5` never refreshes the page, so it cannot
+lose edits waiting for autosave. While a dialog is open or Save runs, `F4` and
+paging are ignored.
+
+### Copy and paste
+
+`Ctrl`+click toggles cells into a selection, anywhere in the table. A plain
+click elsewhere or `Esc` clears it. Copy writes tab-separated text for the
+rectangle around the selection, with unselected cells left blank. Paste takes
+tab and newline separated text, such as a block from Excel. A single cell
+receives the block at its top-left corner, one value fills every selected
+cell, a selection of the same shape maps cell for cell, and any other shape is
+rejected.
+
+A paste is all or nothing. It is rejected, and no cell changes, if it runs past
+the last row or column (paste never adds rows), touches a disabled cell, puts
+text in a depth or an unknown code in a lookup, empties a required field, or
+creates an inverted or duplicate interval. Planning is in `planPaste()`
+(`rawLithoClipboard.ts`); the edit is applied by `applyCellEdits()`
+(`rawLithoDocumentOperations.ts`).
+
+## Where the data is stored
+
+Everything is stored in the browser's IndexedDB on this PC, in the database
+`raw-litho-db` (version 4, opened through
+`src/services/IndexDB/rawLithoDatabase.ts`):
+
+| Store | Key | Holds |
 | --- | --- | --- |
-| `F4` | Add Row | Same `tryAddRow` path as the button. Ignored while disabled or blocked. |
-| `F5` | Remove Last Row | Opens the confirmation dialog — it never deletes on its own. Browser refresh is always prevented while the page is mounted, so a stray F5 cannot discard edits still inside the auto-save debounce. Does not open the dialog when only one row remains. |
-| `PageUp` | previous page | No-op on the first page. |
-| `PageDown` | next page | No-op on the last page. |
+| `drafts` | drillhole id | that drillhole's document, rows in Litho From order |
+| `session` | `active-raw-litho-session` | the open drillhole and page |
+| `session` | `recent-drillholes` | selection history, most recent first |
+| `drillholeCache` | `all-drillholes` | last drillhole list from the server |
 
-Any modifier (Alt / Ctrl / Meta / Shift) makes the handler ignore the key, so
-`Ctrl`+`F5` still performs a hard refresh.
+Dropdown lists are cached in a separate database, `raw-litho-lookup-cache-db`.
+The cached copy shows at once and the server copy replaces it; if the server is
+down, the cache stays. The `Ins` number is not stored; it is the row position.
 
-Shortcuts are suppressed while `isBlocked` is true — during a save, or while
-either the import or the remove confirmation dialog is open — except for F5,
-which stays swallowed.
+### Autosave and loading
 
-### Navigation inside the table
+Each edit is written about 400 ms after you stop typing. The save queue
+(`src/services/IndexDB/rawLithoSaveQueue.ts`) writes one drillhole at a time
+and keeps a failed snapshot for retry. The page retries every 2 seconds and
+also flushes when the browser comes back online, the tab is hidden or closed,
+you leave the page, or you switch drillholes. Flushing on close is best effort,
+and two browser tabs on the same drillhole do not coordinate.
 
-| Key | Behaviour |
-| --- | --- |
-| `←` / `→` | Move to the previous / next editable cell, when the whole cell value is selected or the caret is at the edge of the current value, so normal text editing still works. Disabled cells are skipped, the end of a row continues on the next row (and the start on the previous row), and the edge of a page continues on the adjacent page. |
-| `Tab` / `Shift`+`Tab` | Exactly like `→` / `←`, except that they always leave the cell regardless of the caret. Leaving a lookup cell never confirms a highlighted suggestion. `Shift`+`Tab` stops at the first editable cell of the document without changing focus. |
-| `←` / `→` / `Tab` / `Shift`+`Tab` in a lookup cell with an open dropdown (typed or empty) | Move focus without changing the committed value. Empty cells remain empty. |
-| `↑` / `↓` | Move one cell vertically in the same column. On `number` inputs the default spinner behaviour is suppressed. After F2 in a lookup cell, these keys browse options instead. |
-| `↓` on the last row | No cell below, so the table creates the next row and focuses it — from a lookup cell as well as a plain one. |
-| `Tab` from the last editable cell of the final row | Creates one row through the same validated path as ArrowDown, then focuses its first editable cell. |
-| `Enter` | In a Litho From / Litho To cell, commits the value and reorders the rows without leaving the cell. |
-| `Delete` | Clears the cell when the whole value is selected, the caret is at the end, or the cell is already empty. Otherwise the browser default applies. |
-| `Escape` (lookup cell) | Reverts the typed text and closes the dropdown. |
-| `Escape` (any cell) | Clears cell selection and releases Tab navigation to the browser. Re-entering the table or clicking a cell resumes table navigation. |
-| `Space` | Types normally; leading whitespace in Lithology Comments is removed by the shared normalizer. |
-| `F2` (lookup cell) | Enters option-selection mode: Up/Down browse, Enter confirms, Escape cancels. |
+If a draft cannot be read, editing stays disabled and nothing is written over
+it. Loading retries every 2 seconds, or at once when you select the drillhole
+again. Coming back to the page restores the last drillhole and page.
 
-All four horizontal keys share one mechanism: `getHorizontalStep(event)` in
-`tableNavigation.ts` turns the key into `+1`, `-1` or `0`. The cell handler
-(`handleCellNavigation`) moves within the rendered page; when it finds no
-neighbour the event bubbles to `handleTableKeyDown`, which asks the same
-function and continues in the adjacent row on the next / previous page through
-`focusRowCell` (rows addressed by id, page switched first, cell focused — and so
-scrolled into view — after the render). Shift+Tab stops at the document start; neither direction wraps.
-Tab at the final editable cell, ArrowDown on the final row, F4, and Add Row all
-reuse `requestAddRow`, including validation, defaults, pending focus, and IndexedDB
-autosave. Successful focus requests scroll the destination into view.
+### Who created and edited it
 
-Navigation indexes logical table cells, with one primary editor per cell.
-Secondary inputs, wrappers, and dropdown triggers never become extra stops.
-The currently active cell determines the starting position, and handled native
-key events are ignored by later handlers. Already focused destinations do not
-trigger another focus call or a fallback to a different cell.
+The document can carry `created_by` and `edited_by`, the Windows user from
+`useCurrentUser()`. `created_by` is set once, when a new blank document is first saved. `edited_by`
+is set in `commitDocument` on every committed change (edits, pastes, added or
+removed rows, Save JSON). Selecting, restoring and paging do not change it.
+With no known user, neither field is guessed. Older files without them load as
+before, and the backend ignores both on upload.
 
-### Comment cells
+## Toast messages
 
-`normalizeFieldValue` in `rawLithoHelpers.ts` removes leading whitespace
-from `lithologyComments` with `trimStart()`. Whitespace-only comments become
-empty, while internal and trailing spaces remain intact. This same normalizer
-runs for manual edits, single/multi-cell paste, imported/restored documents,
-autosave, and JSON export. The hidden `lithologicalDescription` retains its
-existing behavior. Codes and depths remain trimmed on load.
+All messages live in `TOAST_NOTIFICATIONS` in `constants.ts` and are shown with
+`showToast(TOAST_NOTIFICATIONS.<key>)` from `src/hooks/useToast.ts`. Only one
+toast shows at a time. How long it stays depends on its type
+(`src/config/ui.yaml`: error 5000 ms, the others 3000 ms).
 
-### Cell selection, copy and paste
-
-| Action | Behaviour |
-| --- | --- |
-| `Ctrl` + click (`⌘` + click on macOS) | Adds the cell to the selection, or removes it if it was already selected, and focuses it. Cells may be in any row or column and need not touch. |
-| Plain click on a selected cell | Keeps the selection. |
-| Plain click anywhere else (inside or outside the table) | Clears the selection. |
-| `Escape` | Clears the selection. |
-| `Ctrl` + `C` with a selection | Copies the selected cells (see below). |
-| `Ctrl` + `V` with a selection | Pastes into the selection (see below). |
-| `Ctrl` + `C` / `Ctrl` + `V` without a selection | Native input behaviour. A clipboard holding several cells (from Excel) pasted into a focused cell is the one exception: it pastes as a block from that cell. |
-
-The selection is a list of `{ rowId, columnKey }`, never DOM positions, so the
-highlight follows its rows through sorting and paging. Selecting does not change
-any value. The handlers listen to the `copy` / `paste` events on the table body
-only, so nothing outside the table and no browser shortcut is affected.
-
-**Copy.** The clipboard gets tab-separated columns and newline-separated rows in
-table column order, covering the bounding rectangle of the selection. Unselected
-cells inside that rectangle are written as empty strings, so they keep the
-selected cells' relative positions without exposing their values. Tabs and line
-breaks inside a value become spaces in the clipboard text only.
-
-**Paste.** Tabs separate columns, newlines separate rows, and one trailing line
-break (as Excel writes) is ignored.
-
-| Selection | Clipboard | Result |
+| Key | Message | Type |
 | --- | --- | --- |
-| one cell (or none, with a multi-cell clipboard) | any | The block is pasted with its top-left corner on that cell. |
-| several cells | one value | The value fills every selected editable cell; disabled cells are skipped. |
-| several cells forming a contiguous rectangle of the clipboard's shape | several values | Cell-for-cell mapping. |
-| any other shape | several values | Rejected — "Selection does not match clipboard". |
-
-A paste is all-or-nothing. It is planned by `planPaste` in
-`rawLithoClipboard.ts` and applied by `applyCellEdits` in
-`rawLithoDocumentOperations.ts` as one document edit, and it is rejected with a
-toast — leaving every cell untouched — when:
-
-- the block would run past the last row or column (paste never adds rows);
-- a target is disabled (a lookup with no values loaded);
-- a depth is not a number, or a lookup value is not a known code (codes match
-  case-insensitively and are stored in the lookup's own spelling);
-- it would empty a required field that has a value;
-- it would invert a depth range or create a duplicate interval.
-
-Accepted pastes keep row ids and whole row objects, are re-sorted by
-`sortRowsByLithoFrom()`, and are autosaved to IndexedDB through the normal
-`commitDocument` path.
-
-### Lookup selection and navigation
-
-Every editable lookup opens its full list on focus with muted-grey `Empty`
-first. That choice commits `""`; it is not a placeholder or a default code.
-Selecting keeps input focus. Clicking that same input reopens the closed menu
-and resets the filter to show every option, without changing the stored value.
-Typing filters and ranks non-empty matches by exact, prefix, then substring.
-The empty choice remains available while filtering. Enter confirms the closest
-match, and clicking an option explicitly commits that choice.
-
-Tab, Shift+Tab, and arrows never accept a highlighted suggestion. Unconfirmed
-text remains a draft; leaving it does not overwrite the committed value. A
-non-matching draft is flagged on blur. Empty required cells remain editable
-and fail the existing validation when adding/saving as before.
-
-The default is table navigation. F2 explicitly enters option-selection mode:
-Up/Down move the highlight without committing; Enter confirms, Escape cancels,
-and Tab exits to the adjacent cell without accepting the highlight. After
-selection or refocus the input returns to table navigation. On keyboard entry,
-the whole cell value is selected, so the next horizontal arrow moves in one
-press. A click/caret inside text or a partial selection retains ordinary text
-editing. Alt+Tab is never intercepted.
-
-### How ArrowDown reaches the table
-
-`keydown` bubbles from the input up to the `<tbody>`, so a cell handler runs
-first. Cell handlers call `markKeyAsHandled(event)` once they have used a key,
-and `handleTableKeyDown` skips any event where `isKeyAlreadyHandled(event)` is
-true.
-
-In table-navigation mode, vertical arrows go directly to the adjacent row.
-If no row exists below, ArrowDown bubbles to the table's existing row-creation
-handler. In explicit F2 option-selection mode, the dropdown marks vertical
-keys handled so they cannot also create rows. Tab never commits a suggestion;
-row creation validates the values that were explicitly confirmed.
-
-Only the last page can create rows: `handleTableKeyDown` returns early unless
-`currentPage === totalPages`, because the last rendered row is only the document's
-final row on the final page.
-
----
-
-## Pagination
-
-| Setting | Value |
-| --- | --- |
-| Rows per page | `table.rowsPerPage: 50` in `config.yaml` (`RAW_LITHO_ROWS_PER_PAGE`) |
-| Total pages | `max(1, ceil(rowCount / 50))` |
-| Controls | Previous / Next buttons, `PageUp` / `PageDown` |
-
-Pagination is a pure view concern: it slices the **already-sorted** `rows` for
-rendering and never mutates them, so unsaved edits on other pages survive and no
-row can land on the wrong page. Adding a row jumps to the page holding it after
-sorting; a row that is reordered onto another page takes the caret with it;
-removing rows clamps the current page. Changing pages resets the table's scroll
-position and is written to the `session` store, so the page number is restored on
-the next visit.
-
----
-
-## State
-
-### Local (React)
-
-| State | Owner | Purpose |
-| --- | --- | --- |
-| `rawLithoDocument` | `useRawLithoWorkspace` | The whole document: project, campaign, drillhole, timestamps, rows |
-| `selectedHoleId` | `useRawLithoWorkspace` | Selected drillhole |
-| `currentPage` | `useRawLithoWorkspace` | Active table page |
-| `loadedKey` | `useRawLithoDraftPersistence` | Gate for `isPageEnabled` — the table stays disabled until the draft for the selected drillhole has loaded |
-| `isRestoringSession` | `useRawLithoDraftPersistence` | Suppresses the session write during the initial restore |
-| `isSaving` | `RawLitho.tsx` | Disables Save while it runs |
-| `drillholes`, `isLoading`, `error` | `useDrillholes` | Drillhole list in API order; `RawLitho.tsx` orders it for the selector |
-| `recentHoleIds` | `useDrillholes` | The selection history (up to 20, most recent first), mirrored in `recentHoleIdsRef` so recording a selection does not rebuild the callback |
-| `workingDrafts` | `useWorkingDrillholes` | Drillholes with saved working data → their draft's `modified_at` |
-| `lookupData`, `lookupStatus` | `useRawLithoLookups` | Dropdown records, per-field loading/error |
-| `pendingImport`, `isImporting` | `useRawLithoImport` | Parsed-but-unconfirmed import |
-| `toast` | `useToast` | The single active notification |
-| `isConfirmOpen`, `isRemoving` | `useRemoveRowConfirmation` | Remove-last-row dialog visibility and in-flight write |
-
-`documentRef` points to the current working document between React commits.
-The persistence hook holds readiness, timers and restoration state. The save
-queue retains pending snapshots by drillhole until a committed write succeeds.
-Editing and saving require a successfully loaded draft; import requires an
-empty drillhole selection.
-
-### Persisted (IndexedDB)
-
-Database `raw-litho-db` v4, through `services/IndexDB/rawLithoDatabase.ts`.
-
-| Store | Key | Value |
-| --- | --- | --- |
-| `drafts` | drillhole id | the normalised document |
-| `session` | `"active-raw-litho-session"` | `{ drillhole, page, updatedAt }` |
-| `session` | `"recent-drillholes"` | `{ holeIds, updatedAt }` — the selection history (up to 20), most recent first |
-| `drillholeCache` | `"all-drillholes"` | `{ records, updatedAt }` |
-
-One record per drillhole, replaced on write. Rows are stored in Litho From
-order, matching the table. The `Ins` number is derived from row order and never
-stored, so it renumbers itself when rows move.
-
----
-
-## Persistence behaviour
-
-Each edit stages its document synchronously, then schedules a 400 ms debounce.
-The save queue serializes writes for each drillhole, drains newer snapshots
-received during a write, and keeps failed snapshots available for retry.
-The persistence hook retries pending writes every 2 seconds while mounted, and
-flushes on online, hidden visibility, pagehide, route unmount and drillhole switch.
-Repeated save failures show one notification until a save succeeds.
-
-Loading checks the in-memory pending snapshot before reading IndexedDB. Failed
-or malformed loads leave editing disabled and do not write a blank replacement.
-Loading retries every 2 seconds, or immediately when the drillhole is selected
-again. Valid legacy drafts are normalized and sorted, preserving existing valid
-row IDs; normalized migrations use the same save queue.
-
-Session state is restored before writing the active drillhole/page. A user
-selection made during restoration wins over the asynchronous stored session.
-Clearing the selection removes the active session record.
-
-### Layout
-
-The page is a full-height flex column: the title, then one row with Drillhole
-(the widest control), the read-only Project and Campaign, and Import JSON
-right-aligned with no label of its own (passed to `RawLithoFilters` as
-`actions`), then the table, which takes all the remaining height (`flex-1`)
-and scrolls its rows inside its frame with the header sticky. Under it a single
-bar holds everything else: Add Row and Remove Last Row on the left, the
-pagination group centred (Previous, "Page N of M" with the row range beneath
-it, Next), and Save JSON on the right. From the `lg` breakpoint the bar is a
-`1fr auto 1fr` grid, so the pagination stays centred; below it the pagination
-takes its own centred line under the buttons. All header controls are 30 px
-high and all bar buttons 32 px. No height is fixed, so the table grows and
-shrinks with the window.
-
-```text
-Drillhole               Project     Campaign
-[ Select Drillhole ▼ ]  [ P ]       [ C ]                [ Import JSON ]
-
-[ Add Row (F4) ] [ Remove Last Row (F5) ]   [ Previous ]  Page 1 of 5  [ Next ]   [ Save JSON ]
-                                                         Rows 1–50 of 230
-```
-
-### Created by (`created_by`)
-
-The document has an optional top-level `created_by`, the Windows user
-(`Bek` for a local account, `COMPANY\bek` for a domain account) who created
-the dataset:
-
-```json
-{ "project": "…", "campaign": "…", "drillhole": "…",
-  "created_by": "DOMAIN\\username",
-  "created_at": "…", "modified_at": "…", "rows": [] }
-```
-
-**When it is set**
-- It is stamped once, when selecting a drillhole creates a new, blank document
-  (`buildFallback` → `createBlankDocument`), using the trusted user from
-  `useCurrentUser()`.
-- The identity arrives asynchronously, so it can come after the blank document
-  was created. The persistence hook tells the workspace the document is new
-  (`onLoaded(…, isNew)`), and the workspace then adds the creator in
-  `commitDocument` at the document's first save. That is also when the document
-  is first written to IndexedDB or exported, so the stored and exported file
-  always has it. A document that existed before is never stamped this way.
-- Saves, edits, autosave, IndexedDB restore, import and export keep it
-  unchanged. `normalizeRawLithoDocument` reads it only from the document
-  itself, never from the fallback.
-
-**When it is not set**
-- An existing or imported document without one (older files and drafts) keeps
-  none; the current user is never filled in.
-- A document created and saved while no identity is available has none —
-  for example when the browser did not send Windows credentials to
-  `/api/status?includeUser=true` (see `src/services/README.md`).
-
-**Compatibility**
-- Older JSON files and IndexedDB drafts without the field load as before.
-- An imported `created_by` that is not text is rejected.
-- The backend ignores the field on upload.
-
-### Edited by (`edited_by`)
-
-An optional top-level `edited_by` records the Windows user who made the
-last committed edit. Raw Litho JSON carries only `created_by` and `edited_by`
-— never `imported_by`; the importer is shown on Upload Data only.
-
-```json
-{ "project": "…", "campaign": "…", "drillhole": "…",
-  "created_by": "DOMAIN\creator", "edited_by": "DOMAIN\editor",
-  "created_at": "…", "modified_at": "…", "rows": [] }
-```
-
-- Stamped in `commitDocument` (`useRawLithoWorkspace.ts`) with the trusted
-  current user on every committed change — cell edits, pastes, added or removed
-  rows, sorting and Save JSON — the same path that moves `modified_at`.
-- Selecting a drillhole, restoring a draft, scrolling and paging go through
-  `applyDocument`, not `commitDocument`, so they never change it.
-- With no trusted identity an edit leaves the previous
-  `edited_by` as it was; nothing is guessed.
-- `normalizeRawLithoDocument` keeps it, so IndexedDB autosave and restore, JSON
-  export and JSON import all carry it. An imported `edited_by` that is not text
-  is rejected; files without it load as before.
-
-The Save JSON button validates lookup codes, stamps `modified_at`, stages the snapshot,
-flushes pending saves and downloads `<drillhole>.json`. Export is still attempted
-if IndexedDB saving fails, and the pending document is retained for retry.
-
-Pagehide flushing is best effort: a browser crash, forced termination or rejected
-storage writes cannot guarantee durable recovery. Concurrent browser tabs have
-independent queues; this migration does not implement cross-tab conflict resolution.
-
-### Project and Campaign after returning to the page
-
-Returning restores the selected drillhole at once, before the drillhole list
-has loaded, so a new document can start without Project / Campaign. When the
-list arrives, `useRawLithoWorkspace` fills those two from the selected hole's
-entry: only where they are empty (a file's own values win) and only for the
-document still on screen (a newer selection is never overwritten). In memory
-only; the next edit saves it like any other change.
-
-## JSON import
-
-Preparation validates without writing. Confirmation first saves any earlier edits,
-then performs one ordered replacement write. Completion is reported only after
-that write commits.
-
-| Status | Meaning |
-| --- | --- |
-| `idle` | No current import |
-| `preparing` | Reading and validating the selected file |
-| `pending` | Validated and awaiting confirmation |
-| `saving` | Confirmed, waiting for earlier saves or writing the replacement |
-| `completed` | Replacement committed successfully |
-| `failed` | Preparation or saving failed; a prepared plan may be explicitly retried |
-| `cancelled` | Cancelled before replacement write submission |
-
-Failed imports never remain in the autosave queue, so switching drillholes,
-restoration or other save retries cannot apply them. Cancelling clears only the
-import plan and preserves edit snapshots. New edits received while the import
-waits cause it to fail for renewed review. Edits received during its submitted
-write save afterwards; failed newer saves remain pending.
-
-The dialog disables its buttons during saving. Internally cancellation can stop
-a waiting import until the replacement write is submitted. After submission,
-the write may commit and cannot be reported as cancelled. Context changes and
-unmounts invalidate UI callbacks so stale completions cannot select an old hole.
-
-```text
-Import JSON → file picker → prepareRawLithoImport()      [zero writes]
-    parse → validate structure → normalise → check lookup codes
-    → check for an existing draft
-                    ↓
-            ConfirmDialog (row count, drillhole, replace warning)
-             ├─ Cancel  → "Import cancelled"
-             └─ Import  → applyRawLithoImport() → rawLithoSaveQueue.commitImport
-                          → applyImportedDocument() → table shows the rows
-```
-
-Rejected before the dialog appears when the file is unreadable, is not valid
-JSON, is not an object, is missing any of `project`, `campaign`, `drillhole`,
-`created_at`, `modified_at`, `rows`, has a non-array `rows`, has a row that is
-not an object, has an empty `drillhole`, has a `created_by` that is not text
-(the field itself is optional), or contains a lookup code that is not
-in the loaded lookup data. Lookups that failed to load are skipped rather than
-treated as invalid (`skipUnavailable: true`).
-
-Normalisation on import: all 20 row fields become strings, unknown keys are
-dropped, invalid or duplicate row ids are regenerated, and an empty `rows` array
-becomes one blank row. Import derives its own draft key from the file's
-`drillhole` value and switches the selection to it.
-
-The Import button is enabled **only when no drillhole is selected**
-(`canImport = !selectedHoleId`), so an import cannot silently overwrite the
-drillhole being edited.
-
----
-
-## Drillhole list ordering
-
-The selector puts the drillholes the user is working on first, then every
-other drillhole:
-
-```text
-RECENT WORKING DRILLHOLES
-DH001                  ← saved data, most recently worked on
-DH002
-DH003
-ALL DRILLHOLES         ← separator
-Drillhole 2026-09-09   ← newest of the rest
-Drillhole 2026-09-08
-...
-```
-
-| Rule | Where |
-| --- | --- |
-| Only drillholes with saved data are "working" | `hasWorkingData()`: the IndexedDB draft has at least one row with a value. A blank document, or a selection alone, does not count |
-| Up to 3, most recently worked on first | `pickRecentWorkingHoleIds()`: the selection history order, then drafts not in it by latest `modified_at` |
-| How many are promoted | `RECENT_DRILLHOLE_LIMIT = 3`; the history keeps `SELECTION_HISTORY_LIMIT = 20` |
-| Then every other hole, newest first | `orderDrillholes()` + `sortDrillholesByNewestFirst()` |
-| A 4th, 5th… working drillhole | listed under All Drillholes; never hidden |
-| No hole appears twice | a promoted hole is filtered out of the newest-first part |
-| A working hole not in `/api/drillholes` | skipped; the list only offers valid drillholes |
-
-`useWorkingDrillholes` reads the `drafts` store once when the page opens
-(read-only, one cursor), then follows the open document: once its draft has
-loaded, the drillhole joins the working set when it holds a value (autosave
-writes it within moments) and leaves when every value is cleared. Selecting,
-importing (recorded in the selection history like a selection) and editing
-therefore update the section at once. No draft is ever written or deleted by
-this.
-
-`RawLitho.tsx` builds the ordered list and passes it with `recentCount` to
-`RawLithoFilters`, which adds the two headings while the field is empty.
-Headings are not options: the keyboard moves over drillholes only. Typing
-ranks every drillhole by match quality (exact → prefix → substring, capped at
-10) as one list — a search is a search.
-
-**Newest first is the backend order reversed.** `/api/drillholes` returns the
-records oldest first and they carry no date field, so that is the only signal
-available. If the API ever returns a date, `sortDrillholesByNewestFirst()` is
-the one function to change.
-
-A selection is recorded by `handleDrillholeChange` in `RawLitho.tsx`, which
-calls `rememberDrillholeSelection(holeId)` alongside `selectDrillhole(holeId)`.
-Clearing the field is not a selection and is not recorded. Re-selecting the hole
-already at the front changes nothing and skips the write.
-
----
-
-## Dropdown data loading
-
-`useRawLithoLookups` loads the nine API lookups in parallel, cache-first per
-lookup:
-
-```text
-for each lookup:
-  read raw-litho-lookup-cache-db → show cached records immediately (isLoading stays true)
-  fetch the endpoint
-    success → replace records, isLoading false, source "backend", refresh the cache
-    failure → keep cached records and clear the error,
-              or set error "<label> unavailable" (screen readers only)
-```
-
-Granulo and Hardness are local (`source: "local"`, digits 0–9) and skip both the
-network and the cache; the row passes `isLoading: false` and no error for them.
-
-A lookup cell renders disabled when the page is disabled, or when it has no
-options and is not loading. Its placeholder reflects the state: `Loading...`
-or `No values`; a lookup that failed to load shows no placeholder and no
-visible "unavailable" label in every row — the reason is kept in a visually
-hidden element linked by `aria-describedby`. The drillhole search does the same
-when drillholes cannot be loaded.
-
-`useDrillholes` follows the same shape for `/api/drillholes`: fetch, cache on
-success, and fall back to `drillholeCache` on failure with a
-"Using cached drillhole data" toast.
-
----
-
-## Event handlers
-
-### `RawLithoTable.tsx`
-
-```text
-requestAddRow()
-- triggered by: Add Row button (onClick), F4, Tab at the row end, ArrowDown on
-  the last row
-- calls onAddRow() (= workspace.tryAddRow) which performs all validation and
-  the reordering
-- on success: requestFocus(result.rowId) — the new row is focused by id after
-  render, wherever sorting placed it
-- on rejection: focusRowCell(result.rowId, result.focusField), switching page
-  first if that row is off-screen
-- depends on: onAddRow, focusRowCell, requestFocus
-
-handleTableKeyDown(event)
-- bound to <tbody> onKeyDown
-- Escape clears the cell selection
-- returns early when: the page is disabled or blocked, or a cell handler already
-  used the key
-- Tab / Shift + Tab / ← / → at the page edge: focusAdjacentPageRow()
-- otherwise returns early unless on the last page with a row-creation key
-- Shift+Tab prevents browser navigation and retains focus at the first editable cell; final-cell Tab and ArrowDown-on-last-row call requestAddRow()
-
-document mousedown listener
-- Ctrl / ⌘ + click on a cell: toggle it in selectedCells and focus it
-- plain click outside the selection: clear selectedCells
-
-handleCopy(event) / handlePaste(event)
-- bound to <tbody> onCopy / onPaste
-- copy: with a selection, writes buildClipboardText() to event.clipboardData
-- paste: with a selection, or a multi-cell clipboard in a focused cell, runs
-  planPaste() and hands the edits to onPasteCells (= workspace.pasteCells)
-```
-
-### `useRawLithoWorkspace.ts`
-
-The hook owns the working document, selected drillhole, and current page.
-A synchronous ref points to the same working document so edits followed by a
-drillhole switch in the same React batch are staged before the switch.
-
-- `updateRow`, `commitDepthEdit`, `sortRows`, `pasteCells`, `tryAddRow`,
-  `removeLastRow` delegate transformations to `rawLithoDocumentOperations.ts`.
-- `selectDrillhole` flushes pending edits and disables editing until the new
-  draft is successfully loaded.
-- `setRawLithoDocument` stages a document update; `flushPendingSaves` requests
-  an immediate save and returns whether all pending writes succeeded.
-- `applyImportedDocument` selects and reloads the confirmed, saved import.
-- `retryDraftLoad`, `loadError`, and `saveError` expose recovery status.
-
-### `useRawLithoDraftPersistence.ts`
-
-Owns session restoration, loading, the 400 ms debounce, and 2 second retries.
-It does not keep a second working document. Pending snapshots are recovery data
-managed by `rawLithoSaveQueue.ts`, not a competing React state store.
-
-A failed or malformed load leaves the table disabled and never creates a blank
-replacement. Loads retry automatically; selecting a drillhole again also retries.
-Failed saves retain the latest snapshot, retry while the workspace is mounted,
-and flush on online, visibilitychange, pagehide, and route unmount. A tab crash
-or forced browser termination cannot guarantee completion of an asynchronous write.
-
-### `rawLithoDocumentOperations.ts`
-
-Storage-free operations create, edit, validate, add, delete, and sort documents.
-Unchanged rows retain their IDs; all validation outcomes use shared rules in
-`rawLithoValidation.ts`. Normalization/import parsing stays in `rawLithoHelpers.ts`.
-
-### `useRawLithoShortcuts.ts`
-
-```text
-handleShortcut(event, options)
-- bound to a window keydown listener for the page's lifetime
-- ignores any event with a modifier key
-- F5: always preventDefault, then Remove Last Row if enabled, not blocked, and
-  more than one row exists
-- F4: preventDefault + onAddRow() (skipped when disabled or blocked)
-- PageUp / PageDown: preventDefault + changePage, which does nothing past
-  either end
-```
-
-### `RawLithoRow.tsx` (per cell)
-
-```text
-onKeyDown  Delete clears the cell (isClearCellRequest); Enter commits a depth
-           cell via commitDepth; otherwise handleCellNavigation moves focus
-           (arrows, Tab, Shift + Tab)
-onFocus    remembers the pre-edit value of the depth cells
-onChange   onRowChange(row.id, column.key, value) — never sorts
-onBlur     depth cells call commitDepth, which forwards to onDepthCommit
-           (range check + reorder)
-
-commitDepth(columnKey)
-- local helper; ignores non-depth columns
-- calls onDepthCommit(row.id, columnKey, valueBeforeEdit)
-- the single place both blur and Enter go through
-```
-
-### `LookupAutocomplete.tsx`
-
-```text
-handleQueryChange   filters the draft; explicit text clearing commits empty
-F2                  enters option-selection mode; Up / Down browse the list
-Enter / mouse       explicitly confirms a suggestion (including empty)
-Tab / arrows        navigate cells without accepting highlighted options
-finishEditing       on blur: validates unconfirmed text, never commits it
-clearCellValue      Delete empties the cell and reopens the dropdown
-```
-
-### `hooks/useRemoveRowConfirmation.ts`
-
-```text
-requestRemoveLastRow()
-- triggered by: the Remove Last Row button and F5
-- opens the confirmation dialog; changes nothing
-
-cancelRemoveLastRow()
-- triggered by: Cancel, Escape
-- closes the dialog; no removal, no write, no toast
-- ignored while a removal is already in flight
-
-confirmRemoveLastRow()
-- triggered by: the Remove button
-- awaits onRemoveLastRow() (= workspace.removeLastRow)
-- closes the dialog, then shows "Row removed" or "Action failed"
-- guarded against a double submit by isRemoving
-```
-
-### `hooks/useRawLithoRowFocus.ts`
-
-```text
-handleTableFocus(event)
-- bound to the table body's onFocus
-- records { rowId, columnKey } for the cell the user is in
-
-focusRowCell(rowId, columnKey)
-- focuses that cell now; if the row is not rendered, finds its page,
-  switches to it and focuses after the render
-
-requestFocus(rowId, columnKey)
-- queues focus for a row that does not exist in the DOM yet (a new row)
-
-reorder effect
-- runs when the row id order changes
-- skips when a specific focus request is already queued
-- skips when focus is on a real element (a deliberate move is not stolen)
-- otherwise restores focus to the last tracked cell, by row id
-```
-
-### `RawLitho.tsx`
-
-```text
-handleSave   see "Save button" above
-```
-
----
-
-## Quick reference
+| `rowAdded` | Row added | success |
+| `rowRemoved` | Row removed | success |
+| `saveSuccess` | Saved. The JSON file is in your downloads. | success |
+| `saveFailed` | Couldn't save. Your edits are still here, so try Save JSON again. | error |
+| `actionFailed` | Couldn't remove the row. Try again. | error |
+| `importSuccess` | File imported | success |
+| `importFailed` | Couldn't import the file | error |
+| `importCancelled` | Import cancelled | info |
+| `cachedDrillholesLoaded` | Server is offline. Showing the drillhole list saved on this PC. | info |
+| `drillholeCacheFailed` | Couldn't keep a copy of the drillhole list for offline use | warning |
+| `draftSaveFailed` | Couldn't save your last edit on this PC. Keep this page open and try again. | error |
+| `draftLoadFailed` | Couldn't load the saved rows for this drillhole. Reload the page to try again. | error |
+| `missingRequiredFields` | Fill in the required (*) cells of the last row first | warning |
+| `duplicateInterval` | This From / To interval is already in the table | warning |
+| `invalidDepthRange` | From must be less than To. The previous depth was kept. | warning |
+| `invalidLookupValue` | Some codes aren't in their list. Fix them, then save. | warning |
+| `cellsCopied` | Cells copied | info |
+| `invalidPasteValue` | Some pasted values don't fit these columns. Nothing was pasted. | warning |
+| `pasteShapeMismatch` | The copied cells don't match the selected cells. Nothing was pasted. | warning |
+| `pasteOutOfRange` | The copied cells don't fit in the table. Nothing was pasted. | warning |
+| `pasteNotEditable` | These cells can't be edited. Nothing was pasted. | warning |
+| `clipboardUnavailable` | Couldn't use the clipboard. Allow clipboard access in the browser and try again. | error |
+
+The conditional-rule warning on Save is built in `RawLitho.tsx` from
+`CONDITIONAL_RULE_MESSAGES`. Confirmations use `src/components/ConfirmDialog.tsx`
+(props `title`, `message`, `facts`, `confirmLabel`, `cancelLabel`, `busyLabel`,
+`isBusy`, `initialFocus`, `tone`).
+
+## FAQ
 
 | Question | Answer |
 | --- | --- |
-| Where is a row created? | `tryAddRow()` in `hooks/useRawLithoWorkspace.ts` |
-| Where are rows sorted? | `sortRowsByLithoFrom()` in `rawLithoSorting.ts` — the only sorting code |
-| What triggers a sort? | `commitDepthEdit` (blur/Enter), `tryAddRow`, import, restore |
-| Why doesn't my row move as I type? | By design — sorting waits for the value to commit |
-| Where is focus moved? | `hooks/useRawLithoRowFocus.ts` + `focusCellInRow` in `tableNavigation.ts` |
-| How does focus survive a reorder? | Rows are addressed by `row.id` via `data-row-id`, never by index |
-| Where are the validation rules? | `rawLithoValidation.ts` (pure); toast text in `constants.ts` |
-| Where are the required fields listed? | `REQUIRED_COLUMN_KEY_LIST` in `constants.ts` |
-| Which fields are copied to a new row? | `ROW_COPY_FIELD_KEYS` in `constants.ts` |
-| Where do I change rows per page, columns or widths? | `config.yaml` |
-| Where is the styling? | Tailwind utilities in the components; shared lists in `rawLithoStyles.ts`; tokens in `src/css/index.css` |
-| Where are the shortcuts? | `hooks/useRawLithoShortcuts.ts` |
-| Where is horizontal navigation (arrows, Tab)? | `getHorizontalStep` / `handleCellNavigation` in `tableNavigation.ts`, page crossing in `RawLithoTable.tsx` |
-| Where is copy / paste? | `rawLithoClipboard.ts` (pure), handlers in `RawLithoTable.tsx`, `applyCellEdits` in `rawLithoDocumentOperations.ts` |
-| Which fields keep their spaces? | `COMMENT_FIELD_KEYS` in `constants.ts` |
-| How do I accept a partly typed lookup code? | `Enter` or a mouse click in `LookupAutocomplete.tsx` |
-| Why doesn't `↓` move inside a dropdown? | By design — the vertical keys belong to the table, so `↓` can add a row from any cell |
-| Where is the drillhole list order decided? | `orderDrillholes()` in `drillholeOrdering.ts` — the only place |
-| How many working drillholes are promoted? | `RECENT_DRILLHOLE_LIMIT` in `drillholeOrdering.ts` |
-| Where do I change a toast message? | `TOAST_NOTIFICATIONS` in `constants.ts` |
-| How do I show a toast? | `showToast(TOAST_NOTIFICATIONS.<key>)` from `hooks/useToast.ts` |
-| Which handler confirms a removal? | `confirmRemoveLastRow` in `hooks/useRemoveRowConfirmation.ts` |
-| Why did removal not delete immediately? | Both the button and F5 open a confirmation first |
-| What is persisted? | `drafts`, `session`, `drillholeCache` in `raw-litho-db`; lookups in `raw-litho-lookup-cache-db` |
-| Is the stored order the displayed order? | Yes — the sorted array is what gets written |
-| Which APIs does this page call? | 9 lookup endpoints + `/api/drillholes`. No writes. |
+| Why doesn't my row move while I type a depth? | Sorting waits until you leave the cell or press Enter. |
+| Why can't I add a row? | The last row is missing a required value, has From above To, or repeats an interval. The caret is on the cell to fix. |
+| Why does Save JSON refuse? | A lookup code is not in its list, or a row breaks a conditional rule. |
+| Why is Import JSON greyed out? | A drillhole is selected. Clear the Drillhole field first. |
+| Is my data still there after a reload? | Yes, in IndexedDB on this PC. It reaches another PC only as an exported JSON file. |
+| Does this page send rows to the server? | No. Uploading happens on the Upload Data page. |
 
----
+## Where to change things
 
-## Manual test checklist
-
-1. Select a drillhole; the table becomes editable and shows page 1 of 50-row pages.
-2. Enter `10 → 15`, add a row, enter `15 → 20`, add a row, then set the third row's Litho From to `13` and Tab out → the rows reorder to `10, 13, 15` and the `Ins` numbers renumber.
-3. While typing into Litho From, confirm the row does **not** jump on each keystroke; it moves only once you blur or press Enter.
-4. Type a new Litho From and press Enter → the row reorders and the caret stays in the cell.
-5. Give a row distinctive values (Litho Code, Colour, Redox, OX, CA, comments), move it with a Litho From edit, and confirm every value travelled with it.
-6. Confirm rows order numerically: `2`, `10`, `100` — not `10`, `100`, `2`.
-7. Give two rows the same Litho From but different Litho To → the smaller Litho To sits first.
-8. Clear a row's Litho From → it drops to the bottom of the table and blocks Add Row until refilled.
-9. With more than 50 rows, edit a row's Litho From so it belongs on another page → the table follows it and the caret stays on that row.
-10. Click the Save button straight after typing a Litho From that reorders the rows → the reorder happens but focus stays on the button.
-11. Leave `Redox Code` empty and press Add Row → no row, warning toast, focus lands in `Redox Code`.
-12. Tab from the last editable cell adds exactly one validated row, scrolls it into view, and focuses its first cell. Repeated Shift+Tab at the first editable table cell keeps focus there without refocusing or cycling.
-13. Confirm `CA`, `PY`, `Sedim`, `Granulo`, `Hardness` and the comments are **not** copied.
-14. Enter an interval that already exists → both rows' depth cells turn orange, the duplicate warning appears, and Add Row / F4 / Tab / ArrowDown all refuse to advance while focus stays in `Litho To`. Confirm this still holds after the rows have been reordered.
-15. Change the duplicate to a unique interval → creation works again.
-16. Press `F4`; confirm a "Row added" toast appears for the button, F4, Tab and ArrowDown alike, and that a blocked attempt shows a warning instead.
-17. Press `F5`; confirm it opens "Remove last row?" rather than deleting, does not refresh the browser, and that Cancel leaves the table untouched with no toast.
-18. Confirm the removal → the row disappears and "Row removed" appears; reload and check the row is still gone.
-19. In the confirmation dialog, check Cancel holds focus, Escape cancels, and Remove is the only red button.
-20. Add more than 50 rows; use `PageUp`/`PageDown` and confirm both ends are no-ops and edits on other pages are intact.
-21. On page 1 with an invalid last row, press `F4` → the table jumps to the page holding it and focuses the offending cell.
-22. In table-navigation mode, ArrowDown in the last row creates a row or shows validation; on earlier rows it moves down once. F2 then ArrowDown browses options without creating a row.
-23. Type a partial code such as `Unk`; the closest match is highlighted below the empty choice. Enter confirms `Unknown`. Tab and arrows leave it unchanged and never accept an unconfirmed match.
-24. Type nonsense (`Zzz`) in a lookup cell and press `→` → nothing is inserted; the cell keeps the typed text and is flagged "Select a valid value" on blur.
-25. Keyboard-focus a filled cell: its whole value is selected, and one horizontal arrow moves to the adjacent cell. Click inside text or partially select it to use normal caret editing.
-26. Confirm the untouched routes: type a full code and press `Enter`, then `Tab`, then click an option with the mouse; scroll the option list with the mouse wheel.
-27. Select drillhole A without typing anything, clear the field and open the list → A is **not** under Recent Working Drillholes. Enter a value in A, B and C (in that order) → the list shows C, B, A under Recent Working Drillholes, then All Drillholes without them. Work in a fourth (D) → D takes the front, A moves to All Drillholes (still listed). Reload the page and confirm the same grouping; reopen A → its draft is restored.
-28. Navigate away and back → the same drillhole, rows, order and page are restored.
-29. Reload after a successful save → the last change and row order are intact. Pagehide flushing of pending edits is best effort.
-30. Clear the drillhole, import a JSON file whose rows are out of order, cancel the dialog → nothing changes; import again and confirm → the rows appear sorted.
-31. Press Save JSON → `<drillhole>.json` downloads with rows in Litho From order and "Changes saved" appears.
-32. Press `Tab` / `Shift`+`Tab` across a row → focus moves exactly like `→` / `←`, skips disabled lookups, wraps to the next / previous row, and crosses from row 50 to row 51 on the next page and back.
-33. Type `Fine grained  sandstone ` (double space, trailing space) in Lithology Comments → every space stays; reload, then Save and re-import the JSON → still identical.
-34. `Ctrl`+click three cells in different rows → all highlighted; `Ctrl`+click one again → deselected; click any other cell → selection cleared.
-35. Select two non-adjacent cells, `Ctrl`+`C`, paste into Excel → the values keep their relative positions with blank cells between them.
-36. Copy a 2 × 3 block from Excel, `Ctrl`+click one cell, `Ctrl`+`V` → the block lands from that cell; a Litho From change re-sorts the rows and the selection follows its rows.
-37. Paste `abc` into Litho From, a block past the last row, or a value that inverts / duplicates an interval → a warning toast appears and no cell changes.
-38. Select several comment cells and paste one value → every selected cell receives it; reload → still there.
+| To change | Look in |
+| --- | --- |
+| rows per page, column order, labels, widths, hidden columns | `config.yaml` |
+| the stored fields and their defaults | `src/types/rawLithoSchema.ts` (`columnByKey`, `createSchemaRow`, `DEPTH_FIELDS`) |
+| required fields | `REQUIRED_COLUMN_KEY_LIST` in `constants.ts` |
+| fields copied to a new row | `ROW_COPY_FIELD_KEYS` in `constants.ts` |
+| conditional rule codes and messages | `CONDITIONAL_RULE_CODES`, `CONDITIONAL_RULE_MESSAGES` in `rawLithoValidation.ts` |
+| validation order | `findRowIssue()` in `rawLithoValidation.ts` |
+| toast text | `TOAST_NOTIFICATIONS` in `constants.ts` |
+| toast durations | `src/config/ui.yaml` |
+| row sorting | `sortRowsByLithoFrom()` in `rawLithoSorting.ts` |
+| drillhole list order, recent limit | `drillholeOrdering.ts` |
+| shortcuts | `hooks/useRawLithoShortcuts.ts`, and the list in `src/components/KeyboardShortcuts.tsx` |
+| cell navigation | `tableNavigation.ts`, page crossing in `RawLithoTable.tsx` |
+| copy and paste | `rawLithoClipboard.ts`, handlers in `RawLithoTable.tsx` |
+| dropdown behaviour | `LookupAutocomplete.tsx` (affects Upload Data too) |
+| dropdown sources | `src/services/rawLithoLookupConfig.ts` |
+| autosave timing | `SAVE_DELAY` and `RETRY_DELAY` in `hooks/useRawLithoDraftPersistence.ts` |
+| table cell styles | `CELL_INPUT`, `REQUIRED_MARK` in `src/components/dataTableStyles.ts` |
+| import checks and dialog text | `rawLithoImportService.ts`, `readRawLithoImport()` in `rawLithoHelpers.ts` |

@@ -1,13 +1,15 @@
-# TypeScript frontend
+# Frontend
 
-Complete migration of the supplied React/Vite frontend. Backend code, API routes,
-JSON field names, IndexedDB database names/versions and UI styling are unchanged.
-All 55 supplied JavaScript/JSX files are now TypeScript/TSX, including the unrouted
-Raw Extraction page and the existing empty future-page placeholders.
+The AcQuire WEB browser app: React 19, TypeScript, Vite and Tailwind CSS 4. It
+uses `HashRouter`, so the pages live at `/#/raw-litho`, `/#/upload-data` and
+`/#/database-viewer`. Any other address opens Raw Litho.
 
-## Run locally
+For a map of the source tree and the coding conventions, see
+[src/README.md](src/README.md).
 
-Use Node.js 24 LTS (tested with 24.19.0), or a version supported by `package.json`.
+## Setup
+
+Use a Node.js version allowed by `package.json` (`^22.13.0 || ^24.0.0 || >=26.0.0`).
 From this folder:
 
 ```bash
@@ -15,92 +17,59 @@ npm ci
 npm run dev
 ```
 
-The existing frontend uses HashRouter: `/#/raw-litho` and `/#/upload-data`.
-The new Vite configuration proxies `/api` to `http://localhost:7047` in development.
-Copy `.env.example` to `.env.local` and set `VITE_API_PROXY_TARGET` if your existing
-backend uses another address. No backend modification is needed.
+## API proxy and environment variables
 
-For production, `VITE_API_BASE_URL` may be empty for same-origin `/api` requests,
-or the existing backend origin. Build with `npm run build`; deploy the `dist/`
-contents with your existing hosting setup.
+In development, `buildApiUrl` (`src/services/Api/apiConfig.ts`) always produces
+relative `/api/...` URLs, and `vite.config.ts` proxies `/api` to the backend.
+The proxy keeps a single connection open to the backend because Windows
+authentication (NTLM) authenticates a connection, not a single request.
 
-Only `src/` and `package.json` were supplied. This bundle adds `index.html`, Vite,
-TypeScript, ESLint and test configuration, and a lockfile. When applying it to a
-full repository, keep your existing environment values, `public/` assets and IIS
-configuration, and merge any custom root configuration with the included defaults.
+Copy `.env.example` to `.env.local` to change the defaults:
 
-## Structure
+| Variable | Used | Meaning |
+| --- | --- | --- |
+| `VITE_API_PROXY_TARGET` | `npm run dev` | Backend address for the dev proxy. Default `http://localhost:7047`. |
+| `VITE_API_BASE_URL` | production build | Origin of the API. Leave it empty when the frontend and `/api` are served from the same origin. |
 
-| File | Responsibility |
-| --- | --- |
-| `src/types/rawLithoSchema.ts` | Complete persisted field contract, keyed column definitions and generated defaults; visible ordering, labels and widths live in `src/pages/RawLitho/config.yaml` |
-| `src/types/domain.ts` | Rows, documents, drillholes, lookups, props-related contracts, sessions, imports and operation results |
-| `src/types/validation.ts` | Runtime guards for external data and error handling |
-| `src/pages/RawLitho/hooks/useRawLithoWorkspace.ts` | Single working document, selected drillhole, pagination, operations and UI feedback |
-| `src/pages/RawLitho/hooks/useRawLithoDraftPersistence.ts` | Session/draft restoration, debounce, retries, readiness and lifecycle flushing |
-| `src/pages/RawLitho/rawLithoDocumentOperations.ts` | Storage-free create/edit/add/delete/commit/sort transformations |
-| `src/services/IndexDB/rawLithoSaveQueue.ts` | Latest pending snapshot per drillhole and serialized writes |
-| `src/pages/RawLitho/rawLithoHelpers.ts` | Document normalization, JSON import validation and export |
-| `src/pages/UploadData/` | JSON review: editable virtualized preview, validation, upload of the original or edited document |
-| `src/pages/DatabaseViewer/` | Read-only, virtualized viewer of the records stored for one drillhole (`GET /api/dataviewer`) |
-| `src/pages/*/config.yaml` + `src/config/yamlConfig.ts` | Static UI settings per page, parsed and validated once at load |
-| `src/css/index.css` | Tailwind CSS v4 entry (`@tailwindcss/vite`) and the shared `rl-*` design tokens |
-| `tests/` | Persistence, operations, storage/API, keyboard, Upload Data, Database Viewer and YAML configuration tests |
+Serving both from one origin is the simplest setup. A cross-origin API would
+need a CORS policy that allows credentials, since every request sends Windows
+credentials.
 
-The workspace has one editable document. A synchronous ref points to the same
-working value so an edit and drillhole switch in one React batch cannot lose the
-edit. Pending queue snapshots exist only for persistence/recovery. Failed writes
-retain the latest snapshot; failed loads keep editing disabled without creating
-or saving a blank replacement. Load/save retries run every two seconds while the
-workspace is mounted. Save, deletion and confirmed imports share write ordering. Imports use a one-shot
-write after earlier edits have saved; they never enter the autosave snapshot map.
-Failed imports require explicit confirmation to retry. A pending import is prepared
-and awaiting confirmation. Cancellation is allowed before its replacement write
-starts; a submitted write may commit even after navigation, but stale completions
-cannot select an old drillhole or report success in a new context.
-
-The migration also fixes the Raw Extraction storage import/export filename and
-preserves string row IDs during focus restoration. API/JSON/IndexedDB values are
-checked at runtime; TypeScript does not replace those checks. No explicit `any`,
-unsafe type assertions or TypeScript suppression directives were added.
-
-## Checks
+## Scripts
 
 ```bash
-npm run typecheck  # strict + noUncheckedIndexedAccess, including tests and build configuration
-npm run lint      # ESLint + React hook rules
-npm test          # regression suite
-npm run build     # type checking followed by Vite production build
-npm run check     # all the above
+npm run dev         # Vite dev server
+npm run typecheck   # tsc --noEmit (strict, noUncheckedIndexedAccess)
+npm test            # Vitest, once (jsdom + fake-indexeddb)
+npm run test:watch  # Vitest in watch mode
+npm run build       # typecheck, then vite build into dist/
+npm run preview     # serve the production build locally
+npm run check       # typecheck, lint, test and build
 ```
 
-Automated verification: strict type checking with `noUncheckedIndexedAccess`,
-ESLint, 52 regression tests and the production build all pass. CSS, assets and sample JSON files are byte-identical to the upload.
+Lint the source and tests with:
 
-Tests cover immediate drillhole switching, read/write failures and retries,
-stale load responses, route unmount flushing, legacy draft/session restoration,
-row operations and validation, depth sorting, recent drillhole ordering,
-autocomplete acceptance, keyboard focus, F4/F5, dropdown ArrowDown row creation,
-delete confirmation, IndexedDB wrappers/caches, import and API response validation.
-Additional review regressions cover schema compilation failures, empty rows,
-newer snapshots surviving older saves, import failures and explicit retries,
-cancellation before and after write submission, stale asynchronous completions,
-and preservation of earlier and newer edits.
+```bash
+npx eslint src tests
+```
 
-The existing ES2022, DOM and DOM.Iterable libraries already support `Error.cause`.
-Vite client and Node types were retained along with the test configuration.
-See [TypeScript conventions](src/README.md#typescript-conventions) for type and
-runtime-validation ownership.
+`npm run lint` (and therefore `npm run check`) runs `eslint .`, which also
+lints the committed build output in `publish/` and reports errors there.
 
-## Verification limits
+## Building for deployment
 
-- Manual browser, backend and deployment verification was not performed.
-- Tests use jsdom and fake IndexedDB; live backend, actual-browser IndexedDB,
-  visual browser rendering and IIS deployment were not available for verification.
-- Pagehide flushing is best effort. Pending edits survive route remounts in the
-  running application, but cannot survive a browser crash or forced termination
-  if storage writes have not succeeded.
-- Write ordering is coordinated within one application instance. Simultaneous
-  editing of the same drillhole in multiple browser tabs is not conflict-resolved.
-- Newest drillhole ordering still reverses API order because the existing
-  response contains no timestamp field.
+`npm run build` writes to `dist/`. The deployed copy is kept in `publish/`:
+
+```bash
+npm run build -- --outDir publish
+```
+
+The app version shown in the sidebar comes from `version` in `package.json`
+(`appVersion.ts`, injected as `__APP_VERSION__`).
+
+## Known limits
+
+- Edits are flushed to IndexedDB on page hide on a best-effort basis. A browser
+  crash before a write finishes can lose the last edits.
+- Write ordering is coordinated inside one tab. Editing the same drillhole in
+  two tabs at once is not reconciled.

@@ -1,146 +1,98 @@
 # Backend API
 
-ASP.NET Core Web API for the application backend.
+ASP.NET Core Web API for the AcQuire Offline website. It reads drillholes and
+lookup lists, stores uploaded lithology through a stored procedure, and reads
+the stored records back for the Database Viewer.
 
 ## Requirements
 
-- .NET 10 SDK or a newer SDK capable of targeting `net10.0`
+- .NET 10 SDK, or a newer SDK that can target `net10.0`
 - Access to the configured SQL Server database
 
-## Restore and run
+## Run, test and publish
 
-From the `BackendApi` directory (the app is used over HTTP):
+From the `BackendApi` directory:
 
 ```bash
 dotnet restore
 dotnet run --launch-profile http
+dotnet build
+dotnet test ../BackendApi.Tests
+dotnet publish -c Release -o release
 ```
 
-Swagger UI is available in Development at:
+The `http` profile listens on `http://localhost:7047` in the `Development`
+environment and opens Swagger at `http://localhost:7047/swagger`. Swagger is
+registered in every environment. HTTPS redirection is on in Development only.
+`BackendApi.http` has ready-made requests; its upload comment still names the
+old procedure and `ACQMN01_DEV`.
 
-```text
-http://localhost:7047/swagger
-```
+## Endpoints
 
-## The five APIs
+| API | Method and route | Database object | Purpose |
+| --- | --- | --- | --- |
+| Drillholes | `GET /api/drillholes` | `ZOOVCH_COLLAR_LIST` | Every drillhole with Project and Campaign |
+| Table Constants | `GET /api/table-constants` | `QV_VS_LOOKUP_RO` | The nine Raw Litho lookup lists |
+| Upload Data | `POST /api/upload-data` | `dbo.insertAcQuireOfflineBek` | Store an exported lithology JSON |
+| Data Viewer | `GET /api/dataviewer/drillholes` | `MyApps.CoreDescrData` | Drillholes that have stored records |
+| | `GET /api/dataviewer?drillhole=…` | `MyApps.CoreDescrData` | Stored intervals of one drillhole |
+| Status | `GET /api/status` | none | Online check, plus the verified Windows user with `?includeUser=true` |
 
-| # | API | Method and route | Database | Purpose |
-| --- | --- | --- | --- | --- |
-| 1 | Drillholes | `GET /api/drillholes` | `ACQMN01` (`ZOOVCH_COLLAR_LIST`) | Every drillhole with Project and Campaign |
-| 2 | Table Constants | `GET /api/table-constants` | `ACQMN01` (`QV_VS_LOOKUP_RO`) | All nine Raw Litho lookup lists |
-| 3 | Upload Data | `POST /api/upload-data` | `ACQMN01` (procedure) | Store an exported lithology JSON |
-| 4 | Data Viewer | `GET /api/dataviewer/drillholes` | `ACQMN01` (`MyApps.CoreDescrData`) | Drillholes that have stored records |
-|   |  | `GET /api/dataviewer?drillhole=…` | `ACQMN01` (`MyApps.CoreDescrData`) | Stored intervals of one drillhole |
-| 5 | Status | `GET /api/status` | — | Backend online check; the verified Windows user with `?includeUser=true` |
+`ApiRoutesTests` fails if a route is added or a removed one comes back
+(`/api/currentuser`, the nine old lookup routes such as `/api/lithocodes`, and
+`/api/uploaddata`).
 
-No other application route exists (Swagger is Development-only
-infrastructure). `ApiRoutesTests` fails if a route is added or one of the
-removed ones returns. Removed: `GET /api/currentuser`, the nine lookup routes
-(`/api/lithocodes`, `/api/colour`, `/api/ca`, `/api/om`, `/api/omfacies`,
-`/api/py`, `/api/ox`, `/api/sedim`, `/api/redoxcode`) and `/api/uploaddata`.
+Code is split by API under `Controllers/`, `Repositories/` and `Models/`, with
+shared helpers in `Data/` (connections, SQL error numbers), the AD group check
+in `Auth/`, and DBA scripts in `Sql/`. Database access uses
+`Microsoft.Data.SqlClient` with parameterised commands only.
 
-## Project structure
+## Configuration
 
-One folder per API in each main folder; namespaces mirror the folders
-(`BackendApi.Controllers.DataViewer`, `BackendApi.Repositories.DataViewer`, …).
+| Key | `appsettings.json` | `appsettings.Development.json` | Meaning |
+| --- | --- | --- | --- |
+| `ConnectionStrings:DefaultConnection` | server `BMNULAADB02`, database `ACQMN01`, SQL login `userAcquire` | same | The only connection string |
+| `CoreDescrData:Database` | not set | not set | Database for Upload Data and Data Viewer; unset means `DefaultConnection`'s |
+| `CoreDescrData:UseWindowsAuthentication` | `false` | `true` | Upload Data and Data Viewer connect with `Integrated Security=True` |
+| `Database:ImpersonateWindowsUser` | `false` | `false` | Run every database call as the browser user |
+| `Auth:AllowedGroup` | `""` | `""` | AD group allowed to use the website; blank turns the check off |
+| `UploadData:MaxFileSizeBytes` | not set | not set | Upload size limit, default 10 MB |
 
-```text
-BackendApi/
-├── Controllers/
-│   ├── Drillholes/       DrillholesController
-│   ├── TableConstants/   TableConstantsController
-│   ├── UploadData/       UploadDataController, UploadDataValidator
-│   ├── DataViewer/       DataViewerController
-│   └── Status/           StatusController
-├── Repositories/         one I<Name>Repository + <Name>Repository per API
-│   ├── Drillholes/       (no Status folder: Status reads no data)
-│   ├── TableConstants/
-│   ├── UploadData/
-│   └── DataViewer/
-├── Models/
-│   ├── Drillholes/  TableConstants/  UploadData/  DataViewer/  Status/
-└── Data/                 shared helpers: connection strings, reader helpers
-```
+`GetRequiredConnectionString()` in `Data/ConfigurationExtensions.cs` reads
+`DefaultConnection` and fails fast when it is missing. Drillholes and Table
+Constants use it as it is. `GetCoreDescrDataConnectionString()` derives the
+Upload Data and Data Viewer connection from it: it swaps in
+`CoreDescrData:Database` when set, and drops the user and password when
+`CoreDescrData:UseWindowsAuthentication` is on.
 
-Database access uses `Microsoft.Data.SqlClient` only, always parameterised.
+The CORS policy allows `http://10.27.27.140:5174` with credentials. That
+origin is set in `Program.cs`; the `Cors:AllowedOrigins` key in the settings
+files is not read.
 
-## Database configuration
+At startup the API logs the environment and the CoreDescrData connection
+without the password, for example
+`Environment Production; CoreDescrData connection: BMNULAADB02/ACQMN01, SQL login userAcquire`.
+`Windows authentication as …` or `Environment Development` in the server log
+means the wrong settings are in effect.
 
-```text
-appsettings.json              ConnectionStrings:DefaultConnection   Data Source=BMNULAADB02; Initial Catalog=ACQMN01; User ID=userAcquire; …
-appsettings.json              CoreDescrData:UseWindowsAuthentication  false   (IIS: SQL login userAcquire)
-appsettings.Development.json  CoreDescrData:UseWindowsAuthentication  true    (dotnet run: your Windows account)
-```
+### Development and IIS
 
-- Drillholes and Table Constants use `DefaultConnection` as it is (`ACQMN01`,
-  SQL login `userAcquire`).
-- Upload Data and Data Viewer work on `MyApps.CoreDescrData`. They use
-  `DefaultConnection`, with the database replaced by `CoreDescrData:Database`
-  when that is set (unset: `ACQMN01`;
-  `ConfigurationExtensions.GetCoreDescrDataConnectionString`).
-  No second connection string, no credentials in code.
-- With `CoreDescrData:UseWindowsAuthentication` (Development), those two
-  connect with `Integrated Security=True` as the Windows account running the
-  API (`dotnet run` / `dotnet watch` in your session = you), with no password
-  anywhere. `userAcquire` is not allowed to run the upload procedure's INSERT
-  (error 229, see below); a Windows account with the rights works. Hosted
-  (IIS, service), the API runs as its service account, which then needs
-  `EXECUTE` on `dbo.InsertUpdateCoreDescr_WellCAD` (Upload Data) and `SELECT`
-  on `MyApps.CoreDescrData`, or an approved read-only view or procedure in its
-  place (Data Viewer).
-- On IIS the app pool runs as `ApplicationPoolIdentity`, which reaches SQL
-  Server as the computer account `BDOM\BMNDULAAS01$` (no login: error 18456).
-  So `appsettings.json` keeps Windows authentication **off** and the API uses
-  `userAcquire`, which needs the database fix in *Troubleshooting: error 229*.
-  IIS runs in the `Production` environment, so `appsettings.Development.json`
-  does not apply there; do not copy it over `appsettings.json`.
-  `ConnectionConfigurationTests` fails the build if `appsettings.json` ever
-  turns Windows authentication back on.
-- At startup the API logs the environment and the CoreDescrData connection
-  without the password, e.g.
-  `Environment Production; CoreDescrData connection: BMNULAADB02/ACQMN01, SQL login userAcquire`.
-  On IIS the log appears in the stdout log when `stdoutLogEnabled` is on in
-  `web.config`, or in the Windows Event Log. `Windows authentication as …` or
-  `Environment Development` there means the wrong settings are in effect.
+With `dotnet run`, Upload Data and Data Viewer connect as your own Windows
+account. On IIS the app runs in `Production`, so `appsettings.Development.json`
+does not apply; do not copy it over `appsettings.json`. The app pool
+(`ApplicationPoolIdentity`) reaches SQL Server as the computer account
+`BDOM\BMNDULAAS01$`, which has no login (error 18456), so `appsettings.json`
+keeps Windows authentication off and uses `userAcquire`.
+`ConnectionConfigurationTests` fails if that changes.
 
-### Running as the Windows user (`Database:ImpersonateWindowsUser`)
-
-Off by default. When it is `true`, every database call (all four data APIs)
-runs on SQL Server **as the browser user's own Windows account**:
-
-1. Negotiate verifies the browser user (`BDOM\jsmith`). Requests without a
-   Windows user get `401` + `WWW-Authenticate: Negotiate` (only
-   `GET /api/status` stays anonymous). The frontend sends
-   `credentials: "include"` on every call.
-2. The API opens the connection with its own account (the connection string
-   as configured; a gMSA with `Integrated Security=True` is the goal, so no
-   password is stored anywhere).
-3. It then runs `EXECUTE AS LOGIN = N'BDOM\jsmith' WITH COOKIE INTO …`
-   (`Data/DatabaseConnectionFactory.cs`). From here SQL Server checks
-   permissions for the user, and `SUSER_SNAME()` / `SUSER_NAME()` return the
-   user, so the upload procedure stores the real uploader in `usr` on its
-   own. `ORIGINAL_LOGIN()` still shows the service account (logged on upload).
-4. Reads and the upload run; then `REVERT WITH COOKIE` returns the connection
-   to the service account before it goes back to the pool. If the revert
-   fails, the pool is cleared so no other request reuses that session.
-5. Permission errors (229, 230, 916, 15406, 15517) return `403`
-   `"<DOMAIN\user> has no database permission to …"`.
-
-Why not `Integrated Security` with the user's own credentials: the API (on
-BMNDULAAS01) and SQL Server (BMNULAADB02) are different machines, and Windows
-does not pass the browser user's credentials on to a second machine without
-Kerberos constrained delegation (the "double hop"). `EXECUTE AS LOGIN` needs
-no SPN, delegation or DNS change.
-
-Before turning it on, the DBA runs `Sql/WindowsUserImpersonation.sql` on
-development first. Set it on the server like the connection string:
-`Database__ImpersonateWindowsUser=true` as an IIS environment variable.
+The login needs `EXECUTE` on `dbo.insertAcQuireOfflineBek` (granted by
+`Sql/insertAcQuireOfflineBek.sql`) and `SELECT` on `MyApps.CoreDescrData`.
 
 ### Production password
 
-The password should not live in Git. On the server, set the whole connection
-string as an environment variable of the IIS site. It overrides
-`appsettings.json`, and a publish does not overwrite it (unlike `web.config`):
+Keep the password out of Git. Set the whole connection string as an
+environment variable of the IIS site. It overrides `appsettings.json`, and a
+publish does not overwrite it:
 
 ```text
 IIS Manager → AcQuireBackend → Configuration Editor
@@ -154,11 +106,81 @@ Do not set `ASPNETCORE_ENVIRONMENT=Development` or
 `CoreDescrData__UseWindowsAuthentication=true` there. Recycle the app pool
 afterwards.
 
-## Drillholes
+### Website access by AD group (`Auth:AllowedGroup`)
 
-```text
-GET /api/drillholes
+Set the group on the server, for example `BDOM\AcQuire_Uploaders`, either in
+`appsettings.Production.json` as `"Auth": { "AllowedGroup": "BDOM\\AcQuire_Uploaders" }`
+or as the IIS environment variable `Auth__AllowedGroup=BDOM\AcQuire_Uploaders`.
+
+With a group set, a request without a Windows login gets `401` with
+`WWW-Authenticate: Negotiate`, and a signed-in user outside the group gets
+`403`. Nested groups count. `GET /api/status` stays anonymous, and
+`GET /api/status?includeUser=true` returns `200` with `"isAuthorized": true`
+or `false`.
+
+Membership comes from the Windows login token (`User.IsInRole`), so a user
+just added to or removed from the group must sign out of Windows and back in.
+If Windows cannot resolve the group, access is refused. The frontend
+(`frontend/src/services/websiteAccess.ts`) shows an Access denied page, but
+the backend enforces access. When the key is blank the API logs a warning in
+Development and an error elsewhere.
+
+## Windows authentication
+
+The API uses Negotiate (Kerberos or NTLM).
+
+- `GET /api/status?includeUser=true` answers an anonymous request with `401`
+  and `WWW-Authenticate: Negotiate`. The browser then signs in as the current
+  Windows user and the response adds the name.
+- `POST /api/upload-data` always requires a Windows user.
+- The other routes are anonymous unless `Auth:AllowedGroup` or
+  `Database:ImpersonateWindowsUser` is set. Then every route except
+  `GET /api/status` requires a Windows user.
+
+Browsers send Windows credentials on their own to `localhost` and Local
+intranet sites; other host names must be in the Local intranet zone (or an
+`AuthServerAllowlist` policy). On IIS, enable Windows Authentication and keep
+Anonymous Authentication on. To check from PowerShell on the same PC:
+
+```powershell
+Invoke-RestMethod 'http://localhost:7047/api/status?includeUser=true' -UseDefaultCredentials
 ```
+
+### Running as the Windows user (`Database:ImpersonateWindowsUser`)
+
+Off by default. When it is `true`, the API opens each connection with its own
+account and then runs `EXECUTE AS LOGIN = N'BDOM\jsmith' WITH COOKIE INTO …`
+for the verified user (`Data/DatabaseConnectionFactory.cs`). SQL Server then
+checks that user's permissions and `SUSER_SNAME()` returns the user, while
+`ORIGINAL_LOGIN()` still shows the service account. `REVERT WITH COOKIE` runs
+before the connection goes back to the pool; if it fails, the pool is cleared.
+
+This avoids the "double hop": the API (BMNDULAAS01) and SQL Server
+(BMNULAADB02) are different machines, and Windows does not forward the user's
+credentials without Kerberos constrained delegation. `EXECUTE AS LOGIN` needs
+no SPN, delegation or DNS change. The DBA runs `Sql/WindowsUserImpersonation.sql`
+first; on IIS set `Database__ImpersonateWindowsUser=true` as an environment
+variable.
+
+## Error handling
+
+The read endpoints (Drillholes, Data Viewer drillholes and Table Constants)
+share `DatabaseAccessDenied.ReadAsync`:
+
+| Outcome | Status | Body |
+| --- | --- | --- |
+| success | `200` | the result |
+| SQL Server permission error (229, 230, 916, 15406, 15517) | `403` | `{ "error": "<DOMAIN\\user> has no database permission to <action>. Contact the database administrator." }` |
+| any other error | `500` | `{ "error": "<failure message>" }` |
+
+`<action>` is `read drillholes` or `read table constants`. Without a signed-in
+user the message starts with "This account". The single-drillhole Data Viewer
+route uses the same 403 (`read drillhole records`) with its own 500.
+
+SQL Server messages, connection details and stack traces are logged, never
+returned. A request the client abandons cancels the database call.
+
+## Drillholes
 
 ```sql
 SELECT HOLEID, PROJECTCODE, RIGHT(PROSPECT, 4) AS CAMPAIGN FROM ZOOVCH_COLLAR_LIST;
@@ -168,84 +190,35 @@ SELECT HOLEID, PROJECTCODE, RIGHT(PROSPECT, 4) AS CAMPAIGN FROM ZOOVCH_COLLAR_LI
 [ { "holeId": "GTZO_0001_1", "projectCode": "ZOOVCH", "campaign": "2015" } ]
 ```
 
-An empty result is `[]` with `200`. Database failures return `500` with
-`{ "error": "Unable to retrieve drillholes." }`. Data Viewer reuses the same
-query, filtered by `HOLEID` (`DrillholeRepository.GetByHoleIdAsync`), for
-Campaign only; its drillhole selector uses `GET /api/dataviewer/drillholes`.
+An empty table returns `[]`. The 500 message is `Unable to retrieve drillholes.`
 
 ## Table Constants
 
-```text
-GET /api/table-constants
-```
-
-Replaces the nine lookup endpoints with one query on `QV_VS_LOOKUP_RO` (same
-view, same `FIELDNAME`s). Each list keeps the item shape its old endpoint
-returned, so codes, descriptions and field names are unchanged:
-
-| Key | `FIELDNAME` | Item | Old route |
-| --- | --- | --- | --- |
-| `caCode` | `Min1Qty` | `{ "caCode", "description" }` | `/api/ca` |
-| `colourCode` | `Colour` | `{ "colourCode", "description" }` | `/api/colour` |
-| `lithoCode` | `LithoFacies` | `{ "lithoCode", "description" }` | `/api/lithocodes` |
-| `omCode` | `Min2Qty` | `{ "omCode", "description" }` | `/api/om` |
-| `omFaciesCode` | `OM_Facies` | `{ "omFaciesCode", "description" }` | `/api/omfacies` |
-| `oxCode` | `Min4Qty` | `{ "oxCode", "description" }` | `/api/ox` |
-| `pyCode` | `Min3Qty` | `{ "pyCode", "description" }` | `/api/py` |
-| `redoxCode` | `RedoxFacies` | `{ "redoxCode", "description" }` | `/api/redoxcode` |
-| `sedimCode` | `InternalStructure` | `{ "sedimCode", "description" }` | `/api/sedim` |
+One query on `QV_VS_LOOKUP_RO` returns all nine lists, keyed by list name
+(with the `FIELDNAME` each reads): `caCode` (`Min1Qty`), `colourCode`
+(`Colour`), `lithoCode` (`LithoFacies`), `omCode` (`Min2Qty`), `omFaciesCode`
+(`OM_Facies`), `oxCode` (`Min4Qty`), `pyCode` (`Min3Qty`), `redoxCode`
+(`RedoxFacies`) and `sedimCode` (`InternalStructure`). Each item holds the code
+under the list's key plus `description`:
 
 ```json
-{
-  "caCode":      [ { "caCode": "1", "description": "…" } ],
-  "colourCode":  [ { "colourCode": "10G4/2", "description": "…" } ],
-  "lithoCode":   [ { "lithoCode": "0--", "description": "…" } ],
-  "omCode": [], "omFaciesCode": [], "oxCode": [], "pyCode": [], "redoxCode": [], "sedimCode": []
-}
+{ "caCode": [ { "caCode": "1", "description": "…" } ], "lithoCode": [ { "lithoCode": "0--", "description": "…" } ], "omCode": [], … }
 ```
 
-Database failures return `500` with `{ "error": "Unable to retrieve table constants." }`.
+The 500 message is `Unable to retrieve table constants.`
 
 ## Data Viewer
 
-Read-only. Both routes read `MyApps.CoreDescrData` in the
-`CoreDescrData:Database` (unset: `ACQMN01`) through the same connection as
-Upload Data, with parameterised `SELECT`s only. Opening the Data Viewer never
-writes anything.
+Both routes are read-only `SELECT`s on `MyApps.CoreDescrData` through the
+CoreDescrData connection.
 
-```text
-Controllers/DataViewer/DataViewerController.cs     HTTP, Project / Campaign
-Repositories/DataViewer/DataViewerRepository.cs    the two SELECTs
-Repositories/DataViewer/DataViewerIntervals.cs     NAME / VALUE rows → intervals
-Models/DataViewer/DataViewerResponse.cs            response and row models
-```
+### `GET /api/dataviewer/drillholes`
 
-### Drillholes with stored records
+Returns the distinct, non-blank `HOLEID`s, sorted, for example
+`[ "GTZO_0001_1", "GTZO_0002_1" ]`. An empty table returns `[]`. The 500
+message is `Unable to retrieve drillholes.`
 
-```text
-GET /api/dataviewer/drillholes
-```
-
-```sql
-SELECT DISTINCT [HOLEID]
-FROM [MyApps].[CoreDescrData]
-WHERE [HOLEID] IS NOT NULL
-  AND LTRIM(RTRIM([HOLEID])) <> ''
-ORDER BY [HOLEID];
-```
-
-```json
-[ "GTZO_0001_1", "GTZO_0002_1" ]
-```
-
-Empty table: `[]` with `200`. Database failure: `500
-{ "error": "Unable to retrieve drillholes." }`.
-
-### One drillhole
-
-```text
-GET /api/dataviewer?drillhole=GTZO_0001_1
-```
+### `GET /api/dataviewer?drillhole=GTZO_0001_1`
 
 ```sql
 SELECT [HOLEID], [PROJECTCODE], [FROM], [TO], [PRIORITY], [NAME], [VALUE],
@@ -255,472 +228,225 @@ WHERE [HOLEID] = @Drillhole            -- varchar(20)
 ORDER BY [FROM], [TO], [PRIORITY], [PROJECTCODE], [usr], [NAME];
 ```
 
-Only the selected drillhole's rows are read; then, if it has any, one more
-query for its Campaign (below). Two queries per request, whatever the number
-of intervals or projects.
-
 ```json
-{
-  "drillhole": "GTZO_0001_1",
-  "project": "ZOOVCH",
-  "campaign": "2015",
+{ "drillhole": "GTZO_0001_1", "project": "ZOOVCH", "campaign": "2015",
   "projects": [ { "projectCode": "ZOOVCH", "campaign": "2015" } ],
-  "totalIntervals": 1,
-  "totalRecords": 3,
-  "hiddenValues": 0,
-  "storedBy": [ "BDOM\user" ],
-  "fileNames": [ "yashgaa.json" ],
+  "totalIntervals": 1, "totalRecords": 3, "hiddenValues": 0,
+  "storedBy": [ "BDOM\\user" ], "fileNames": [],
   "intervals": [
-    { "projectCode": "ZOOVCH", "lithoFrom": 5.0, "lithoTo": 10.0, "priority": 1,
-      "usr": "BDOM\user",
-      "values": { "lithoCode": "0--", "colorCode": "10G4/2", "lithologyComments": "Fine sand" } }
-  ]
-}
+    { "projectCode": "ZOOVCH", "lithoFrom": 5.0, "lithoTo": 10.0, "priority": 1, "usr": "BDOM\\user",
+      "values": { "lithoCode": "0--", "colorCode": "10G4/2", "lithologyComments": "Fine sand" } } ] }
 ```
 
-**Intervals** (`DataViewerIntervals.Build`). The procedure stores one row per
-interval and attribute and matches rows on `HOLEID`, `PROJECTCODE`, `FROM`,
-`TO`, `PRIORITY`, `NAME`, `usr`. So rows sharing `PROJECTCODE`, `FROM`, `TO`,
-`PRIORITY` and `usr` are one interval; another priority or login is another
-row, never merged. `NAME` → Raw Litho field is the upload mapping read
-backwards (see *JSON → database mapping*; names compared case-insensitively):
+| Case | Answer |
+| --- | --- |
+| records found | `200` |
+| no stored rows | `200` with `"totalIntervals": 0`, `"intervals": []`, `"projects": []` |
+| `drillhole` missing or blank | `400 { "error": "The drillhole query parameter is required." }` |
+| `drillhole` over 20 characters | `400 { "error": "drillhole must be 20 characters or fewer." }` |
+| permission error | `403` (see *Error handling*) |
+| other database error | `500 { "error": "Unable to retrieve drillhole records." }` |
 
-| `NAME` | `values` key | Value |
-| --- | --- | --- |
-| `LithoFacies` | `lithoCode` | `VALUE` |
-| `Colour` | `colorCode` | `VALUE` |
-| `RedoxFacies` | `redoxCode` | `VALUE` |
-| `CA` / `OM` / `OX` | `ca` / `om` / `ox` | `VALUE` |
-| `InternalStructure` | `sedim` | `VALUE` |
-| `Granulo` / `Hardness` | `granulo` / `hardness` | `VALUE` |
-| `LithologyComments` | `lithologyComments` | `COMMENT_VALUE`, or `VALUE` when that is empty |
+`DataViewerIntervals.Build` groups rows that share `PROJECTCODE`, `FROM`,
+`TO`, `PRIORITY` and `usr` into one interval, and maps `NAME` back to the Raw
+Litho field (case-insensitive): `LithoFacies` to `lithoCode`, `Colour` to
+`colorCode`, `RedoxFacies` to `redoxCode`, `CA`, `OM`, `OX` to `ca`, `om`,
+`ox`, `InternalStructure` to `sedim`, `Granulo` and `Hardness` to `granulo`
+and `hardness`, and `LithologyComments` to `lithologyComments` (from
+`COMMENT_VALUE`, or `VALUE` when that is empty).
 
-- `[FROM]` / `[TO]` are returned as `lithoFrom` / `lithoTo` in their SQL type
-  (no rounding); `5.0` and `5.00` are the same interval.
+- Depths are returned in their SQL type without rounding.
 - An attribute that is not stored is absent from `values`; `NULL` is `null`.
-  Nothing is filled in. `omFacies` and `py` are never present: the procedure
-  does not store them.
-- A row whose `NAME` has no Raw Litho field, or repeats one already placed in
-  the interval, is counted in `hiddenValues` instead of being dropped silently.
-- `totalRecords` is the number of `CoreDescrData` rows read.
+  `omFacies` and `py` never appear, because the procedure does not store them.
+- A row whose `NAME` has no Raw Litho field, or repeats one already in the
+  interval, is counted in `hiddenValues`.
+- `totalRecords` is the number of rows read. `storedBy` and `fileNames` are the
+  distinct `usr` and `FileName` values. `dbo.insertAcQuireOfflineBek` does not
+  write `FileName`, so `fileNames` is empty for rows it stored.
 
-**Project / Campaign.** `projects` lists every distinct stored `PROJECTCODE`
-of the drillhole (trimmed, case-insensitive). Campaign is not in
-`CoreDescrData`: it comes from the Drillholes query (`ZOOVCH_COLLAR_LIST`,
-`RIGHT(PROSPECT, 4)`) for the same `HOLEID`, matched on `PROJECTCODE` too,
-because a `HOLEID` may belong to several projects. Exactly one campaign: it;
-none or several: `null` (several is logged). The lookup is not a SQL join
-because `CoreDescrData:Database` may point at another database. If the lookup
-itself fails, it is logged and Campaign is `null`; the records are still
-returned. `project` / `campaign` are filled only when there is exactly one
-project, otherwise `null` (the frontend then lists `projects`).
-
-- No stored rows: `200` with `"totalIntervals": 0`, `"intervals": []`,
-  `"projects": []`.
-- Missing or blank `drillhole`, or longer than 20 characters (`HOLEID` is
-  written through `@Hole varchar(20)`): `400 { "error": "…" }`.
-- Database failure: `500 { "error": "Unable to retrieve drillhole records." }`;
-  details are logged only.
-
-**Permissions.** These `SELECT`s run as the CoreDescrData connection's login
-(see *Database configuration*), which needs `SELECT` on
-`MyApps.CoreDescrData` (Upload Data only needs `EXECUTE` on the procedure).
+Campaign is not in `CoreDescrData`. The controller reads it from the
+Drillholes query for the same `HOLEID` and `PROJECTCODE`, because one
+`HOLEID` can belong to several projects. One match gives the campaign; none or
+several give `null` (several is logged). If the lookup fails, Campaign is
+`null` and the records are still returned. `project` and `campaign` are set
+only when there is exactly one project; otherwise the frontend lists
+`projects`.
 
 ## Status
 
 ```text
 GET /api/status                    anonymous, polled by the sidebar every 5 s
-GET /api/status?includeUser=true   Windows Integrated Authentication
+GET /api/status?includeUser=true   Windows authentication
 ```
 
 ```json
 { "status": "online", "message": "Backend connection successful" }
-{ "status": "online", "message": "Backend connection successful", "userName": "COMPANY\\bek" }
+{ "status": "online", "message": "Backend connection successful",
+  "userName": "COMPANY\\bek", "fullUsername": "COMPANY\\bek", "isAuthorized": true }
 ```
 
-## Identity (current user)
+`fullUsername` is the name as Windows reports it. `userName` drops the
+computer name for a local account (`DESKTOP-1\Bek` becomes `Bek`). Only a name
+proven by Windows is returned. The frontend reads it once
+(`frontend/src/services/currentUser.ts`) for the sidebar, `created_by`,
+`edited_by` and Upload Data's Imported By.
 
-A browser cannot read the Windows login, so the backend proves it, on the
-existing Status route (no sixth API): `GET /api/status?includeUser=true`
-answers an unauthenticated request with `401` + `WWW-Authenticate: Negotiate`;
-the browser then authenticates the signed-in Windows user automatically
-(Kerberos or NTLM, `Microsoft.AspNetCore.Authentication.Negotiate`) and the
-response adds `userName`:
-
-| Account | Windows reports | `userName` |
-| --- | --- | --- |
-| Domain | `COMPANY\bek` | `COMPANY\bek` |
-| Local | `DESKTOP-1\Bek` | `Bek` (this computer's name is dropped) |
-
-- Only a name proven by Windows is returned; nothing the client sends is
-  used. No credentials or other OS details are returned.
-- Besides this, only `POST /api/upload-data` requires authentication (it takes
-  the uploader from it); plain `/api/status` and the other APIs stay anonymous,
-  unless `Auth:AllowedGroup` is set (see *Website access by AD group*).
-- The frontend asks once (`frontend/src/services/currentUser.ts`) and uses the
-  name for the sidebar, `created_by`, `edited_by` and Upload Data's
-  "Imported By". Without Windows credentials (another browser zone, a
-  non-Windows client) it shows "User not identified" — never a guess.
-- Browsers send Windows credentials automatically to `localhost` and Local
-  intranet sites; another host name must be in the Local intranet zone (or an
-  `AuthServerAllowlist` policy). Hosted in IIS: enable Windows Authentication
-  and keep Anonymous Authentication on.
-- Check from PowerShell on the same PC:
-  `Invoke-RestMethod 'http://localhost:7047/api/status?includeUser=true' -UseDefaultCredentials`.
-
-Upload Data sends the same verified user to the procedure as `@usr`; see
-*Uploader identity and authorization* below.
-
-## Website access by AD group (`Auth:AllowedGroup`)
-
-Only members of one Active Directory group may use the website. Set the group
-name on the server, for example `BDOM\AcQuire_Uploaders`:
-
-- In `appsettings.Production.json`: `"Auth": { "AllowedGroup": "BDOM\\AcQuire_Uploaders" }`.
-- Or as an IIS environment variable: `Auth__AllowedGroup=BDOM\AcQuire_Uploaders`.
-
-When it is set:
-
-| Request | Answer |
-| --- | --- |
-| No Windows login | `401` + `WWW-Authenticate: Negotiate` |
-| Signed in, not in the group | `403` |
-| Signed in, in the group (nested groups count) | normal response |
-| `GET /api/status` (plain online check) | always anonymous |
-| `GET /api/status?includeUser=true` | `200`, plus `"isAuthorized": true/false` |
-
-The frontend (`frontend/src/services/websiteAccess.ts`) shows an *Access
-denied* page with the user's `BDOM\` name instead of the app. While the backend
-cannot be reached, it uses the last answer saved in the browser. The backend
-is what enforces access.
-
-- Membership comes from the Windows login token (`User.IsInRole`), not a live
-  LDAP query. A user who was just added to or removed from the group must
-  sign out of Windows and back in.
-- IIS: Windows Authentication must stay on.
-- Blank (the default) turns the check off. The API logs a warning in
-  Development and an error in any other environment.
-
-## Upload Data endpoint
+## Upload Data
 
 ```text
 POST /api/upload-data
 Content-Type: multipart/form-data
-file = <exported lithology .json file>
+file         = <exported lithology .json file>
+expectedUser = <DOMAIN\user the page verified>   (optional)
 ```
 
-Uploads one exported Raw Litho JSON document (the format the frontend exports,
-e.g. `frontend/src/other/raw-lithology-test.json`) through the existing stored
-procedure. All inserts and updates happen inside the procedure; the API does
-no SQL INSERT/UPDATE of its own. The frontend uploads the original export;
-the backend validates it and sends the procedure only the fields it stores.
+`UploadDataController` checks the request, `UploadDataValidator` validates the
+JSON and builds a filtered copy, and `UploadDataRepository` passes that copy
+to the stored procedure in one call. The API runs no INSERT, UPDATE or DELETE
+of its own.
 
-```text
-Controllers/UploadData/UploadDataController.cs   HTTP: file checks, responses
-Controllers/UploadData/UploadDataValidator.cs    validation + the filtered procedure JSON
-Repositories/UploadData/UploadDataRepository.cs  the one stored procedure call
-Models/UploadData/UploadDataRequest.cs           the procedure's parameter values
-Models/UploadData/UploadDataResponse.cs          every response body
+### Checks, in order
+
+1. No Windows user: `401` with `WWW-Authenticate: Negotiate`, and the database
+   is not called.
+2. `expectedUser` set and different from the authenticated user: `409`.
+3. Windows user name over 50 characters: `400`.
+4. No file or an empty file: `400`. Larger than `UploadData:MaxFileSizeBytes`:
+   `413`. Not `*.json`, or a file name over 50 characters: `400`.
+5. Not valid UTF-8 JSON: `400 Invalid JSON file.`
+6. `400 Invalid lithology data.` with `errors` when:
+   - `project` or `drillhole` is not non-empty text, or `drillhole` is over 20
+     characters;
+   - `rows` is not a non-empty array of objects;
+   - a row's `lithoFrom` or `lithoTo` is missing or not a plain decimal number
+     (a JSON number or a string such as `"12.75"`, with no exponent or
+     thousands separator), or `lithoFrom` is not less than `lithoTo`;
+   - a stored attribute (`lithoCode`, `colorCode`, `redoxCode`, `ca`, `om`,
+     `ox`, `sedim`, `granulo`, `hardness`, `lithologyComments`) is not text,
+     `null` or missing.
+
+   Errors name the row (`Row 3: lithoFrom must be less than lithoTo.`). The
+   first 20 are listed, then `…and N more errors.`
+
+The filtered copy keeps `project`, `drillhole` and `rows`, and in each row
+only `lithoFrom`, `lithoTo` (as JSON numbers) and the ten stored attributes
+with their original values. Missing stays missing and `""` stays `""`.
+
+```json
+{ "project": "ZOOVCH", "drillhole": "GTZO_0001_1", "rows": [
+  { "lithoFrom": 5, "lithoTo": 10, "lithoCode": "0--", "colorCode": "10G4/2",
+    "redoxCode": "0042_MN1", "ca": "", "om": "", "ox": "", "sedim": "",
+    "granulo": "", "hardness": "", "lithologyComments": "" } ] }
 ```
-
-### Request flow
-
-1. A file is required (`400` otherwise), at most `UploadData:MaxFileSizeBytes`
-   (`appsettings.json`, default 10 MB; `413` otherwise), named `*.json`, with a
-   name of at most 50 characters (`@fileName varchar(50)`).
-2. The content must be valid UTF-8 JSON (`400 Invalid JSON file.`).
-3. The document is validated (`400 Invalid lithology data.` with `errors`):
-   - `project` and `drillhole` are non-empty text; `drillhole` is at most 20
-     characters (`@Hole varchar(20)`);
-   - `rows` is a non-empty array of objects;
-   - each row's `lithoFrom` and `lithoTo` are present and are plain decimal
-     numbers, as JSON numbers or numeric strings (`"5"`, `"12.75"`; no exponent
-     or thousands separator), with `lithoFrom < lithoTo`;
-   - each stored attribute (`lithoCode`, `colorCode`, `redoxCode`, `ca`, `om`,
-     `ox`, `sedim`, `granulo`, `hardness`, `lithologyComments`) is text, `null`
-     or missing. Empty strings are valid and are passed on as empty strings.
-
-   Errors name the row (`Row 3: lithoFrom must be less than lithoTo.`); the
-   first 20 are listed, then `…and N more errors.`. Nothing is truncated or
-   converted. An invalid file never reaches the database.
-4. A **filtered copy** is built for the procedure (the uploaded file itself is
-   not changed) and passed in a single call for the whole document (never once
-   per row):
-   - top level: `project`, `drillhole`, `rows` only;
-   - each row: `lithoFrom`, `lithoTo` (as JSON numbers, value unchanged:
-     `"12.50"` → `12.50`) and the ten stored attributes, under their original
-     names and with their original values. An attribute missing from the
-     upload stays missing (the procedure reads `NULL`); `""` stays `""`;
-     nothing is defaulted, trimmed or invented.
-
-   ```json
-   { "project": "ZOOVCH", "drillhole": "GTZO_0001_1", "rows": [
-     { "lithoFrom": 5, "lithoTo": 10, "lithoCode": "0--", "colorCode": "10G4/2",
-       "redoxCode": "0042_MN1", "ca": "", "om": "", "ox": "", "sedim": "",
-       "granulo": "", "hardness": "", "lithologyComments": "" } ] }
-   ```
 
 ### Stored procedure call
-
-`UploadDataRepository` runs `dbo.InsertUpdateCoreDescr_WellCAD` with
-`Microsoft.Data.SqlClient`, `CommandType.StoredProcedure`, explicitly typed
-parameters, async calls and the request's cancellation token (command timeout
-120 s):
 
 | Parameter | Type | Value |
 | --- | --- | --- |
 | `@Action` | `varchar(50)` | `'Raw core import_JSON'` |
 | `@Hole` | `varchar(20)` | the JSON `drillhole` |
-| `@usr` | `varchar(50)` | the verified Windows user (`DOMAIN\user`), see *Uploader identity* |
-| `@fileName` | `varchar(50)` | the uploaded file name (no path) |
-| `@str_json` | `nvarchar(max)` | the filtered JSON (step 4 above) |
+| `@usr` | `varchar(50)` | the verified Windows user (`DOMAIN\user`) |
+| `@fileName` | `varchar(50)` | the uploaded file name, without a path |
+| `@str_json` | `nvarchar(max)` | the filtered JSON |
 
-The call runs in one `SqlTransaction`, like the SSMS test (`BEGIN TRAN` →
-`EXEC` → `COMMIT`):
+The repository checks that the connection is on the configured CoreDescrData
+database, starts a transaction, logs the Windows user with `DB_NAME()`,
+`SUSER_SNAME()`, `USER_NAME()` and `ORIGINAL_LOGIN()`, and runs the procedure
+with a 120 s timeout. It reads every result set so a late error still fails
+the request, then commits (not cancellable at that point). On any error it
+rolls back if SQL Server has not already done so (the procedure uses
+`XACT_ABORT ON`), logs and rethrows.
 
-1. Open the connection and check it is on the configured upload database
-   (otherwise nothing runs).
-2. `BEGIN TRANSACTION`; log the Windows user, `DB_NAME()`, `SUSER_SNAME()` and `USER_NAME()`
-   (the SQL login the procedure runs as).
-3. Execute the procedure once and read every result set it returns to the
-   end, so an error raised by a later statement still fails the request.
-4. `COMMIT` — not cancellable once the procedure has finished. Only then is
-   success returned.
-5. On any error: `ROLLBACK` if the transaction is still open (the procedure
-   uses `XACT_ABORT ON`, so SQL Server may already have rolled it back), log,
-   rethrow; the API returns a failure.
+`Sql/insertAcQuireOfflineBek.sql` creates the procedure and grants `EXECUTE`
+to `userAcquire`. It copies the `Raw core import_JSON` branch of
+`dbo.InsertUpdateCoreDescr_WellCAD` with the same parameters, except that it
+stores `@usr` as sent and falls back to `SUSER_SNAME()` only when `@usr` is
+empty. The old procedure is unchanged and WellCAD still uses it.
 
-The API does not report inserted/updated counts (the procedure does not
-return them) and does not read `CoreDescrData` to verify: under the security
-policy the login may only execute the procedure. Verify with Section G of
-`SQLTests/Test_UploadData_StoredProcedure.sql`.
+### What gets stored
 
-### JSON → database mapping
+The procedure writes `HOLEID` (from `drillhole`), `PROJECTCODE` (from
+`project`), `[FROM]` and `[TO]` (rounded to two decimals), `PRIORITY` (always
+1), `NAME`, `VALUE`, `COMMENT_VALUE` and `usr` in `MyApps.CoreDescrData`, one
+row per interval and attribute. `NAME` is the reverse of the Data Viewer
+mapping above; comments go to `COMMENT_VALUE`. Everything else in the file
+(`campaign`, timestamps, `created_by`, `edited_by`, row fields such as `id`,
+`corePass`, `omFacies` and `py`) is accepted but filtered out.
 
-The procedure's `Raw core import_JSON` branch writes to
-`[ACQMN01].[MyApps].[CoreDescrData]` (`HOLEID`, `PROJECTCODE`, `FROM`,
-`TO`, `PRIORITY`, `NAME`, `VALUE`, `COMMENT_VALUE`, `CONSISTENTCHECK`, `usr`,
-`FileName`, `PathName`), one row per interval and attribute (`NAME`/`VALUE`):
+Existing rows are matched on `HOLEID`, `PROJECTCODE`, `FROM`, `TO`,
+`PRIORITY`, `NAME` and `usr`, so uploading the same file again updates them.
+Because `usr` is part of the key, the same file from another user adds a
+second set of rows, and rows stored earlier under `userAcquire` are not
+updated by a re-upload. The API never deletes rows and does not report counts.
 
-| JSON field | Stored as |
-| --- | --- |
-| `drillhole` | `HOLEID` |
-| `project` | `PROJECTCODE` |
-| `lithoFrom` | `FROM` |
-| `lithoTo` | `TO` |
-| `lithoCode` | `NAME = 'LithoFacies'` |
-| `colorCode` | `NAME = 'Colour'` |
-| `redoxCode` | `NAME = 'RedoxFacies'` |
-| `ca` | `NAME = 'CA'` |
-| `om` | `NAME = 'OM'` |
-| `ox` | `NAME = 'OX'` |
-| `sedim` | `NAME = 'InternalStructure'` |
-| `granulo` | `NAME = 'Granulo'` |
-| `hardness` | `NAME = 'Hardness'` |
-| `lithologyComments` | `NAME = 'LithologyComments'` |
+### Uploader identity
 
-**Not stored** by the procedure today: `campaign`, `created_at`,
-`modified_at`, `created_by`, `edited_by`, and the row fields `id`,
-`extractionType`, `corePass`, `recoveryStart`, `recoveryEnd`, `coreEnd`,
-`omFacies`, `py`, `lithologicalDescription`. They are accepted in the upload
-but **filtered out** of `@str_json`. The procedure's `OPENJSON` also reads `py`
-and `omFacies`, but its raw-import INSERT never stores them, so they are not
-sent; storing them would need a procedure change.
+`@usr` is always the Windows user Negotiate verified, as the full
+`DOMAIN\user`. `created_by`, `edited_by` and form fields are never used for
+it, and `expectedUser` is only compared. Unless
+`Database:ImpersonateWindowsUser` is on, the connection stays `userAcquire`
+and SQL Server trusts the API to pass the verified name.
 
-### Uploader identity and authorization (`usr`)
-
-```text
-browser ──Negotiate (Kerberos/NTLM)──▶ API: User.Identity.Name = "BDOM\jsmith"
-API ──SQL login userAcquire──▶ EXEC … @usr = 'BDOM\jsmith'
-procedure: is BDOM\jsmith in the uploaders' AD group?  no → THROW 51001 (nothing inserted)
-                                                       yes → insert/update, usr = 'BDOM\jsmith'
-```
-
-- `POST /api/upload-data` requires Windows Integrated Authentication. An
-  anonymous request gets `401` + `WWW-Authenticate: Negotiate` and the
-  database is not called. The other endpoints stay anonymous.
-- `@usr` is the full verified `DOMAIN\user` (a local account keeps its
-  computer name). `created_by` / `edited_by` in the file, or any form field,
-  are never used as the uploader.
-- The decision is SQL Server's: the procedure checks `@usr` against the
-  uploaders' AD group (`xp_logininfo`) and raises error **51001** when the
-  user is not a member. The API rolls back and answers `403`
-  "`<user>` is not authorized to upload data. Contact the database
-  administrator." Other SQL errors stay `500` without details.
-- The SQL connection stays `userAcquire` unless `Database:ImpersonateWindowsUser`
-  is on. SQL Server therefore trusts the API to pass the verified name; keep
-  the `userAcquire` password out of Git (see *Production password*).
-- The page re-verifies the Windows user (`/api/status?includeUser=true`)
-  right before every upload and sends it as the optional form field
-  `expectedUser`. It is only compared: if it differs from the account the
-  upload request authenticated as, the API answers `409` "You are signed in
-  as … but this page shows …" and the database is not called. Without a
-  verified user the page sends nothing. The IndexedDB identity in the
-  sidebar is display-only and never authorizes an upload.
-
-**Why `usr` is `userAcquire` today, and the fix (not applied by this repository):**
-the API sends the right `@usr`, but the procedure's 'Raw core import_JSON'
-branch overwrites it with `SUSER_NAME()`, the SQL login `userAcquire`.
-- `Sql/UploadDataUsrFix.sql`: the minimal one-line procedure change (keep
-  `@usr`, fall back to `SUSER_SNAME()` only when it is empty), with checks and
-  rollback tests. This alone makes `usr` the `DOMAIN\user` of whoever uploads.
-  `Sql/UploadDataUsrFix.Apply.sql` applies that change in SSMS: preview with
-  `@Apply = 0`, then `@Apply = 1`; it changes nothing unless exactly one
-  line overwrites `@usr`.
-- `Sql/UploadDataUserAuthorization.sql`: the same change plus the uploaders'
-  AD group check (error 51001), if only that group may upload.
-- No procedure change: turn on `Database:ImpersonateWindowsUser` (see
-  *Running as the Windows user*), so `SUSER_NAME()` is the user itself.
-
-**Careful with `usr` in the match key:** once `usr` is the real user,
-re-uploading a drillhole stored under `userAcquire` adds rows instead of
-updating them (see *Duplicates and updates*). The script lists those
-drillholes; what to do with them is a decision for the data owners.
-
-### Duplicates and updates
-
-There is no duplicate detection in the API. The procedure matches existing
-rows on `HOLEID`, `PROJECTCODE`, `FROM`, `TO`, `PRIORITY`, `NAME` and `usr`:
-uploading the same file again updates those rows instead of adding new ones,
-and a changed value updates the matching row. Because `usr` is part of the key,
-the same file uploaded under a *different* SQL login creates a second set of
-rows. The API never deletes rows.
+If the procedure raises error 51001, the API rolls back and answers `403`.
+`dbo.insertAcQuireOfflineBek` does not raise 51001 today.
+`Sql/UploadDataUserAuthorization.sql` describes an AD group check that would,
+but it and the other `Sql/UploadDataUsr*.sql` scripts were written for
+`dbo.InsertUpdateCoreDescr_WellCAD`.
 
 ### Responses
 
-```json
-// 200 OK — totalRows is the number of JSON rows received, not database rows.
-{ "success": true, "message": "Data uploaded successfully.",
-  "drillhole": "GTZO_0001_1", "project": "ZOOVCH", "totalRows": 53 }
+Every body is `{ "success", "message" }`, plus `errors` for invalid data and
+`drillhole`, `project`, `totalRows` (JSON rows received) on success. A 401
+has no body.
 
-// 400 Bad Request
-{ "success": false, "message": "No file was uploaded." }
-{ "success": false, "message": "Only .json files are accepted." }
-{ "success": false, "message": "File name must be 50 characters or fewer." }
-{ "success": false, "message": "Invalid JSON file." }
-{ "success": false, "message": "Invalid lithology data.",
-  "errors": [ "Row 3: lithoFrom must be less than lithoTo." ] }
+| Status | `message` |
+| --- | --- |
+| 200 | `Data uploaded successfully.` |
+| 400 | `No file was uploaded.`, `Only .json files are accepted.`, `File name must be 50 characters or fewer.`, `Windows user name must be 50 characters or fewer.`, `Invalid JSON file.`, `Invalid lithology data.` |
+| 403 | `BDOM\jsmith has no database permission to upload data. Contact the database administrator.` (permission error) or `BDOM\jsmith is not authorized to upload data. Contact the database administrator.` (error 51001) |
+| 409 | `You are signed in as BDOM\jsmith, but this page shows BDOM\other. Reload the page and upload again.` |
+| 413 | `File exceeds the 10 MB limit.` |
+| 500 | `Database upload failed.` |
 
-// 413 Payload Too Large
-{ "success": false, "message": "File exceeds the 10 MB limit." }
-
-// 403 Forbidden — SQL Server denied a permission (229, 230, 916, 15406, 15517)
-{ "success": false,
-  "message": "BDOM\\jsmith has no database permission to upload data. Contact the database administrator." }
-
-// 500 Internal Server Error — any other connection or procedure failure
-{ "success": false, "message": "Database upload failed." }
-```
-
-SQL Server errors, connection details and stack traces are logged on the
-server (with the file name and drillhole) and never returned. A request the
-client abandons cancels the database call.
-
-### Database
-
-See *Database configuration* above: the upload uses the `CoreDescrData`
-connection (`ACQMN01`). After opening, the repository checks the
-connection really is on that database and refuses to run otherwise, so an
-upload never lands silently in another database. Each upload logs server, database,
-SQL login and database user. Under the company security model the login may
-only execute the procedure: the API sends no INSERT/UPDATE/DELETE of its own.
-
-### Troubleshooting: error 229 (INSERT permission denied)
+### Error 229 (INSERT permission denied)
 
 ```text
 The INSERT permission was denied on the object 'CoreDescrData',
 database 'ACQMN01', schema 'MyApps'.   (Number 229, State 5, Class 14)
 ```
 
-This is a database authorization problem, not a JSON or parameter problem:
-the API returns `<DOMAIN\user> has no database permission to upload data.
-Contact the database administrator.` (HTTP 403) and logs the SQL error number, the
-procedure, the connected server/database and SQL Server's message — never the
-credentials or the uploaded JSON.
+The API answers with the 403 "no database permission" message and logs the
+SQL error, never credentials or the JSON. The error names the table, so
+`EXECUTE` was allowed; the ownership chain from the procedure to
+`MyApps.CoreDescrData` is broken (different owner, dynamic SQL or a
+cross-database write) or the login has a `DENY`. `Sql/UploadDataPermissions.sql`
+(written against the old procedure name) has diagnostics and commented-out
+fixes. The recommended fix is to sign the procedure with a certificate whose
+user holds `SELECT, INSERT, UPDATE` on that table, so the login keeps
+`EXECUTE` only. Avoid `db_owner`, `db_datawriter`, schema-wide grants,
+cross-database chaining, `TRUSTWORTHY` and `EXECUTE AS OWNER`.
 
-The error names the **table**, so the EXECUTE check on the procedure passed;
-granting EXECUTE does not fix it. The procedure ran its INSERT and SQL Server
-checked it against `userAcquire`, which happens only when the ownership chain
-from `dbo.InsertUpdateCoreDescr_WellCAD` to `MyApps.CoreDescrData` is broken:
-the `MyApps` schema (or table) has a different owner than `dbo`, the INSERT
-is dynamic SQL, or it crosses into another database. An explicit DENY on the
-login matters on top of that.
+### Known limitations
 
-`Sql/UploadDataPermissions.sql` holds read-only diagnostics that show which
-case applies (destination, identity, owners, execution context, dynamic SQL,
-DENYs) and the fixes for the DBA, all commented out. Recommended: **sign the
-procedure with a certificate** whose user holds `SELECT, INSERT, UPDATE` on
-that one table — the application login keeps `EXECUTE` only, which is exactly
-the approved model. Not proposed: `db_owner`, `db_datawriter`, table or
-schema grants to the application, cross-db chaining, `TRUSTWORTHY`, or
-`EXECUTE AS OWNER` (it would change `SUSER_NAME()`, i.e. the `usr` column
-and the duplicate-matching key). If direct grants are approved anyway, the
-script's B3 grants `SELECT, INSERT, UPDATE` on that one table (not the whole
-`MyApps` schema).
-
-### Known limitations of the procedure
-
-- Until `Sql/UploadDataUserAuthorization.sql` is applied, `usr` is `SUSER_NAME()` and no group is checked (see above).
-- Not every JSON field is stored (see the mapping).
-- No inserted/updated counts are returned.
-- Column sizes of `CoreDescrData` (e.g. `PROJECTCODE`, `VALUE`) and the
-  procedure's `OPENJSON` column types were not available while this was built,
-  so the API checks only the parameter sizes above. If the procedure reads
-  values into shorter `OPENJSON ... WITH` columns, SQL Server truncates them
-  without an error; that would have to be fixed in the procedure.
-- Whether the procedure wraps its work in a transaction is not known; a
-  cancelled or failed call may leave a partial upload until the file is
-  uploaded again.
+`OPENJSON` reads `PROJECTCODE` as `varchar(10)`, attribute values as
+`varchar(20)` and comments as `varchar(254)`, while the API checks only the
+parameter sizes, so longer values may be cut by SQL Server. `FileName` and
+`PathName` are not stored. No counts come back; Section G of
+`SQLTests/Test_UploadData_StoredProcedure.sql` shows the stored rows.
 
 ## Tests
 
-Automated tests live in `../BackendApi.Tests` (xUnit), through the real
-ASP.NET Core pipeline with fake repositories; they never connect to a real
-database:
+`../BackendApi.Tests` (xUnit) runs the real ASP.NET Core pipeline with fake
+repositories and never connects to a database. It covers the exact route list
+(`ApiRoutesTests`), the production connection settings and password-free
+logging (`ConnectionConfigurationTests`), the `EXECUTE AS LOGIN` batch and
+fallback auth policy (`WindowsUserImpersonationTests`), AD group access
+(`Auth/`), the status check (`Status/`), lookup grouping (`TableConstants/`),
+interval building and Campaign matching (`DataViewer/`), and upload
+validation, filtering, SQL errors 229 and 51001, anonymous uploads and the
+`@usr` value (`UploadData/`).
 
-- `ApiRoutesTests`: exactly the six routes of the five APIs; removed routes
-  return `404`.
-- `ConnectionConfigurationTests`: `appsettings.json` (Production) uses the
-  SQL login `userAcquire` with encryption; Windows authentication on/off;
-  the logged description never contains the password.
-- `TableConstants/`: `FIELDNAME` to list grouping, response keys and item
-  names, safe `500`.
-- `DataViewer/`: the drillhole list (filled, empty, safe `500`); NAME / VALUE
-  rows → intervals (every mapped NAME, comments from `COMMENT_VALUE`,
-  priorities / projects / logins kept apart, depth scale, missing and NULL
-  values, unknown and repeated NAMEs counted); Project / Campaign matched on
-  HOLEID + PROJECTCODE (single, matching, conflicting, missing, several
-  projects, failed lookup); empty result, `400` for a missing or too-long
-  drillhole, safe `500`.
-- `UploadData/`: validation, filtering, one procedure call, error 229 and
-  other SQL errors, an unreachable server; anonymous upload → 401 without a
-  database call, the verified user (not `created_by`, `edited_by` or a form
-  field) sent as `@usr`, error 51001 → 403, an over-long user name → 400.
-
-```bash
-dotnet test ../BackendApi.Tests
-```
-
-Manual check against an approved development database:
-
-1. `dotnet run --launch-profile http`, then open Swagger at
-   `http://localhost:7047/swagger`.
-2. `POST /api/upload-data` with a valid export → `200`, `totalRows` = rows in
-   the file. Check `CoreDescrData` for the drillhole.
-3. Upload the same file again → row count for that `HOLEID` unchanged.
-4. Change one value (e.g. a `lithoCode`), upload → that row's `VALUE` updated.
-
-5. `GET /api/dataviewer/drillholes` lists the drillhole;
-   `GET /api/dataviewer?drillhole=<HOLEID>` shows one interval per uploaded
-   row, with the file's values.
-
-The requests in `BackendApi.http` can be used instead of Swagger.
-
-## Build verification
-
-```bash
-dotnet restore
-dotnet build
-dotnet test ../BackendApi.Tests
-dotnet publish -c Release -o release
-```
+For a manual check against an approved development database, upload a valid
+export in Swagger (expect `200` and `totalRows` equal to the file's rows),
+upload it again (the row count for that `HOLEID` stays the same), then open
+`GET /api/dataviewer?drillhole=<HOLEID>`.

@@ -1,254 +1,161 @@
 # Services
 
-Non-React layer: HTTP clients, IndexedDB access, and lookup configuration.
-Nothing here imports React, and nothing here holds UI state.
+The non-React layer: HTTP clients, IndexedDB access, lookup configuration and
+the signed-in user. Nothing here imports React or holds UI state.
 
 ```text
 services/
 ├── Api/
-│   ├── apiConfig.ts              buildApiUrl — the only place a URL is built
-│   ├── backendStatus.ts          GET /api/status
-│   ├── dataViewerApi.ts          GET /api/dataviewer/drillholes, /api/dataviewer?drillhole=… (Database Viewer)
-│   ├── drillholeApi.ts           GET /api/drillholes
-│   ├── rawLithoApi.ts            GET /api/table-constants (all 9 lookups)
-│   └── uploadData.ts             POST /api/upload-data
+│   ├── apiConfig.ts         buildApiUrl, the only place an API URL is built
+│   ├── backendStatus.ts     GET /api/status
+│   ├── drillholeApi.ts      GET /api/drillholes
+│   ├── rawLithoApi.ts       GET /api/table-constants (all nine lookups)
+│   ├── dataViewerApi.ts     GET /api/dataviewer/drillholes and /api/dataviewer?drillhole=…
+│   └── uploadData.ts        POST /api/upload-data
 ├── IndexDB/
 │   ├── rawLithoDatabase.ts       owns raw-litho-db: version, stores, transactions
-│   ├── rawLithoSaveQueue.ts      pending snapshots, serialized saves and retries
-│   ├── rawLithoDraftDb.ts        drafts + session stores
-│   ├── drillholeCacheDb.ts       drillholeCache store
-│   ├── recentDrillholesDb.ts     drillhole selection history (session store)
-│   ├── rawLithoLookupCacheDb.ts  separate raw-litho-lookup-cache-db
-│   ├── rawExtractionDraftDb.ts   raw-extraction-db (unrouted page)
-│   └── uploadDataDraftDb.ts      separate upload-data-db (Upload Data draft)
-├── rawLithoLookupConfig.ts       single source of truth for all 11 lookups
-└── README.md
+│   ├── rawLithoDraftDb.ts        Raw Litho drafts and the active session
+│   ├── rawLithoSaveQueue.ts      pending snapshots and ordered draft writes
+│   ├── drillholeCacheDb.ts       cached drillhole list
+│   ├── recentDrillholesDb.ts     recently selected drillholes
+│   ├── windowsIdentityDb.ts      last verified Windows user, for display
+│   ├── rawLithoLookupCacheDb.ts  lookup cache, in its own database
+│   └── uploadDataDraftDb.ts      Upload Data working document, in its own database
+├── rawLithoLookupConfig.ts  every Raw Litho dropdown
+├── currentUser.ts           verified Windows user from the backend
+└── websiteAccess.ts         whether that user may use the site
 ```
 
 ## Api/
 
-### `apiConfig.ts`
+`buildApiUrl(path)` returns a relative `/api/...` URL in development, so the
+Vite proxy handles it and CORS never comes up. In production it prefixes
+`VITE_API_BASE_URL` with trailing slashes removed. Every client goes through it,
+and every client except `backendStatus.ts` sends `credentials: "include"` so the
+backend sees the Windows user.
 
-```js
-const apiBaseUrl = import.meta.env.DEV ? "" : configuredBaseUrl;
-export function buildApiUrl(path) { ... }
-```
-
-Dev mode always produces relative `/api/...` URLs so the Vite proxy handles the
-request and no CORS negotiation is needed. Production uses
-`VITE_API_BASE_URL` with trailing slashes stripped. Every client goes through
-`buildApiUrl`.
-
-### `drillholeApi.ts`
-
-`getDrillholes(signal)` → array of `{ holeId, projectCode, campaign }`.
-
-Rejects the entire response if it is not an array, if any record is missing
-those three string fields, if a `holeId` is blank, or if `holeId` values are not
-unique. Better to fall back to the cache than to render a half-valid list.
-
-### `rawLithoApi.ts`
-
-`getRawLithoLookup(fieldKey)` → array of records for one lookup.
-
-- All nine lists come from **one** request, `GET /api/table-constants`
-  (`{ caCode: [...], colourCode: [...], ... }`); the lookup's `responseKey`
-  picks its list. An unknown field rejects immediately.
-- **Shared in flight**: the one request is cached at module level, so all
-  nine lookups on every page cost a single call per page load.
-- A failed request, or a list that fails validation, is forgotten, so a
-  retry asks the server again.
-- Throws unless that list is an array of objects with a string value for the
-  configured code property; one bad list fails only its own lookup.
-
-### `backendStatus.ts`
-
-`getBackendStatus(signal)` requires HTTP OK **and** `{ "status": "online" }`.
-Anything else throws, which the indicator treats as offline.
-
-### `uploadData.ts`
-
-`importUploadData(file, signal)` POSTs `multipart/form-data` with the file under
-the field name `file`, with `credentials: "include"`: the backend takes the
-uploader from Windows authentication, and no user name is sent. A `401`
-becomes "Windows sign-in required: your account could not be verified."; a
-`403` (SQL Server did not authorize the user) shows the backend's message.
-Network failures become
-"Server unavailable"; `AbortError` is re-thrown
-untouched. Error text is read from `detail`, `message`, or `title`, or from a
-plain-text body, falling back to "Upload failed".
+- `getBackendStatus(signal)` succeeds only on HTTP OK with
+  `{ "status": "online" }`. Anything else throws, and the status indicator
+  shows Offline.
+- `getDrillholes(signal)` returns `{ holeId, projectCode, campaign }` records
+  and rejects the whole response if any record is invalid, so the caller falls
+  back to the cache.
+- `getRawLithoLookup(fieldKey)` returns one lookup list. All nine lists come
+  from a single `GET /api/table-constants` request that is shared for the page
+  load. The lookup's `responseKey` picks its list. A failed request, or a list
+  that fails validation, is forgotten so the next call asks again. One bad list
+  fails only its own lookup.
+- `getDataViewerDrillholes(signal)` and `getDataViewerRecords(drillhole, signal)`
+  feed the Database Viewer and validate the response shape.
+- `importUploadData(file, expectedUser, signal)` posts `multipart/form-data`
+  with `file` and `expectedUser`. The backend takes the uploader (`usr`) from
+  Windows authentication and only compares `expectedUser` with it, refusing with
+  `409` when they differ. The request times out after 180 seconds. A `401`
+  becomes "Couldn't confirm your Windows sign-in.", a network failure "Server
+  unavailable", and other errors show the JSON `message`, `detail` or `title`
+  plus the first row error. A non-JSON error body is never shown.
 
 ## IndexDB/
 
-### `rawLithoDatabase.ts` — the gateway
+### `rawLithoDatabase.ts`
 
-The single owner of the `raw-litho-db` connection, its version (**4**), and its
-store list. Every other module in this folder calls its helpers rather than
-opening the database itself, so the schema is declared exactly once.
-
-```text
-readValue(store, key)          → runTransaction("readonly")
-readEntries(store)             → runTransaction("readonly"), one cursor: [key, value][]
-writeValue(store, key, value)  → runTransaction("readwrite")
-deleteValue(store, key)        → runTransaction("readwrite")
-```
-
-Stores: `drafts`, `drillholeCache`, `rawLithoLookupCache`, `session`. Upgrades
-create only the missing stores, so adding one is a version bump plus a name.
-The connection closes after each transaction and on `versionchange`, and a
-blocked upgrade rejects rather than hanging.
+The single owner of the `raw-litho-db` connection (version 4) and its stores:
+`drafts`, `drillholeCache`, `rawLithoLookupCache` and `session`. Other modules
+use its helpers (`readValue`, `readEntries`, `writeValue`, `deleteValue`, all
+built on `runTransaction`) instead of opening the database. An upgrade only
+creates missing stores. The connection closes after each transaction and on
+`versionchange`, a blocked upgrade rejects, and writes resolve when the
+transaction completes. The `rawLithoLookupCache` store is declared but unused.
 
 ### `rawLithoDraftDb.ts`
 
 | Function | Purpose |
 | --- | --- |
-| `buildRawLithoDraftKey(drillhole)` | Trims the id, returns `null` when blank — the "page disabled" signal |
-| `readRawLithoDraft(key)` | Reads a draft, unwrapping older `{ document }`, `{ snapshot }`, `{ draft }`, `{ value }` envelopes |
-| `readRawLithoDrafts()` | Every stored draft as `{ draftKey, draft }` (unwrapped), read-only — for Recent Working Drillholes |
-| `writeRawLithoDraft(key, lithoDocument)` | Replaces the draft; rejects without a key |
-| `deleteRawLithoDraft(key)` / `hasRawLithoDraft(key)` | Delete / existence check |
-| `readRawLithoSession()` / `writeRawLithoSession({ drillhole, page })` | The active drillhole and table page; writing a blank drillhole deletes the record |
+| `buildRawLithoDraftKey(drillhole)` | Trimmed drillhole id, or `null` when blank (the page stays disabled) |
+| `readRawLithoDraft(key)` | One draft, unwrapping older `{ document }`, `{ snapshot }`, `{ draft }` and `{ value }` envelopes |
+| `readRawLithoDrafts()` | Every stored draft as `{ draftKey, draft }`, for the recent working drillholes |
+| `writeRawLithoDraft(key, lithoDocument)` | Replaces a draft |
+| `readRawLithoSession()` / `writeRawLithoSession({ drillhole, page })` | Active drillhole and table page. Writing a blank drillhole deletes the record. |
 
-### `drillholeCacheDb.ts`
+### `rawLithoSaveQueue.ts`
 
-Validates and strips records to `{ holeId, projectCode, campaign }` on both
-write and read, so a corrupted cache returns `null` instead of bad data.
+`DraftSaveQueue` (exported instance `rawLithoSaveQueue`) keeps the latest
+pending snapshot per drillhole and writes them one at a time per key. A
+snapshot is dropped only after its write commits, and a revision check stops an
+older write from removing a newer edit. Failed snapshots stay queued across
+route remounts. `commitImport` writes a confirmed JSON import once, after
+earlier edits have saved. Imports are never retried in the background. The
+persistence hook (`useRawLithoDraftPersistence`) decides when to flush.
 
-### `recentDrillholesDb.ts`
+### Caches and small stores
 
-`readRecentDrillholes()` / `writeRecentDrillholes(holeIds)`, stored under
-`"recent-drillholes"` in the existing `session` store as
-`{ holeIds, updatedAt }` — most recent first. Blank and duplicate ids are
-dropped on both write and read. Storage only: how many are kept and where they
-appear in the list belongs to `pages/RawLitho/drillholeOrdering.ts`.
-
-### `rawLithoLookupCacheDb.ts`
-
-A **separate** database (`raw-litho-lookup-cache-db` v1, store `lookups`,
-`keyPath: "cacheKey"`) holding `{ cacheKey, records, updatedAt }` per lookup.
-Note that `raw-litho-db` also declares an unused `rawLithoLookupCache` store.
-
-### `rawExtractionDraftDb.ts`
-
-Serves the unrouted `RawExtraction.tsx`. Own database, single `"current"` key,
-and a promise chain that serialises writes.
-
-### `uploadDataDraftDb.ts`
-
-Upload Data's working document. Its own database (`upload-data-db`, store
-`drafts`, single `"current"` key) so it never touches the Raw Litho schema.
-The value is `{ fileName, fileSize, isEdited, document, savedAt }`; the parsed
-document is stored as-is (structured clone), never re-serialised to JSON.
-`writeUploadDataDraft` and `clearUploadDataDraft` share one promise chain, so a
-Cancel issued during a save always wins; `readUploadDataDraft` waits for that
-chain first.
+- `drillholeCacheDb.ts`: `saveDrillholes` and `readDrillholeCache` validate and
+  strip records to `{ holeId, projectCode, campaign }` on write and read. A
+  damaged cache reads as `null`.
+- `recentDrillholesDb.ts`: `readRecentDrillholes` and `writeRecentDrillholes`
+  store `{ holeIds, updatedAt }` under `session["recent-drillholes"]`, most
+  recent first, without blanks or duplicates. How many to keep is decided in
+  `pages/RawLitho/drillholeOrdering.ts`.
+- `windowsIdentityDb.ts`: `readCachedWindowsIdentity` and
+  `cacheVerifiedWindowsIdentity` keep
+  `{ id: "current-user", domain, username, fullUsername, lastUpdated }` under
+  `session["windows-identity"]`. It is for display only and never used to
+  stamp edits or authorize anything.
+- `rawLithoLookupCacheDb.ts`: `readLookupCache` and `saveLookupCache` use a
+  separate database, `raw-litho-lookup-cache-db` (store `lookups`, key path
+  `cacheKey`).
+- `uploadDataDraftDb.ts`: `readUploadDataDraft`, `writeUploadDataDraft` and
+  `clearUploadDataDraft` keep one draft in `upload-data-db` (store `drafts`,
+  key `"current"`): `{ fileName, fileSize, isEdited, document, savedAt }`. The
+  document is stored as a structured clone. Writes and clears share one promise
+  chain, so a Cancel during a save wins.
 
 ## rawLithoLookupConfig.ts
 
-One place defining every dropdown, consumed by the API client, the loading hook,
-the row renderer, and validation.
+Defines every Raw Litho dropdown. The API client, the lookup hook, the row
+renderer and validation all read it, so a new lookup needs only a new entry.
 
 | Export | Contents |
 | --- | --- |
-| `RAW_LITHO_LOOKUPS` | The 9 API lookups: `fieldKey`, `label`, `responseKey` (list key in `/api/table-constants`), `codeProperty`, `cacheKey` |
-| `RAW_LITHO_LOCAL_LOOKUPS` | Granulo and Hardness: `source: "local"`, digits 0–9, `maxLength: 1`, numeric input guard |
-| `GRANULO_HARDNESS_OPTIONS` | `[{ code: "0" }, … { code: "9" }]` |
-| `RAW_LITHO_ALL_LOOKUPS` | Both lists, used by lookup validation |
-| `RAW_LITHO_API_LOOKUP_BY_FIELD` | Field → API lookup, used by `rawLithoApi.ts` |
-| `RAW_LITHO_LOOKUP_BY_FIELD` | Field → any lookup, used by `RawLithoRow.tsx` |
+| `RAW_LITHO_LOOKUPS` | The nine API lookups: `fieldKey`, `label`, `responseKey`, `codeProperty`, `cacheKey` |
+| `RAW_LITHO_LOCAL_LOOKUPS` | Granulo and Hardness: local digits 0 to 9, `maxLength: 1` |
+| `GRANULO_HARDNESS_OPTIONS` | `[{ code: "0" }, …, { code: "9" }]` |
+| `RAW_LITHO_ALL_LOOKUPS` | Both lists, for validation |
+| `RAW_LITHO_API_LOOKUP_BY_FIELD` | Field to API lookup, used by `rawLithoApi.ts` |
+| `RAW_LITHO_LOOKUP_BY_FIELD` | Field to any lookup, used by `RawLithoRow.tsx` |
 
-`codeProperty` matters: the API property and the row field are not always the
-same name. Colour is served as `colourCode` but stored as `colorCode`.
+`responseKey` and the row field can differ: Colour arrives as `colourCode` and
+is stored as `colorCode`.
 
-Adding a lookup means adding one entry here — the client, cache, dropdown, and
-validation all pick it up.
+## currentUser.ts and websiteAccess.ts
 
-## currentUser.ts
+A browser cannot read the Windows login, so `getVerifiedWindowsIdentity()` asks
+the backend with `GET /api/status?includeUser=true` and `credentials: "include"`.
+That request needs Windows authentication (Kerberos or NTLM), and the answer
+carries `userName`, `fullUsername` and `isAuthorized`. A missing
+`isAuthorized` counts as allowed, since an older backend has no group check.
+`getCurrentWindowsUser()` returns just the `userName`.
 
-`getCurrentWindowsUser()` is the one place the app asks who is signed in
-(`Bek` for a local account, `COMPANY\bek` for a domain account). Through
-`hooks/useCurrentUser.ts` it feeds Raw Litho's
-`created_by` / `edited_by`, and Upload Data's "Edited By" stamp and
-"Imported By".
+- Callers share one request. A verified identity is reused for one minute.
+- A `401`, a bad body or a network error returns `null` and is not kept, so
+  the next call tries again. `useCurrentUser()` retries every 10 seconds.
+- Upload Data calls it with `forceRefresh` right before uploading.
+- The name stamps `created_by` and `edited_by` and fills Upload Data's
+  "Imported By". Nothing else (host name, user agent, typed input) is ever used.
 
-**How the name is obtained.** A browser cannot read the Windows login, so
-`getCurrentWindowsUser()` asks the backend: `GET /api/status?includeUser=true`
-with `credentials: "include"`. That variant of the Status route requires
-Windows Integrated Authentication (Negotiate: Kerberos or NTLM), so the
-browser proves the signed-in Windows user and the backend answers with
-`userName` (backend README, *Identity*). It also returns `fullUsername`, the
-original authenticated principal including the machine/domain authority, for
-the display cache. Existing metadata keeps using `userName` unchanged.
-The plain status poll stays anonymous and exposes neither name.
+`checkWebsiteAccess()` turns that answer into `allowed`, `denied` or
+`unverified`. It saves the last backend answer under `session["website-access"]`
+and uses it while the backend is unreachable. `hooks/useAccessCheck.ts` calls
+it. The backend enforces access on its own; this only decides what the site
+shows.
 
-A verified name is shared for one minute, then revalidated. An error status (401
-when the browser sent no Windows credentials), a body without `userName` or
-a network failure gives `null` to verified-identity consumers and is not
-kept: `useCurrentUser()` checks every 10 seconds (sharing the one-minute cache),
-so starting the backend after the page fills in the name without a refresh.
-The hostname, user agent, a build-time user name, browser fingerprinting or
-anything typed in are never used.
+Edge and Chrome send Windows credentials to `localhost` automatically. Another
+host name must be in the Local intranet zone (or an `AuthServerAllowlist`
+policy), or the browser prompts for a login.
 
-`IndexDB/windowsIdentityDb.ts` stores
-`{ id: "current-user", domain, username, fullUsername, lastUpdated }` at
-`session["windows-identity"]` in the existing `raw-litho-db`. Older records are
-upgraded in place without changing their timestamp. Older servers that only
-return `userName` remain supported; no missing authority is guessed.
-The timestamp is an ISO string updated when the identity changes. Existing
-stores and records are preserved without a schema upgrade. Each fresh lookup
-reads the persisted record before fetching, and replaces it only with a
-verified backend identity if different. Writes await transaction completion.
-Storage failures do not prevent authentication. Failed authentication retains
-the local record but returns null; cached identity never supplies metadata or
-authorization. Backend Windows authentication and SQL user validation remain
-authoritative.
+## Caching
 
-The sidebar uses `hooks/useCachedWindowsIdentity.ts` for display only. It reads
-IndexedDB and restores the label before initiating synchronization, then reads
-back the committed record after successful backend lookups. Failed requests
-and storage errors never clear a displayed identity. It retries every ten
-seconds using the shared one-minute verified request cache and refreshes on
-the browser `online` event. Page remounts and offline refreshes restore the
-same persisted record. With no cache the existing neutral label remains.
-
-**Browser and deployment notes**
-- Edge and Chrome send Windows credentials to `localhost` automatically. A
-  backend on another host name must be in the browser's Local intranet zone
-  (or an `AuthServerAllowlist` policy), otherwise the browser asks for a login.
-- `npm run dev`: Vite proxies `/api/status` over a single kept-alive
-  connection (`vite.config.ts`), because NTLM authenticates a connection, not
-  a request. Dev-only; fine on a single-user PC.
-- Production should serve the frontend and `/api` from one origin
-  (`VITE_API_BASE_URL` empty). A cross-origin API would need its CORS policy
-  changed from `AllowAnyOrigin` to named origins with `AllowCredentials`.
-
-## Caching strategy
-
-Reads are network-first with a cache fallback; the working table is local-only.
-
-```text
-GET lookups / drillholes
-  show cached records immediately (if any)
-  fetch
-    ok   → replace state, refresh the cache
-    fail → keep the cached records, or surface an offline message
-
-Raw Litho rows
-  never sent to the backend
-  debounced write to raw-litho-db, exported as JSON on Save
-```
-
-## Draft write coordination
-
-`rawLithoSaveQueue.ts` retains the latest pending snapshot for each drillhole.
-It serializes writes per key, removes a pending snapshot only after its write
-commits, and drains edits received during an in-flight write. Failed snapshots
-remain available across route remounts. The persistence hook schedules debounce,
-retry, online, visibility, and unmount flushes. Manual saves and deletion stage
-snapshots; confirmed imports use `commitImport` as an ordered one-shot write.
-Earlier edits must save first, and imports are never retained for background
-retry or restoration. A failed import requires an explicit user retry. Cancelling
-before write submission leaves earlier and newer edit snapshots intact. Once
-submitted, an import can commit and is not reported as cancelled. The snapshot
-identity check ensures an older successful write cannot remove a newer edit. `rawLithoDatabase.ts` additionally orders all writes
-and resolves them on transaction completion, not request success.
+Lookups and the drillhole list are network-first: cached records show
+immediately, the fetch replaces them and refreshes the cache, and a failed fetch
+keeps the cached copy. Raw Litho rows never go to the backend. They are written
+to `raw-litho-db` and leave the browser only as an exported JSON file.
