@@ -515,7 +515,7 @@ describe("Tab navigation", () => {
     await user.click(cell("Hardness, row 2"));
     await user.keyboard("{Escape}");
     await user.tab();
-    expect(screen.getByRole("button", { name: /Add Row/ })).toHaveFocus();
+    expect(screen.getByRole("button", { name: /Add row/ })).toHaveFocus();
   });
   it("moves through consecutive filled cells and rows with one arrow per move", async () => {
     const user = await table(pageRows(2));

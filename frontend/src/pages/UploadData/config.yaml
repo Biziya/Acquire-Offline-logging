@@ -2,7 +2,7 @@
 # contract stay in TypeScript. Read once when the page module loads
 # (config.ts); a bad value stops start-up with the file and key in the error.
 
-title: "Upload Data to Database"
+title: "Upload Data"
 
 table:
   rowHeight: 28          # px; must stay fixed, the virtual scroller relies on it

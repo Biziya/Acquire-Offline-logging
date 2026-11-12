@@ -42,7 +42,7 @@ describe("YAML page configuration", () => {
 
   it.each([
     ["invalid YAML", (text: string) => `${text}\n  : [`, /invalid YAML/],
-    ["a non-positive row height", (text: string) => text.replace("rowHeight: 22", "rowHeight: 0"), /table\.rowHeight must be a whole number/],
+    ["a non-positive row height", (text: string) => text.replace("rowHeight: 26", "rowHeight: 0"), /table\.rowHeight must be a whole number/],
     ["an unknown column", (text: string) => text.replace("lithoFrom:", "lithoFromm:"), /lithoFromm is not a known column/],
     ["a missing persisted field", (text: string) => text.replace(/^\s*coreEnd:.*$/m, ""), /table\.columns is missing coreEnd/],
     ["a wrong type", (text: string) => text.replace('title: "Raw Litho"', "title: 5"), /title must be a non-empty string/],

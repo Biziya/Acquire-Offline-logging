@@ -214,7 +214,7 @@ describe("external response validation", () => {
     );
 
     await expect(importUploadData(file, UPLOADER)).rejects.toThrow(
-      "Windows sign-in required: your account could not be verified.",
+      "Couldn't confirm your Windows sign-in.",
     );
     await expect(importUploadData(file, UPLOADER)).rejects.toThrow(
       "BDOM\\jsmith is not authorized to upload data. Contact the database administrator.",

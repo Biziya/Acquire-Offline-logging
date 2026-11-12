@@ -1,5 +1,10 @@
 import { useEffect, useId, useRef } from "react";
-import { DIALOG_TITLE } from "../../components/uiStyles";
+import {
+  DANGER_FILLED_BUTTON,
+  DIALOG_TITLE,
+  PRIMARY_BUTTON,
+  SECONDARY_BUTTON,
+} from "../../components/uiStyles";
 
 interface ConfirmDialogProps {
   title: string;
@@ -17,22 +22,10 @@ interface ConfirmDialogProps {
 }
 
 
-// Shared by both buttons; each adds its colours. The disabled look wins over
-// either colour scheme while a confirmed action is in flight.
-const DIALOG_BUTTON = [
-  "h-8 cursor-pointer rounded-ui border px-4 text-[0.8rem] font-semibold",
-  "transition-[background-color,border-color,color,box-shadow,transform] duration-140",
-  "focus-visible:outline-2 focus-visible:outline-offset-1",
-  "enabled:active:translate-y-px enabled:active:shadow-none",
-  "disabled:cursor-not-allowed disabled:border-rl-border disabled:bg-rl-navy-softer",
-  "disabled:text-rl-disabled disabled:shadow-none",
-].join(" ");
-
+// The confirm button: red when it removes data, navy otherwise.
 const CONFIRM_TONE = {
-  danger:
-    "border-transparent bg-rl-danger text-white shadow-[0_1px_2px_rgb(180_35_24/30%)] focus-visible:outline-rl-danger enabled:hover:bg-rl-danger-dark enabled:hover:shadow-[0_2px_8px_rgb(180_35_24/32%)]",
-  primary:
-    "border-transparent bg-rl-navy text-white shadow-[0_1px_2px_rgb(16_35_61/30%)] focus-visible:outline-rl-cell-ring enabled:hover:bg-rl-navy-dark enabled:hover:shadow-[0_2px_8px_rgb(16_35_61/32%)]",
+  danger: DANGER_FILLED_BUTTON,
+  primary: PRIMARY_BUTTON,
 };
 
 /*
@@ -95,11 +88,11 @@ function ConfirmDialog({
 
   return (
     <div
-      className="fixed inset-0 z-[2000] flex animate-backdrop-in items-center justify-center bg-[rgb(10_29_51/52%)] p-4"
+      className="fixed inset-0 z-[2000] flex animate-backdrop-in items-center justify-center bg-rl-navy-darker/45 p-4"
       role="presentation"
     >
       <div
-        className="w-[min(400px,100%)] animate-dialog-in rounded-ui border border-rl-border bg-white px-[22px] pt-5 pb-[18px] shadow-[0_1px_2px_rgb(16_35_61/10%),0_20px_48px_rgb(16_35_61/26%)]"
+        className="w-[min(400px,100%)] animate-dialog-in rounded-ui border border-rl-border bg-white px-[22px] pt-5 pb-[18px] shadow-popup"
         role="alertdialog"
         aria-modal="true"
         aria-labelledby={`${id}-title`}
@@ -113,14 +106,14 @@ function ConfirmDialog({
         </h2>
 
         <p
-          className="m-0 text-[0.85rem] leading-normal text-rl-text-muted"
+          className="m-0 text-[0.875rem] leading-normal text-rl-text-muted"
           id={`${id}-message`}
         >
           {message}
         </p>
 
         {details && (
-          <p className="mt-2 mb-0 text-[0.78rem] leading-[1.45] text-rl-text-muted">
+          <p className="mt-2 mb-0 text-[0.8125rem] leading-[1.45] text-rl-text-muted">
             {details}
           </p>
         )}
@@ -128,7 +121,7 @@ function ConfirmDialog({
         <div className="mt-5 flex justify-end gap-2">
           <button
             ref={cancelButtonRef}
-            className={`${DIALOG_BUTTON} border-rl-border-strong bg-white text-rl-navy focus-visible:outline-rl-cell-ring enabled:hover:border-rl-navy enabled:hover:bg-rl-navy-soft`}
+            className={SECONDARY_BUTTON}
             type="button"
             onClick={onCancel}
             disabled={isBusy}
@@ -138,7 +131,7 @@ function ConfirmDialog({
 
           <button
             ref={confirmButtonRef}
-            className={`${DIALOG_BUTTON} ${CONFIRM_TONE[tone]}`}
+            className={CONFIRM_TONE[tone]}
             type="button"
             onClick={onConfirm}
             disabled={isBusy}

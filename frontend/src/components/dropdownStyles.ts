@@ -10,7 +10,7 @@
 
 // White menu surface.
 export const DROPDOWN_MENU =
-  "m-0 list-none overflow-y-auto rounded-ui border border-rl-border bg-white p-1 text-left shadow-[0_10px_24px_rgb(16_35_61/16%)]";
+  "m-0 list-none overflow-y-auto rounded-ui border border-rl-border bg-white p-1 text-left shadow-popup";
 
 // Menu anchored to a table cell, portalled to <body> so a scrolling table
 // never clips it. Position and width come from useAnchoredMenuStyle.

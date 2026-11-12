@@ -49,13 +49,13 @@ const DEPTH_FIELDS = new Set<RowField>(["lithoFrom", "lithoTo"]);
  */
 const CELL_STATES = {
   selected:
-    "raw-litho-cell--selected bg-[#dbeafe] shadow-[inset_0_0_0_2px_#2563eb]",
+    "raw-litho-cell--selected bg-rl-select shadow-[inset_0_0_0_2px_var(--color-rl-select-ring)]",
   duplicate:
-    "raw-litho-cell--duplicate bg-[#fff3e6] shadow-[inset_0_0_0_2px_#d97a1f] focus-within:bg-[#fffaf4] focus-within:shadow-[inset_0_0_0_2px_var(--color-rl-cell-ring),inset_0_0_0_4px_rgb(217_122_31/45%)]",
+    "raw-litho-cell--duplicate bg-rl-duplicate shadow-[inset_0_0_0_2px_var(--color-rl-warning)] focus-within:bg-rl-duplicate focus-within:shadow-[inset_0_0_0_2px_var(--color-rl-cell-ring)]",
   rule:
-    "raw-litho-cell--rule bg-rl-danger-soft shadow-[inset_0_0_0_2px_var(--color-rl-danger)] focus-within:bg-[#fffafa] focus-within:shadow-[inset_0_0_0_2px_var(--color-rl-cell-ring),inset_0_0_0_4px_rgb(192_57_47/32%)]",
+    "raw-litho-cell--rule bg-rl-danger-soft shadow-[inset_0_0_0_2px_var(--color-rl-danger)] focus-within:bg-rl-danger-soft focus-within:shadow-[inset_0_0_0_2px_var(--color-rl-cell-ring)]",
   missing:
-    "raw-litho-cell--missing bg-rl-danger-soft shadow-[inset_0_0_0_2px_var(--color-rl-required-soft)] focus-within:bg-[#fffafa] focus-within:shadow-[inset_0_0_0_2px_var(--color-rl-cell-ring),inset_0_0_0_4px_rgb(192_57_47/32%)] [&_input]:placeholder:text-rl-required/75",
+    "raw-litho-cell--missing bg-rl-danger-soft shadow-[inset_0_0_0_2px_var(--color-rl-required-soft)] focus-within:bg-rl-danger-soft focus-within:shadow-[inset_0_0_0_2px_var(--color-rl-cell-ring)] [&_input]:placeholder:text-rl-required/75",
   normal:
     "focus-within:bg-white focus-within:shadow-[inset_0_0_0_2px_var(--color-rl-cell-ring)]",
 };

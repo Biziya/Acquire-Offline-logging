@@ -115,13 +115,13 @@ function UploadFileSection({
         <span className={STEP_NUMBER}>1</span>
         <div className={SECTION_HEADING_TEXT}>
           <h2 id="upload-file-title" className={SECTION_TITLE}>
-            File Selection
+            File
           </h2>
         </div>
       </div>
 
       <div
-        className={`grid justify-items-center gap-1.5 rounded-ui border-2 px-4 py-5 text-center text-[0.85rem] text-rl-text transition-colors duration-140 ${
+        className={`grid justify-items-center gap-1.5 rounded-ui border px-4 py-5 text-center text-[0.875rem] text-rl-text transition-colors duration-140 ${
           isDragging
             ? "upload-drop-zone--active border-dashed border-rl-navy bg-rl-navy-soft"
             : isLoaded
@@ -144,14 +144,9 @@ function UploadFileSection({
         {isLoaded && !isDragging ? (
           // Loaded: confirm the file. Dropping another file still replaces it.
           <>
-            <span
-              className="grid size-9 place-items-center rounded-full bg-rl-success-soft text-[1.2rem] font-bold text-rl-success"
-              aria-hidden="true"
-            >
-              ✓
-            </span>
+            <svg className="size-6 text-rl-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
             <strong className="font-semibold text-rl-success" role="status">
-              JSON File Loaded
+              File loaded
             </strong>
             <span className="flex max-w-full items-center gap-2">
               <span className="min-w-0 font-semibold [overflow-wrap:anywhere] text-rl-text">
@@ -165,7 +160,7 @@ function UploadFileSection({
                 disabled={isRemoveDisabled}
                 onClick={onFileRemove}
               >
-                ×
+                <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17" /></svg>
               </button>
             </span>
             <span className={HELPER_TEXT}>
@@ -177,31 +172,22 @@ function UploadFileSection({
               type="button"
               onClick={openFilePicker}
             >
-              Change File
+              Choose another file
             </button>
           </>
         ) : (
           <>
-            <span
-              className="grid size-9 place-items-center rounded-full bg-rl-navy-soft text-[1.3rem] font-bold text-rl-navy"
-              aria-hidden="true"
-            >
-              ⇧
-            </span>
+            <svg className="size-6 text-rl-navy" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 16V4m-5 5 5-5 5 5M5 14v6h14v-6" /></svg>
             <strong className="font-semibold">
-              {isDragging ? "Drop the JSON file here" : "Drag and drop your JSON file"}
+              {isDragging ? "Drop the file here" : "Drag a JSON file here, or"}
             </strong>
-            <span className={HELPER_TEXT}>or</span>
             <button
               className={SECONDARY_BUTTON}
               type="button"
               onClick={openFilePicker}
             >
-              Browse Files
+              Choose file
             </button>
-            <span className={HELPER_TEXT}>
-              Supported format: .json
-            </span>
           </>
         )}
       </div>

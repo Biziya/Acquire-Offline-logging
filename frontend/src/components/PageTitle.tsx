@@ -7,7 +7,7 @@ import type { ReactNode } from "react";
  */
 function PageTitle({ children }: { children: ReactNode }) {
   return (
-    <h1 className="m-0 mb-1.5 shrink-0 text-[1.3rem] leading-normal font-[650] tracking-[-0.01em] text-rl-navy">
+    <h1 className="m-0 mb-1.5 shrink-0 text-[1.25rem] leading-normal font-bold text-rl-navy">
       {children}
     </h1>
   );

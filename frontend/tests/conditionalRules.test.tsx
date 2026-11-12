@@ -247,7 +247,7 @@ describe("conditional rules in the Raw Litho table", () => {
   it("applies to a newly inserted row", async () => {
     const user = await openTable([storedRow("r1", 0, 10)]);
 
-    await user.click(screen.getByRole("button", { name: "Add Row (F4)" }));
+    await user.click(screen.getByRole("button", { name: "Add row" }));
     await waitFor(() => expect(cell("Litho Code, row 2")).toBeInTheDocument());
     expectNoRuleError("CA, row 2");
 

@@ -78,9 +78,9 @@ export function buildImportConfirmationMessage(importPlan: ImportPlan | null) {
   if (!importPlan) return "";
 
   const rowLabel = importPlan.rowCount === 1 ? "row" : "rows";
-  const target = importPlan.willReplaceExistingDraft
-    ? `This will replace the Raw Litho data currently stored on this device for drillhole ${importPlan.drillhole}. Any unsaved local changes for that drillhole will be lost.`
-    : `This will store Raw Litho data on this device for drillhole ${importPlan.drillhole}.`;
+  const rows = `${importPlan.rowCount} ${rowLabel} for drillhole ${importPlan.drillhole}`;
 
-  return `The file contains ${importPlan.rowCount} ${rowLabel} for drillhole ${importPlan.drillhole}. ${target} This cannot be undone.`;
+  return importPlan.willReplaceExistingDraft
+    ? `${rows}. They replace the data saved on this PC for this drillhole, and you can't undo it.`
+    : `${rows} will be saved on this PC.`;
 }

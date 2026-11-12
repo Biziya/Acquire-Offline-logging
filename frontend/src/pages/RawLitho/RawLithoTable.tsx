@@ -46,11 +46,17 @@ import {
   TABLE_FRAME,
 } from "../../components/dataTableStyles";
 import { rawLithoConfig } from "./config";
-import {
-  OUTLINE_BUTTON,
-  OUTLINE_BUTTON_DISABLED,
-  OUTLINE_BUTTON_NAVY,
-} from "../../components/uiStyles";
+import { DANGER_BUTTON, SECONDARY_BUTTON } from "../../components/uiStyles";
+
+// The keyboard shortcut shown inside a button, for sighted users only (the
+// button's title names it for everyone).
+function KeyHint({ children }: { children: string }) {
+  return (
+    <kbd aria-hidden="true" className="ml-1.5 rounded-sm border border-current/25 px-1 font-sans text-[0.75rem] font-normal opacity-70">
+      {children}
+    </kbd>
+  );
+}
 
 interface RawLithoTableProps {
   rows: RawLithoRowRecord[];
@@ -75,8 +81,7 @@ const FALLBACK_FOCUS_FIELD = "lithoTo";
 const FIRST_COLUMN_KEY = tableColumns[0]?.key ?? null;
 const LAST_COLUMN_KEY = tableColumns[tableColumns.length - 1]?.key ?? null;
 
-const PAGINATION_BUTTON = `${OUTLINE_BUTTON} ${OUTLINE_BUTTON_NAVY} ${OUTLINE_BUTTON_DISABLED} h-8 min-w-[76px] px-2.5 text-[0.8rem] max-sm:min-w-0`;
-const ROW_ACTION_BUTTON = `${OUTLINE_BUTTON} ${OUTLINE_BUTTON_DISABLED} h-8 px-3 text-[0.8rem]`;
+const PAGINATION_BUTTON = `${SECONDARY_BUTTON} min-w-[76px] max-sm:min-w-0`;
 
 function RawLithoTable({
   rows,
@@ -442,30 +447,30 @@ function RawLithoTable({
         centred line below the buttons instead of overflowing.
       */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pt-2 lg:grid lg:grid-cols-[1fr_auto_1fr]">
-        <div className="flex gap-2">
+        <div className="flex gap-4">
           {/*
             Stays clickable while the page is enabled: `requestAddRow` is what
             reports the missing fields or the duplicate interval, so disabling the
             button would hide the reason the row was rejected.
           */}
           <button
-            className={`${ROW_ACTION_BUTTON} ${OUTLINE_BUTTON_NAVY}`}
+            className={SECONDARY_BUTTON}
             type="button"
             onClick={requestAddRow}
             disabled={!isEnabled}
-            title="Add Row (F4)"
+            title="Add row (F4)"
           >
-            Add Row (F4)
+            Add row<KeyHint>F4</KeyHint>
           </button>
 
           <button
-            className={`${ROW_ACTION_BUTTON} text-rl-danger enabled:hover:border-rl-danger enabled:hover:bg-rl-danger enabled:hover:text-white enabled:active:bg-rl-danger-dark`}
+            className={DANGER_BUTTON}
             type="button"
             onClick={onRemoveLastRow}
             disabled={!canRemoveLastRow}
-            title="Remove Last Row (F5)"
+            title="Remove last row (F5)"
           >
-            Remove Last Row (F5)
+            Remove last row<KeyHint>F5</KeyHint>
           </button>
         </div>
 
@@ -484,7 +489,7 @@ function RawLithoTable({
           </button>
 
           <div
-            className="grid min-w-[140px] gap-px text-center text-[0.8rem] font-semibold text-rl-text"
+            className="grid min-w-[140px] gap-px text-center text-[0.8125rem] font-semibold text-rl-text"
             aria-live="polite"
           >
             <span>

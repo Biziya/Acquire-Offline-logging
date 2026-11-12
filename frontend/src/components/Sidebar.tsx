@@ -8,6 +8,10 @@ const ICON = "size-5 shrink-0";
 // Neutral text until a previously persisted identity is available.
 const NO_USER_LABEL = "User not identified";
 const LABEL = "whitespace-nowrap font-semibold";
+// Light focus ring that shows on the dark sidebar.
+const SIDE_FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-rl-side-text";
+// From package.json, set at build time (vite.config.ts).
+const VERSION_LABEL = `v${__APP_VERSION__}`;
 
 function RawLithoIcon() {
   return (
@@ -82,14 +86,14 @@ function Sidebar() {
   const userLabel = currentUser ?? NO_USER_LABEL;
   const linkClassName = ({ isActive }: { isActive: boolean }) =>
     [
-      "flex min-h-8 items-center gap-[9px] rounded-ui border-0 py-[5px] text-[0.82rem] text-inherit no-underline hover:bg-[#1f2937] hover:text-white",
-      collapsed ? "w-[34px] justify-center px-0" : "px-2",
-      isActive ? "bg-[#1f2937] text-white" : "",
+      `flex min-h-9 items-center gap-[9px] rounded-ui border-0 py-[5px] text-[0.8125rem] text-inherit no-underline hover:bg-rl-side-hover hover:text-white ${SIDE_FOCUS}`,
+      collapsed ? "w-9 justify-center px-0" : "px-2",
+      isActive ? "bg-rl-side-hover text-white shadow-[inset_3px_0_0_var(--color-rl-side-online)]" : "",
     ].join(" ");
 
   return (
     <aside
-      className={`group/sidebar flex h-screen shrink-0 flex-col overflow-hidden bg-[#111827] text-[#e5e7eb] transition-[width] duration-200 ease-in-out ${
+      className={`group/sidebar flex h-screen shrink-0 flex-col overflow-hidden bg-rl-side text-rl-side-text transition-[width] duration-200 ease-in-out ${
         collapsed ? "w-[52px]" : "w-[178px]"
       }`}
       data-collapsed={collapsed}
@@ -100,12 +104,12 @@ function Sidebar() {
         }`}
       >
         {!collapsed && (
-          <span className="min-w-0 overflow-hidden text-[0.85rem] font-bold tracking-[0.04em] text-ellipsis whitespace-nowrap text-[#9ca3af]">
+          <span className="min-w-0 overflow-hidden text-[0.875rem] font-bold text-ellipsis whitespace-nowrap text-white">
             {uiConfig.appName}
           </span>
         )}
         <button
-          className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-ui border-0 bg-transparent text-inherit hover:bg-[#1f2937]"
+          className={`flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-ui border-0 bg-transparent text-rl-side-muted hover:bg-rl-side-hover hover:text-white ${SIDE_FOCUS}`}
           type="button"
           onClick={() => setCollapsed((current) => !current)}
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
@@ -115,7 +119,7 @@ function Sidebar() {
         </button>
       </div>
 
-      <hr className="mx-3.5 mt-0 mb-1 shrink-0 border-0 border-t border-[#1f2937]" />
+      <hr className="mx-3.5 mt-0 mb-1 shrink-0 border-0 border-t border-rl-side-hover" />
 
       <nav
         className={`grid min-h-0 flex-1 content-start gap-0.5 overflow-y-auto px-1.5 py-1 ${
@@ -153,21 +157,21 @@ function Sidebar() {
       </nav>
 
       {/*
-        Signed-in user and backend status — pinned to the
-        bottom and aligned with the link icons. Collapsed, only the status
-        light remains (the name is in its tooltip).
+        Signed-in user, server status and app version, pinned to the bottom
+        and aligned with the link icons. Collapsed, only the status light
+        remains (name and version are in its tooltip).
       */}
       <div
         className={`shrink-0 py-2.5 ${
           collapsed ? "px-0 text-center" : "px-3.5"
         }`}
-        title={collapsed ? userLabel : undefined}
+        title={collapsed ? `${userLabel}\n${VERSION_LABEL}` : undefined}
       >
         {!collapsed && (
           <>
             <p
               className={`m-0 truncate text-xs font-medium ${
-                currentUser ? "text-[#e5e7eb]" : "text-[#9ca3af] italic"
+                currentUser ? "text-rl-side-text" : "text-rl-side-muted italic"
               }`}
               title={userLabel}
             >
@@ -177,6 +181,11 @@ function Sidebar() {
           </>
         )}
         <StatusIndicator />
+        {!collapsed && (
+          <p className="m-0 mt-1 text-[0.65rem] leading-none text-rl-side-muted/60">
+            {VERSION_LABEL}
+          </p>
+        )}
       </div>
     </aside>
   );

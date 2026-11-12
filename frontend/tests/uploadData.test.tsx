@@ -122,8 +122,8 @@ const jsonFile = (value: unknown) =>
   new File([JSON.stringify(value)], "upload.json", { type: "application/json" });
 
 async function confirmImport(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(screen.getByRole("button", { name: "Upload to Database" }));
-  await user.click(screen.getByRole("button", { name: "Confirm Upload" }));
+  await user.click(screen.getByRole("button", { name: "Upload to database" }));
+  await user.click(screen.getByRole("button", { name: "Upload" }));
 }
 
 describe("Upload Data page", () => {
@@ -172,11 +172,11 @@ describe("Upload Data page", () => {
     fireEvent.change(screen.getByLabelText("Litho To (m), record 1"), {
       target: { value: "abc" },
     });
-    await user.click(screen.getByRole("button", { name: "Upload to Database" }));
+    await user.click(screen.getByRole("button", { name: "Upload to database" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Fix blocking errors",
     );
-    expect(screen.queryByRole("button", { name: "Confirm Upload" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Upload" })).toBeNull();
     expect(importUploadData).not.toHaveBeenCalled();
   });
 
@@ -210,7 +210,7 @@ describe("Upload Data page", () => {
       "Invalid JSON file",
     );
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Upload to Database" })).toBeDisabled(),
+      expect(screen.getByRole("button", { name: "Upload to database" })).toBeDisabled(),
     );
   });
 });
@@ -259,20 +259,20 @@ describe("Upload Data drag and drop", () => {
   it("shows a loaded state with the file name and record count until Cancel", async () => {
     const user = userEvent.setup();
     render(<UploadData />);
-    expect(within(zone()).getByText("Drag and drop your JSON file")).toBeInTheDocument();
-    expect(within(zone()).getByRole("button", { name: "Browse Files" })).toBeInTheDocument();
+    expect(within(zone()).getByText("Drag a JSON file here, or")).toBeInTheDocument();
+    expect(within(zone()).getByRole("button", { name: "Choose file" })).toBeInTheDocument();
 
     fireEvent.drop(zone(), drag([jsonFile(uploadDocument())]));
-    expect(await within(zone()).findByText("JSON File Loaded")).toBeInTheDocument();
+    expect(await within(zone()).findByText("File loaded")).toBeInTheDocument();
     expect(zone()).toHaveClass("upload-drop-zone--loaded");
     expect(within(zone()).getByText("upload.json")).toBeInTheDocument();
     expect(within(zone()).getByText("2 records")).toBeInTheDocument();
-    expect(within(zone()).queryByRole("button", { name: "Browse Files" })).toBeNull();
+    expect(within(zone()).queryByRole("button", { name: "Choose file" })).toBeNull();
 
-    // Change File opens the same picker; a dropped replacement still works.
+    // Choose another file opens the same picker; a dropped replacement still works.
     const input = document.querySelector<HTMLInputElement>('input[type="file"]');
     const pickerClick = vi.spyOn(input as HTMLInputElement, "click");
-    await user.click(within(zone()).getByRole("button", { name: "Change File" }));
+    await user.click(within(zone()).getByRole("button", { name: "Choose another file" }));
     expect(pickerClick).toHaveBeenCalled();
 
     const bigger = { ...uploadDocument(), rows: [row(1, 0, 10), row(2, 10, 20), row(3, 20, 30)] };
@@ -283,12 +283,12 @@ describe("Upload Data drag and drop", () => {
     // An unreadable replacement shows the error, not a success state.
     fireEvent.drop(zone(), drag([new File(["{"], "broken.json", { type: "application/json" })]));
     expect(await screen.findByRole("alert")).toHaveTextContent("Invalid JSON file");
-    expect(within(zone()).queryByText("JSON File Loaded")).toBeNull();
+    expect(within(zone()).queryByText("File loaded")).toBeNull();
 
     fireEvent.drop(zone(), drag([jsonFile(uploadDocument())]));
-    await within(zone()).findByText("JSON File Loaded");
+    await within(zone()).findByText("File loaded");
     await user.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(within(zone()).getByText("Drag and drop your JSON file")).toBeInTheDocument();
+    expect(within(zone()).getByText("Drag a JSON file here, or")).toBeInTheDocument();
     expect(zone()).not.toHaveClass("upload-drop-zone--loaded");
     expect(importUploadData).not.toHaveBeenCalled();
   });
@@ -309,22 +309,22 @@ describe("Upload Data creator and importer", () => {
 
   beforeEach(() => vi.mocked(importUploadData).mockClear());
 
-  // The value shown next to a Dataset Information label.
+  // The value shown next to a Dataset label.
   const summary = (label: string) =>
     screen.getByText(label, { selector: "dt" }).nextElementSibling?.textContent;
 
   it("shows the file's creator and a dash for a missing identity", async () => {
     render(<UploadData />);
     await loadFile(jsonFile({ ...uploadDocument(), created_by: CREATOR }));
-    expect(summary("Created By")).toBe(CREATOR);
-    expect(summary("Imported By")).toBe("—");
+    expect(summary("Created by")).toBe(CREATOR);
+    expect(summary("Imported by")).toBe("—");
   });
 
   it("shows a dash for a legacy file without created_by or edited_by", async () => {
     render(<UploadData />);
     await loadFile(jsonFile(uploadDocument()));
-    expect(summary("Created By")).toBe("—");
-    expect(summary("Edited By")).toBe("—");
+    expect(summary("Created by")).toBe("—");
+    expect(summary("Edited by")).toBe("—");
   });
 
   it("shows the trusted importer separately and never changes the creator", async () => {
@@ -334,9 +334,9 @@ describe("Upload Data creator and importer", () => {
     await loadFile(
       jsonFile({ ...uploadDocument(), created_by: CREATOR, edited_by: EDITOR }),
     );
-    await waitFor(() => expect(summary("Imported By")).toBe(UPLOADER));
-    expect(summary("Created By")).toBe(CREATOR);
-    expect(summary("Edited By")).toBe(EDITOR);
+    await waitFor(() => expect(summary("Imported by")).toBe(UPLOADER));
+    expect(summary("Created by")).toBe(CREATOR);
+    expect(summary("Edited by")).toBe(EDITOR);
 
     // Edit, upload: the creator travels unchanged, the edit records the current
     // user as the last editor, and no importer is added (the backend contract
@@ -344,9 +344,9 @@ describe("Upload Data creator and importer", () => {
     fireEvent.change(screen.getByLabelText("Lithology Comments, record 1"), {
       target: { value: "edited" },
     });
-    expect(summary("Edited By")).toBe(UPLOADER);
-    await user.click(screen.getByRole("button", { name: "Upload to Database" }));
-    await user.click(screen.getByRole("button", { name: "Confirm Upload" }));
+    expect(summary("Edited by")).toBe(UPLOADER);
+    await user.click(screen.getByRole("button", { name: "Upload to database" }));
+    await user.click(screen.getByRole("button", { name: "Upload" }));
     const uploaded = vi.mocked(importUploadData).mock.calls[0]?.[0] as File;
     const json = JSON.parse(await uploaded.text());
     expect(json.created_by).toBe(CREATOR);
@@ -372,8 +372,8 @@ describe("Remove selected file", () => {
 
     expect(zone().queryByText("upload.json")).toBeNull();
     expect(screen.queryByLabelText("Lithology Comments, record 1")).toBeNull();
-    expect(screen.getByText("Drag and drop your JSON file")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Upload to Database" })).toBeDisabled();
+    expect(screen.getByText("Drag a JSON file here, or")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Upload to database" })).toBeDisabled();
     await waitFor(async () => expect(await readUploadDataDraft()).toBeNull());
 
     // The same file can be chosen again and uploaded normally.
@@ -426,7 +426,7 @@ describe("Upload Data draft persistence", () => {
     expect(within(zone()).getByText("upload.json")).toBeInTheDocument();
     expect(within(zone()).getByText("2 records")).toBeInTheDocument();
     expect(
-      screen.getByText("Created By", { selector: "dt" }).nextElementSibling,
+      screen.getByText("Created by", { selector: "dt" }).nextElementSibling,
     ).toHaveTextContent(CREATOR);
     expect(screen.getByText("Edited")).toBeInTheDocument();
   });
@@ -457,8 +457,8 @@ describe("Upload Data draft persistence", () => {
     const user = userEvent.setup();
     await loadAndEdit();
 
-    await user.click(screen.getByRole("button", { name: "Upload to Database" }));
-    const confirm = screen.getByRole("button", { name: "Confirm Upload" });
+    await user.click(screen.getByRole("button", { name: "Upload to database" }));
+    const confirm = screen.getByRole("button", { name: "Upload" });
     fireEvent.click(confirm);
     fireEvent.click(confirm);
     const uploading = await screen.findByRole("button", { name: "Uploading…" });
@@ -468,19 +468,19 @@ describe("Upload Data draft persistence", () => {
 
     pending.resolve({ message: "Data uploaded successfully." });
     expect(await screen.findByText("Data uploaded successfully.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Upload to Database" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Upload to database" })).toBeEnabled();
   });
 
   it("asks for confirmation in a modal and never uploads on Cancel, Escape or Enter", async () => {
     const user = userEvent.setup();
     await loadAndEdit();
-    const upload = screen.getByRole("button", { name: "Upload to Database" });
+    const upload = screen.getByRole("button", { name: "Upload to database" });
 
     await user.click(upload);
-    const dialog = screen.getByRole("alertdialog", { name: "Confirm Database Upload" });
+    const dialog = screen.getByRole("alertdialog", { name: "Upload to database?" });
     expect(dialog).toHaveAttribute("aria-modal", "true");
     expect(dialog).toHaveAccessibleDescription(
-      "Are you sure you want to upload this data to the database?",
+      "These records will be added to the database.",
     );
     // Cancel is focused first, so Enter cancels instead of uploading.
     const cancel = within(dialog).getByRole("button", { name: "Cancel" });
@@ -511,7 +511,7 @@ describe("Upload Data draft persistence", () => {
 
     await confirmImport(user);
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Windows sign-in could not be verified",
+      "Couldn't confirm your Windows sign-in, so nothing was uploaded.",
     );
     // Verified against the backend now, not taken from the display cache.
     expect(getVerifiedWindowsIdentity).toHaveBeenCalledWith(true);

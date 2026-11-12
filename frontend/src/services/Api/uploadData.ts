@@ -88,7 +88,7 @@ export async function importUploadData(
   // 401 carries no body: the browser did not prove a Windows user. A 403
   // (SQL Server did not authorize the user) has its own message below.
   if (response.status === 401) {
-    throw new Error("Windows sign-in required: your account could not be verified.");
+    throw new Error("Couldn't confirm your Windows sign-in.");
   }
 
   if (!response.ok) {

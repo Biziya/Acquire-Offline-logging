@@ -36,9 +36,9 @@ const MATCH_LIMIT = 5;
 const LOOKUP_OPEN_EVENT = "raw-litho-lookup-open";
 
 const MENU_ITEM = TABLE_DROPDOWN_OPTION;
-const MENU_STATUS = `text-[0.8rem] ${DROPDOWN_MUTED}`;
+const MENU_STATUS = `text-[0.8125rem] ${DROPDOWN_MUTED}`;
 const CELL_ERROR =
-  "absolute top-[calc(100%+2px)] left-1 z-10 rounded-[3px] bg-[#fdf0ef] px-[5px] py-0.5 text-[0.7rem] whitespace-nowrap text-rl-danger";
+  "absolute top-[calc(100%+2px)] left-1 z-10 rounded-sm bg-rl-danger-soft px-[5px] py-0.5 text-[0.75rem] whitespace-nowrap text-rl-danger";
 
 function normalize(value: unknown) {
   return value === null || value === undefined
@@ -359,7 +359,7 @@ function LookupAutocomplete({
         disabled={isDisabled}
         aria-label={`${lookup.label}, row ${rowIndex + 1}`}
         aria-autocomplete="list"
-        aria-description="Enter confirms a choice. F2 then Up or Down selects options; Escape cancels. Tab and arrows navigate cells."
+        aria-description="Enter picks a value. F2 then arrow keys to browse. Escape closes the list."
         aria-expanded={showSuggestions}
         aria-controls={suggestionListId}
         aria-activedescendant={
@@ -394,7 +394,7 @@ function LookupAutocomplete({
           } ${
             showSuggestions
               ? "rotate-180 text-rl-navy"
-              : "text-[#8b9ab0] peer-hover:text-rl-navy"
+              : "text-rl-text-muted peer-hover:text-rl-navy"
           }`}
           aria-hidden="true"
           data-open={showSuggestions ? "true" : "false"}

@@ -21,7 +21,7 @@ function App() {
     <div className="flex min-h-screen">
       <Sidebar />
 
-      <main className="relative flex h-screen min-w-0 flex-1 flex-col overflow-hidden px-4 pt-1.5 pb-2.5 [&_h1]:pr-10">
+      <main className="relative flex h-screen min-w-0 flex-1 flex-col overflow-hidden px-4 pt-3 pb-3 [&_h1]:pr-10">
         <KeyboardShortcuts />
         <Routes>
           <Route path="/raw-litho" element={<RawLitho />} />

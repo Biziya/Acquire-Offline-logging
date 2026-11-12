@@ -4,6 +4,13 @@ import { getBackendStatus } from "../services/Api/backendStatus";
 const CHECK_INTERVAL_MS = 5000;
 const REQUEST_TIMEOUT_MS = 900;
 
+// Until the first check answers, say so instead of claiming "Offline".
+const STATUS = {
+  checking: { label: "Checking…", title: "Checking the server", light: "bg-rl-side-muted" },
+  online: { label: "Online", title: "Server online", light: "bg-rl-side-online" },
+  offline: { label: "Offline", title: "Server offline", light: "bg-rl-side-offline" },
+} as const;
+
 function StatusIndicator() {
   const [connectionStatus, setConnectionStatus] = useState("checking");
 
@@ -47,22 +54,20 @@ function StatusIndicator() {
     };
   }, []);
 
-  const isOnline = connectionStatus === "online";
+  const status = STATUS[connectionStatus as keyof typeof STATUS] ?? STATUS.checking;
 
   return (
     <div
       className="inline-flex items-center gap-1.5 text-xs font-medium"
       role="status"
       aria-live="polite"
-      title={isOnline ? "Backend online" : "Backend offline"}
+      title={status.title}
     >
-      <span
-        className={`size-2.5 rounded-full ${isOnline ? "bg-[#22c55e]" : "bg-[#f59e0b]"}`}
-      />
+      <span className={`size-2.5 rounded-full ${status.light}`} />
 
       {/* Hidden when the sidebar is collapsed, leaving only the light. */}
       <span className="group-data-[collapsed=true]/sidebar:hidden">
-        {isOnline ? "Online" : "Offline"}
+        {status.label}
       </span>
     </div>
   );

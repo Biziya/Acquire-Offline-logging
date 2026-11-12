@@ -30,10 +30,10 @@ function ValidationSummary({ validation }: ValidationSummaryProps) {
         <span className={STEP_NUMBER}>4</span>
         <div className={SECTION_HEADING_TEXT}>
           <h2 id="validation-summary-title" className={SECTION_TITLE}>
-            Validation Summary
+            Validation summary
           </h2>
           <p className={HELPER_TEXT}>
-            Invalid records block the import. Warnings are allowed.
+            Records with errors can't be uploaded. Warnings are fine.
           </p>
         </div>
       </div>
@@ -45,7 +45,7 @@ function ValidationSummary({ validation }: ValidationSummaryProps) {
             className="rounded-ui border border-rl-grid bg-rl-navy-softer px-2.5 py-1.5"
           >
             <dt className={FIELD_LABEL}>{label}</dt>
-            <dd className={`m-0 text-[1.1rem] font-[650] ${color}`}>
+            <dd className={`m-0 text-base font-bold ${color}`}>
               {validation ? numberFormat.format(validation.counts[key]) : "—"}
             </dd>
           </div>
@@ -53,7 +53,7 @@ function ValidationSummary({ validation }: ValidationSummaryProps) {
       </dl>
 
       {documentIssues.length > 0 && (
-        <ul className="mt-2 mb-0 grid list-none gap-1.5 p-0 text-[0.8rem]">
+        <ul className="mt-2 mb-0 grid list-none gap-1.5 p-0 text-[0.8125rem]">
           {documentIssues.map((issue) => (
             <li
               key={issue.message}

@@ -67,7 +67,7 @@ describe("Raw Litho drillhole, Project and Campaign stay together", () => {
   });
 });
 
-describe("Recent Working Drillholes", () => {
+describe("Recently worked on", () => {
   const holes = ["DH001", "DH002", "DH003", "DH004", "DH005"].map((holeId) => ({
     holeId,
     projectCode: "P",
@@ -94,10 +94,10 @@ describe("Recent Working Drillholes", () => {
 
     const listbox = screen.getByRole("listbox");
     expect(Array.from(listbox.children).map((item) => item.textContent)).toEqual([
-      "Recent Working Drillholes",
+      "Recently worked on",
       "DH001",
       "DH002",
-      "All Drillholes",
+      "All drillholes",
       "DH003",
       "DH004",
       "DH005",
@@ -125,7 +125,7 @@ describe("Recent Working Drillholes", () => {
 
     await user.type(screen.getByRole("combobox", { name: "Drillhole" }), "DH00");
 
-    expect(screen.queryByText("Recent Working Drillholes")).toBeNull();
+    expect(screen.queryByText("Recently worked on")).toBeNull();
     expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual([
       "DH001",
       "DH002",

@@ -25,7 +25,7 @@ import {
   hasInvalidLookupValues,
 } from "./rawLithoValidation";
 import { rawLithoConfig } from "./config";
-import { OUTLINE_BUTTON, OUTLINE_BUTTON_NAVY, PRIMARY_BUTTON } from "../../components/uiStyles";
+import { HELPER_TEXT, PRIMARY_BUTTON, SECONDARY_BUTTON } from "../../components/uiStyles";
 
 function RawLitho() {
   const { toast, showToast, hideToast } = useToast();
@@ -187,7 +187,7 @@ function RawLitho() {
         <ConfirmDialog
           title="Import this JSON file?"
           message={buildImportConfirmationMessage(importer.pendingImport)}
-          details="Cancel leaves the data stored on this device exactly as it is."
+          details="Cancel keeps your current data."
           confirmLabel="Import"
           cancelLabel="Cancel"
           busyLabel="Importing…"
@@ -224,7 +224,7 @@ function RawLitho() {
         actions={
           <>
             <button
-              className={`${OUTLINE_BUTTON} ${OUTLINE_BUTTON_NAVY} h-[30px] px-3 text-[0.8rem] disabled:cursor-not-allowed disabled:opacity-55`}
+              className={SECONDARY_BUTTON}
               type="button"
               onClick={importer.openFilePicker}
               disabled={!canImport}
@@ -243,6 +243,12 @@ function RawLitho() {
           </>
         }
       />
+
+      {!selectedDrillhole && !isLoading && !error && (
+        <p className={`${HELPER_TEXT} mb-1.5`} role="status">
+          Choose a drillhole to start logging.
+        </p>
+      )}
 
       <RawLithoTable
         rows={rows}

@@ -7,13 +7,13 @@ describe("keyboard shortcuts popup", () => {
   it("opens from the keyboard, focuses Close, and restores trigger focus on Escape", async () => {
     const user = userEvent.setup();
     render(<KeyboardShortcuts />);
-    const trigger = screen.getByRole("button", { name: "Keyboard shortcuts" });
-    expect(trigger).toHaveAttribute("title", "Keyboard shortcuts");
+    const trigger = screen.getByRole("button", { name: "Help and shortcuts" });
+    expect(trigger).toHaveAttribute("title", "Help and shortcuts");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     await user.tab();
     await user.keyboard("{Enter}");
-    expect(screen.getByRole("dialog", { name: "Keyboard shortcuts" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Close keyboard shortcuts" })).toHaveFocus();
+    expect(screen.getByRole("dialog", { name: "Shortcuts" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Close shortcuts" })).toHaveFocus();
     expect(trigger).toHaveAttribute("aria-expanded", "true");
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -24,9 +24,9 @@ describe("keyboard shortcuts popup", () => {
   it("closes with the close button, a second trigger click, or an outside click", async () => {
     const user = userEvent.setup();
     render(<><KeyboardShortcuts /><button>Outside</button></>);
-    const trigger = screen.getByRole("button", { name: "Keyboard shortcuts" });
+    const trigger = screen.getByRole("button", { name: "Help and shortcuts" });
     await user.click(trigger);
-    await user.click(screen.getByRole("button", { name: "Close keyboard shortcuts" }));
+    await user.click(screen.getByRole("button", { name: "Close shortcuts" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     await user.click(trigger);
     await user.click(trigger);
@@ -42,7 +42,7 @@ describe("keyboard shortcuts popup", () => {
   it("lists the implemented shortcuts in groups with explicit separators", async () => {
     const user = userEvent.setup();
     render(<KeyboardShortcuts />);
-    await user.click(screen.getByRole("button", { name: "Keyboard shortcuts" }));
+    await user.click(screen.getByRole("button", { name: "Help and shortcuts" }));
     const popup = screen.getByRole("dialog");
     expect(within(popup).getAllByRole("heading", { level: 3 }).map(h => h.textContent))
       .toEqual(["Move around", "Edit and select", "RowsRaw Litho only", "Drillhole searchRaw Litho only"]);
@@ -67,11 +67,11 @@ describe("keyboard shortcuts popup", () => {
   it("keeps popup key presses away from window table shortcuts and removes listeners when closed", async () => {
     const user = userEvent.setup();
     render(<KeyboardShortcuts />);
-    await user.click(screen.getByRole("button", { name: "Keyboard shortcuts" }));
+    await user.click(screen.getByRole("button", { name: "Help and shortcuts" }));
     const listener = vi.fn();
     window.addEventListener("keydown", listener);
     try {
-      const close = screen.getByRole("button", { name: "Close keyboard shortcuts" });
+      const close = screen.getByRole("button", { name: "Close shortcuts" });
       for (const key of ["F4", "F5", "PageDown", "ArrowDown"]) fireEvent.keyDown(close, { key });
       expect(listener).not.toHaveBeenCalled();
       await user.keyboard("{Escape}");

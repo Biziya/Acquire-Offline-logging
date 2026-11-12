@@ -97,7 +97,7 @@ function DatabaseViewerTable({
   return (
     <div
       ref={scrollRef}
-      className={TABLE_FRAME}
+      className={`${TABLE_FRAME} focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-rl-cell-ring`}
       tabIndex={0}
       role="region"
       aria-label="Lithology records"
@@ -170,7 +170,7 @@ function DatabaseViewerTable({
       </table>
 
       {intervals.length === 0 && (
-        <p className="m-0 p-6 text-center text-[0.85rem] text-rl-text-muted">
+        <p className="m-0 p-6 text-center text-[0.875rem] text-rl-text-muted">
           {emptyMessage}
         </p>
       )}

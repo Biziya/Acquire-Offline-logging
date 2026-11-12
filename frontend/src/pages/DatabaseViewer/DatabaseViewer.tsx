@@ -12,7 +12,7 @@ import { useToast } from "../../hooks/useToast";
 import Toast from "../../components/Toast";
 // The Raw Litho drillhole selector, reused as it is.
 import RawLithoFilters from "../RawLitho/RawLithoFilters";
-import { OUTLINE_BUTTON, OUTLINE_BUTTON_NAVY, SECTION_TITLE, HELPER_TEXT } from "../../components/uiStyles";
+import { SMALL_BUTTON, SECTION_TITLE, HELPER_TEXT } from "../../components/uiStyles";
 import PageTitle from "../../components/PageTitle";
 
 const { title } = databaseViewerConfig;
@@ -90,21 +90,21 @@ function DatabaseViewer() {
           {recordStatus}
         </p>
         {loaded && loaded.storedBy.length > 0 && (
-          <p className="m-0 text-[0.8rem] text-rl-text-muted">
+          <p className="m-0 text-[0.8125rem] text-rl-text-muted">
             Stored by {loaded.storedBy.join(", ")}
             {loaded.fileNames.length > 0 &&
               ` · File ${loaded.fileNames.join(", ")}`}
           </p>
         )}
         {loaded && loaded.hiddenValues > 0 && (
-          <p className="m-0 text-[0.8rem] text-[#7a4b00]" role="note">
+          <p className="m-0 text-[0.8125rem] text-rl-warning-text" role="note">
             {numberFormat.format(loaded.hiddenValues)} stored values have no
             Raw Litho column and are not shown
           </p>
         )}
         {view.status === "error" && (
           <button
-            className={`${OUTLINE_BUTTON} ${OUTLINE_BUTTON_NAVY} h-[26px] px-2.5 text-[0.8rem]`}
+            className={SMALL_BUTTON}
             type="button"
             onClick={() => loadRecords(holeId)}
           >

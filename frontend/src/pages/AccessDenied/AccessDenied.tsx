@@ -1,5 +1,6 @@
 import type { WebsiteAccess } from "../../services/websiteAccess";
 import { uiConfig } from "../../config/uiConfig";
+import { PRIMARY_BUTTON } from "../../components/uiStyles";
 
 interface Props {
   // null while the first access check runs.
@@ -25,30 +26,27 @@ function AccessDenied({ access, onRetry }: Props) {
     <main className="flex min-h-screen items-center justify-center bg-rl-navy-softer p-4">
       <section
         aria-live="polite"
-        className="w-full max-w-md rounded-xl border border-rl-border bg-white p-6 text-rl-text shadow-sm"
+        className="w-full max-w-md rounded-ui border border-rl-border bg-white p-6 text-rl-text shadow-ui"
       >
         <p className="m-0 mb-2 text-sm font-semibold text-rl-text-muted">{uiConfig.appName}</p>
-        <h1 className={`m-0 mb-3 text-[1.3rem] font-[650] ${denied ? "text-rl-danger" : "text-rl-navy"}`}>
+        <h1 className={`m-0 mb-3 text-[1.25rem] font-bold ${denied ? "text-rl-danger" : "text-rl-navy"}`}>
           {title}
         </h1>
 
         {denied && (
           <>
             <p className="m-0 mb-2">
-              Your account <strong>{access.userName}</strong> is not in the Active Directory group that
-              is allowed to use this website.
+              <strong>{access.userName}</strong> isn't in the group that can use this website.
             </p>
             <p className="m-0 mb-4 text-rl-text-muted">
-              Ask IT or your administrator to add you to the group, then sign out of Windows and sign
-              back in.
+              Ask IT to add you, then sign out of Windows and back in.
             </p>
           </>
         )}
 
         {!checking && !denied && (
           <p className="m-0 mb-4 text-rl-text-muted">
-            The website could not confirm who you are. Check that you are on the company network and
-            signed in to Windows with your domain account.
+            Check that you're on the company network and signed in to Windows with your BDOM account.
           </p>
         )}
 
@@ -56,7 +54,7 @@ function AccessDenied({ access, onRetry }: Props) {
           <button
             type="button"
             onClick={onRetry}
-            className="rounded-md bg-rl-navy px-4 py-2 font-semibold text-white hover:bg-rl-navy-dark"
+            className={PRIMARY_BUTTON}
           >
             Check again
           </button>

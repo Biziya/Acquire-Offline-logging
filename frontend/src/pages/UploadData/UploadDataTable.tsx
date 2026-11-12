@@ -60,19 +60,19 @@ const [indexWidth, statusWidth, ...columnWidths] = toPercentWidths([
 // Strongest first: the Ctrl + click selection shows over error / warning.
 const CELL_STATES = {
   selected:
-    "upload-cell--selected bg-[#dbeafe] shadow-[inset_0_0_0_2px_#2563eb]",
+    "upload-cell--selected bg-rl-select shadow-[inset_0_0_0_2px_var(--color-rl-select-ring)]",
   error:
-    "upload-cell--error bg-rl-danger-soft shadow-[inset_0_0_0_2px_var(--color-rl-required-soft)] focus-within:shadow-[inset_0_0_0_2px_var(--color-rl-cell-ring),inset_0_0_0_4px_rgb(192_57_47/32%)]",
+    "upload-cell--error bg-rl-danger-soft shadow-[inset_0_0_0_2px_var(--color-rl-required-soft)] focus-within:shadow-[inset_0_0_0_2px_var(--color-rl-cell-ring)]",
   warning:
-    "upload-cell--warning bg-rl-warning-soft shadow-[inset_0_0_0_2px_var(--color-rl-warning-border)] focus-within:shadow-[inset_0_0_0_2px_var(--color-rl-cell-ring),inset_0_0_0_4px_rgb(232_194_122/60%)]",
+    "upload-cell--warning bg-rl-warning-soft shadow-[inset_0_0_0_2px_var(--color-rl-warning-border)] focus-within:shadow-[inset_0_0_0_2px_var(--color-rl-cell-ring)]",
   normal:
     "focus-within:bg-white focus-within:shadow-[inset_0_0_0_2px_var(--color-rl-cell-ring)]",
 };
 
-const STATUS_MARKS: Record<RowStatus, { glyph: string; className: string; text: string }> = {
-  valid: { glyph: "✓", className: "text-rl-success", text: "Valid" },
-  warning: { glyph: "!", className: "text-rl-warning", text: "Warning" },
-  error: { glyph: "✕", className: "text-rl-danger", text: "Invalid" },
+const STATUS_MARKS: Record<RowStatus, { icon: string; className: string; text: string }> = {
+  valid: { icon: "M5 12.5l4.5 4.5L19 7.5", className: "text-rl-success", text: "Valid" },
+  warning: { icon: "M12 7v6M12 17h.01", className: "text-rl-warning", text: "Warning" },
+  error: { icon: "m7 7 10 10M17 7 7 17", className: "text-rl-danger", text: "Invalid" },
 };
 
 const LOOKUP_MENU_ID = "upload-data-lookup-menu";
@@ -485,7 +485,7 @@ function UploadDataTable({
                   >
                     {mark && (
                       <>
-                        <span aria-hidden="true">{mark.glyph}</span>
+                        <svg className="inline size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={mark.icon} /></svg>
                         <span className="sr-only">
                           {mark.text}
                           {messages.length > 0 ? `: ${messages.join(" ")}` : ""}
@@ -525,7 +525,7 @@ function UploadDataTable({
                         title={cellIssues?.map((issue) => issue.message).join("\n")}
                       >
                         <input
-                          className={`h-full w-full min-w-0 border-0 bg-transparent px-1 text-[0.78rem] text-rl-text outline-none read-only:text-rl-text-muted focus:font-[550] focus:text-[#0f172a] ${
+                          className={`h-full w-full min-w-0 border-0 bg-transparent px-1 text-[0.8125rem] text-rl-text outline-none read-only:text-rl-text-muted focus:font-semibold focus:text-rl-text-strong ${
                             column.key === "lithologyComments" ? "text-left" : "text-center"
                           }`}
                           type="text"
@@ -577,13 +577,13 @@ function UploadDataTable({
         </table>
 
         {visibleRows.length === 0 && (
-          <p className="m-0 p-6 text-center text-[0.85rem] text-rl-text-muted">
+          <p className="m-0 p-6 text-center text-[0.875rem] text-rl-text-muted">
             No records match the current search and filter.
           </p>
         )}
       </div>
 
-      <p className="mt-1.5 mb-0 min-h-[1.2em] text-[0.78rem] text-rl-text-muted" aria-live="polite">
+      <p className="mt-1.5 mb-0 min-h-[1.2em] text-[0.8125rem] text-rl-text-muted" aria-live="polite">
         {notice}
       </p>
 

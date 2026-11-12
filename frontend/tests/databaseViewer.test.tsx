@@ -103,7 +103,7 @@ describe("Database Viewer page", () => {
       "GTZO_0001_1",
       "GTZO_0002_1",
     ]);
-    expect(screen.queryByText("Recent Working Drillholes")).toBeNull();
+    expect(screen.queryByText("Recently worked on")).toBeNull();
     expect(getDrillholes).not.toHaveBeenCalled();
   });
 

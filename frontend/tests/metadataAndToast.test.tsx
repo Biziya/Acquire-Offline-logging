@@ -117,8 +117,18 @@ describe("global toast configuration", () => {
     ).toThrow(/toast\.duration\.error must be a whole number/);
   });
 
+  it("keeps an error toast until the user closes it", () => {
+    vi.useFakeTimers();
+    const onClose = vi.fn();
+    render(<Toast message="Upload failed" type="error" isVisible onClose={onClose} />);
+
+    act(() => vi.advanceTimersByTime(60_000));
+    expect(onClose).not.toHaveBeenCalled();
+    act(() => screen.getByRole("button", { name: "Close message" }).click());
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it.each([
-    ["error", 5000],
     ["warning", 3000],
     ["success", 3000],
   ] as const)("closes a %s toast after %i ms", (type, duration) => {
@@ -193,6 +203,24 @@ describe("sidebar user", () => {
     expect(await screen.findByText("CORP\\cached")).toBeVisible();
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Offline"));
     expect(screen.getByText("CORP\\cached")).toBeVisible();
+  });
+
+  it("says Checking until the first status answer, then shows the version under it", async () => {
+    vi.mocked(getBackendStatus).mockReturnValueOnce(new Promise(() => undefined));
+    renderSidebar();
+    const status = screen.getByRole("status");
+    expect(status).toHaveTextContent("Checking…");
+    const version = screen.getByText("v1.0.0");
+    expect(status.compareDocumentPosition(version)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
+  it("moves the version into the footer tooltip when collapsed", async () => {
+    await cacheVerifiedWindowsIdentity("CORP\\jdoe", null);
+    renderSidebar();
+    await screen.findByText("CORP\\jdoe");
+    screen.getByRole("button", { name: "Collapse sidebar" }).click();
+    await waitFor(() => expect(screen.queryByText("v1.0.0")).toBeNull());
+    expect(screen.getByRole("status").parentElement).toHaveAttribute("title", "CORP\\jdoe\nv1.0.0");
   });
 
   it("shows a neutral label, never a guessed name, without an identity", async () => {

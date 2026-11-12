@@ -7,7 +7,7 @@ title: "Raw Litho"
 
 table:
   rowsPerPage: 50        # rows per table page (PageUp / PageDown)
-  rowHeight: 22          # px, every body row
+  rowHeight: 26          # px, every body row
   # Column widths below are proportions: each column gets its share of the
   # table, so the table always fits the page width. minWidth is only a
   # readability floor - below it the table scrolls inside its own frame.

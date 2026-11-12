@@ -122,8 +122,8 @@ function describeValidation(validation: UploadValidation | null) {
   if (!validation) return "—";
   if (validation.hasBlockingErrors) {
     return validation.counts.error > 0
-      ? `Invalid — ${numberFormat.format(validation.counts.error)} records with errors`
-      : "Invalid — see Validation Summary";
+      ? `${numberFormat.format(validation.counts.error)} records have errors`
+      : "Has errors (see Validation summary)";
   }
   const hasWarnings =
     validation.counts.warning > 0 || validation.documentIssues.length > 0;
@@ -429,7 +429,7 @@ function UploadData() {
         showToast({
           type: "error",
           message:
-            "Windows sign-in could not be verified (server unavailable or not signed in). Nothing was uploaded.",
+            "Couldn't confirm your Windows sign-in, so nothing was uploaded. Check that the server is online.",
         });
         return;
       }
@@ -440,7 +440,7 @@ function UploadData() {
         // draft) for checking or a corrected re-upload; Cancel clears it.
         showToast({
           type: "success",
-          message: response.message || "Data uploaded successfully.",
+          message: response.message || "Upload complete.",
         });
       }
     } catch (error) {
@@ -496,14 +496,14 @@ function UploadData() {
               <span className={STEP_NUMBER}>3</span>
               <div className={SECTION_HEADING_TEXT}>
                 <h2 id="json-preview-title" className={SECTION_TITLE}>
-                  Editable JSON Preview
+                  Records
                 </h2>
                 <p className={HELPER_TEXT}>
-                  Review and correct records before import. Changes are kept on
-                  this device until the import succeeds or you Cancel.
+                  Fix any errors in the table before you upload. Your edits are
+                  saved on this PC until you upload or cancel.
                 </p>
                 {draft.saveFailed && (
-                  <p className="m-0 text-[0.8rem] text-rl-danger" role="status">
+                  <p className="m-0 text-[0.8125rem] text-rl-danger" role="status">
                     Draft not saved
                   </p>
                 )}
@@ -546,7 +546,7 @@ function UploadData() {
                     Showing {numberFormat.format(visibleRows.length)} of{" "}
                     {numberFormat.format(rows.length)} records
                     {isEdited && (
-                      <span className="ml-2 rounded-full bg-rl-navy-soft px-2 py-0.5 text-[0.7rem] font-semibold text-rl-navy">
+                      <span className="ml-2 rounded-ui bg-rl-navy-soft px-1.5 py-0.5 text-[0.75rem] font-semibold text-rl-navy">
                         Edited
                       </span>
                     )}
@@ -567,7 +567,7 @@ function UploadData() {
               <p className={HELPER_TEXT}>
                 {draft.isRestoring
                   ? "Restoring saved data…"
-                  : "Select a JSON file to preview its records."}
+                  : "Choose a JSON file to see its records."}
               </p>
             )}
           </section>
@@ -593,14 +593,14 @@ function UploadData() {
         */}
         {isConfirmOpen && workingDocument && (
           <ConfirmDialog
-            title="Confirm Database Upload"
-            message="Are you sure you want to upload this data to the database?"
+            title="Upload to database?"
+            message="These records will be added to the database."
             details={`${numberFormat.format(rows.length)} records · project ${displayValue(workingDocument.project)}, drillhole ${displayValue(workingDocument.drillhole)}. ${
               isEdited
                 ? "Your edited version will be uploaded."
                 : "The original file will be uploaded unchanged."
             }`}
-            confirmLabel="Confirm Upload"
+            confirmLabel="Upload"
             cancelLabel="Cancel"
             busyLabel="Uploading…"
             isBusy={isImporting}
@@ -624,7 +624,7 @@ function UploadData() {
             onClick={handleImportRequest}
             disabled={!workingDocument || isImporting || isConfirmOpen}
           >
-            {isImporting ? "Uploading…" : "Upload to Database"}
+            {isImporting ? "Uploading…" : "Upload to database"}
           </button>
         </div>
       </div>

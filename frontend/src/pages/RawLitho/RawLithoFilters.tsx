@@ -34,8 +34,8 @@ const SUGGESTION_LIMIT = 10;
 const SUGGESTION_LIST_ID = "drillhole-suggestion-list";
 
 const GROUP_HEADING =
-  "px-2.5 pt-2 pb-1 text-[0.7rem] font-semibold tracking-[0.04em] text-rl-text-muted uppercase";
-const FIELD_ERROR ="max-w-[220px] text-[0.8rem] text-rl-danger";
+  "px-2.5 pt-2 pb-1 text-[0.75rem] font-semibold text-rl-text-muted";
+const FIELD_ERROR ="max-w-[220px] text-[0.8125rem] text-rl-danger";
 const CHEVRON = [
   "after:pointer-events-none after:absolute after:right-[11px] after:bottom-[11px]",
   "after:size-2 after:border-r-[1.6px] after:border-b-[1.6px] after:border-rl-text-muted",
@@ -106,13 +106,13 @@ function RawLithoFilters({
     setShowInvalidSelection(false);
   }, [selectedHoleId]);
 
-  let placeholder = "Search Drillhole";
+  let placeholder = "Search drillhole";
 
   if (isLoading) {
-    placeholder = "Loading drillholes...";
+    placeholder = "Loading drillholes…";
   } else if (error) {
-    // No visible "unavailable" label; the reason stays for screen readers.
-    placeholder = "";
+    // The reason is shown under the field.
+    placeholder = "Drillholes not loaded";
   } else if (drillholes.length === 0) {
     placeholder = "No drillholes available";
   }
@@ -247,13 +247,13 @@ function RawLithoFilters({
 
           {showClearButton && (
             <button
-              className="absolute top-1/2 right-2 size-6 -translate-y-1/2 cursor-pointer rounded-ui border-0 bg-transparent p-0 text-[1.25rem] leading-none text-rl-text-muted transition-colors duration-140 hover:bg-rl-navy-soft hover:text-rl-navy focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-rl-cell-ring active:bg-[#dbe5f2]"
+              className="absolute top-1/2 right-1 grid size-7 -translate-y-1/2 cursor-pointer place-items-center rounded-ui border-0 bg-transparent p-0 text-rl-text-muted transition-colors duration-140 hover:bg-rl-navy-soft hover:text-rl-navy focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-rl-cell-ring active:bg-rl-select"
               type="button"
-              aria-label="Clear Drillhole"
+              aria-label="Clear drillhole"
               onMouseDown={(event) => event.preventDefault()}
               onClick={clearSelection}
             >
-              ×
+              <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17" /></svg>
             </button>
           )}
 
@@ -268,7 +268,7 @@ function RawLithoFilters({
                   <Fragment key={drillhole.holeId}>
                   {isGrouped && index === 0 && (
                     <li className={GROUP_HEADING} role="presentation">
-                      Recent Working Drillholes
+                      Recently worked on
                     </li>
                   )}
                   {isGrouped && index === recentCount && (
@@ -276,7 +276,7 @@ function RawLithoFilters({
                       className={`${GROUP_HEADING} mt-1 border-t border-rl-border`}
                       role="presentation"
                     >
-                      All Drillholes
+                      All drillholes
                     </li>
                   )}
                   <li
@@ -312,7 +312,7 @@ function RawLithoFilters({
         </div>
 
         {error && (
-          <span id="drillhole-load-error" className="sr-only">
+          <span id="drillhole-load-error" className={FIELD_ERROR}>
             {error}
           </span>
         )}

@@ -61,10 +61,11 @@ src/
 `App.tsx` renders the persistent layout — `Sidebar` and `Routes` — so the
 sidebar stays mounted while the route changes.
 
-`KeyboardShortcuts.tsx` provides the compact top-right keyboard icon on all
-three routes. Its non-modal popup lists every implemented table shortcut in
-three groups (navigation, editing and selection, rows), marking the ones that
-work on Raw Litho or Upload Data only. Database Viewer has no shortcuts. Keep
+`KeyboardShortcuts.tsx` provides the top-right help button (a question mark,
+"Help and shortcuts") on all three routes. Its non-modal "Shortcuts" popup
+lists every implemented table shortcut in four groups (Move around, Edit and
+select, Rows, Drillhole search), marking the ones that work on Raw Litho or
+Upload Data only. Database Viewer has no shortcuts. Keep
 the list in step with the handlers. Combined keys use `+`, alternatives `/`,
 and sequences `then`. Pages keep their `h1` outside their scroll area so a page
 scrollbar never runs under the absolutely positioned icon. The popup scrolls within the viewport and closes through its trigger, Close,

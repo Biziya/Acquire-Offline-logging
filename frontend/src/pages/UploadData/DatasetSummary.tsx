@@ -1,5 +1,5 @@
 import type { DatasetInfo } from "../../types/domain";
-import { HELPER_TEXT, SECTION_TITLE } from "../../components/uiStyles";
+import { SECTION_TITLE } from "../../components/uiStyles";
 import {
   SECTION,
   SECTION_HEADING,
@@ -13,16 +13,16 @@ interface DatasetSummaryProps {
 
 function DatasetSummary({ summary }: DatasetSummaryProps) {
   const summaryItems = [
-    ["File Name", summary.fileName],
+    ["File name", summary.fileName],
     ["Project", summary.project],
     ["Campaign", summary.campaign],
     ["Drillhole", summary.drillhole],
-    ["Created By", summary.createdBy],
-    ["Edited By", summary.editedBy],
-    ["Imported By", summary.importedBy],
-    ["Total Records", summary.totalRecords],
-    ["File Size", summary.fileSize],
-    ["Validation Status", summary.validationStatus],
+    ["Created by", summary.createdBy],
+    ["Edited by", summary.editedBy],
+    ["Imported by", summary.importedBy],
+    ["Total records", summary.totalRecords],
+    ["File size", summary.fileSize],
+    ["Validation status", summary.validationStatus],
   ];
 
   return (
@@ -31,15 +31,12 @@ function DatasetSummary({ summary }: DatasetSummaryProps) {
         <span className={STEP_NUMBER}>2</span>
         <div className={SECTION_HEADING_TEXT}>
           <h2 id="dataset-summary-title" className={SECTION_TITLE}>
-            Dataset Information
+            Dataset
           </h2>
-          <p className={HELPER_TEXT}>
-            Review the selected dataset details before import.
-          </p>
         </div>
       </div>
 
-      <dl className="m-0 grid grid-cols-2 overflow-hidden rounded-ui border border-rl-grid text-[0.8rem] max-[680px]:grid-cols-1">
+      <dl className="m-0 grid grid-cols-2 overflow-hidden rounded-ui border border-rl-grid text-[0.8125rem] max-[680px]:grid-cols-1">
         {summaryItems.map(([label, value]) => (
           <div
             className="flex justify-between gap-4 border-b border-rl-grid px-2.5 py-1.5 odd:border-r last:border-b-0 last:odd:border-r-0 max-[680px]:border-r-0"
