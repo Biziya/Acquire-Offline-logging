@@ -53,7 +53,7 @@ describe("keyboard shortcuts popup", () => {
       "PgUp / PgDn", "Esc then Tab", "F2", "Delete", "F4", "F5", "Tab / ↓"]) {
       expect(popup.querySelector(`[aria-label="${label}"]`), label).toBeInTheDocument();
     }
-    expect(within(popup).getAllByRole("definition")).toHaveLength(21);
+    expect(within(popup).getAllByRole("definition")).toHaveLength(17);
     // One line per shortcut: keys never wrap, long descriptions are cut off.
     for (const term of within(popup).getAllByRole("term")) expect(term).toHaveClass("whitespace-nowrap");
     for (const definition of within(popup).getAllByRole("definition")) {

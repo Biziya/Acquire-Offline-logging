@@ -77,10 +77,17 @@ export async function applyRawLithoImport(
 export function buildImportConfirmationMessage(importPlan: ImportPlan | null) {
   if (!importPlan) return "";
 
-  const rowLabel = importPlan.rowCount === 1 ? "row" : "rows";
-  const rows = `${importPlan.rowCount} ${rowLabel} for drillhole ${importPlan.drillhole}`;
-
   return importPlan.willReplaceExistingDraft
-    ? `${rows}. They replace the data saved on this PC for this drillhole, and you can't undo it.`
-    : `${rows} will be saved on this PC.`;
+    ? "It replaces the data saved on this PC for this drillhole. You can't undo this."
+    : "The rows will be saved on this PC.";
+}
+
+// Shown in the confirmation's facts box, under the message.
+export function buildImportConfirmationFacts(importPlan: ImportPlan | null) {
+  if (!importPlan) return [];
+
+  return [
+    ["Drillhole", importPlan.drillhole],
+    ["Rows", String(importPlan.rowCount)],
+  ] as const;
 }

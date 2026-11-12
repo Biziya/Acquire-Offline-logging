@@ -288,6 +288,7 @@ describe("Upload Data drag and drop", () => {
     fireEvent.drop(zone(), drag([jsonFile(uploadDocument())]));
     await within(zone()).findByText("File loaded");
     await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await user.click(within(screen.getByRole("alertdialog", { name: "Discard this upload?" })).getByRole("button", { name: "Discard" }));
     expect(within(zone()).getByText("Drag a JSON file here, or")).toBeInTheDocument();
     expect(zone()).not.toHaveClass("upload-drop-zone--loaded");
     expect(importUploadData).not.toHaveBeenCalled();
@@ -369,6 +370,7 @@ describe("Remove selected file", () => {
     expect(zone().getByText("upload.json")).toBeInTheDocument();
 
     await user.click(removeButton());
+    await user.click(within(screen.getByRole("alertdialog", { name: "Discard this upload?" })).getByRole("button", { name: "Discard" }));
 
     expect(zone().queryByText("upload.json")).toBeNull();
     expect(screen.queryByLabelText("Lithology Comments, record 1")).toBeNull();
@@ -545,6 +547,48 @@ describe("Upload Data draft persistence", () => {
     await waitFor(async () => expect(await readUploadDataDraft()).not.toBeNull());
 
     await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await user.click(within(screen.getByRole("alertdialog", { name: "Discard this upload?" })).getByRole("button", { name: "Discard" }));
     await waitFor(async () => expect(await readUploadDataDraft()).toBeNull());
+  });
+
+  it("asks before Cancel discards a loaded file, and Keep editing keeps it", async () => {
+    const user = userEvent.setup();
+    await loadAndEdit();
+    await waitFor(async () => expect(await readUploadDataDraft()).not.toBeNull());
+
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    const dialog = screen.getByRole("alertdialog", { name: "Discard this upload?" });
+    expect(dialog).toHaveAccessibleDescription(
+      "The file and your edits are removed from this PC. Nothing is sent to the database.",
+    );
+    // The safe choice is focused, so a stray Enter keeps the data.
+    expect(within(dialog).getByRole("button", { name: "Keep editing" })).toHaveFocus();
+    await user.keyboard("{Enter}");
+
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(screen.getAllByText("upload.json").length).toBeGreaterThan(0);
+    expect(await readUploadDataDraft()).not.toBeNull();
+  });
+
+  it("clears without asking when nothing is loaded", async () => {
+    const user = userEvent.setup();
+    render(<UploadData />);
+
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
+
+  it("lists the records, project, drillhole and version in the upload confirmation", async () => {
+    const user = userEvent.setup();
+    await loadAndEdit();
+
+    await user.click(screen.getByRole("button", { name: "Upload to database" }));
+    const dialog = screen.getByRole("alertdialog", { name: "Upload to database?" });
+    const fact = (label: string) =>
+      within(dialog).getByText(label, { selector: "dt" }).nextElementSibling?.textContent;
+    expect(fact("Records")).toMatch(/^[0-9]+$/);
+    expect(fact("Version")).toBe("Edited");
+    expect(within(dialog).getByText("Drillhole", { selector: "dt" })).toBeInTheDocument();
   });
 });

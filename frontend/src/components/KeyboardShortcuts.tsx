@@ -24,7 +24,6 @@ const GROUPS: { title: string; scope?: Scope; items: Shortcut[] }[] = [
       { keys: ["Shift", "Tab"], description: "Previous cell", separator: "+" },
       { keys: ["←", "→"], description: "Cell left / right at text end", separator: "/" },
       { keys: ["↑", "↓"], description: "Row above / below", separator: "/" },
-      { keys: ["Enter"], description: "Row below", scope: "Upload Data" },
       { keys: ["PgUp", "PgDn"], description: "Previous / next page", separator: "/", scope: "Raw Litho" },
       { keys: ["Esc", "Tab"], description: "Leave the table", separator: "then", scope: "Raw Litho" },
     ],
@@ -32,8 +31,6 @@ const GROUPS: { title: string; scope?: Scope; items: Shortcut[] }[] = [
   {
     title: "Edit and select",
     items: [
-      { keys: ["Enter"], description: "Open list / pick value", scope: "Raw Litho" },
-      { keys: ["Enter"], description: "Save From / To depth", scope: "Raw Litho" },
       { keys: ["F2"], description: "Move through the list", scope: "Raw Litho" },
       { keys: ["Delete"], description: "Clear cell", scope: "Raw Litho" },
       { keys: ["Esc"], description: "Close list, clear selection" },
@@ -56,7 +53,6 @@ const GROUPS: { title: string; scope?: Scope; items: Shortcut[] }[] = [
     scope: "Raw Litho",
     items: [
       { keys: ["↑", "↓"], description: "Move through list", separator: "/" },
-      { keys: ["Enter"], description: "Choose drillhole" },
       { keys: ["Esc"], description: "Close list" },
     ],
   },

@@ -15,7 +15,10 @@ import { useRawLithoWorkspace } from "./hooks/useRawLithoWorkspace";
 import { useRemoveRowConfirmation } from "./hooks/useRemoveRowConfirmation";
 import { useToast } from "../../hooks/useToast";
 import { useCurrentUser } from "../../hooks/useCurrentUser";
-import { buildImportConfirmationMessage } from "./rawLithoImportService";
+import {
+  buildImportConfirmationFacts,
+  buildImportConfirmationMessage,
+} from "./rawLithoImportService";
 import {
   exportRawLithoSnapshot,
   touchRawLithoDocument,
@@ -187,7 +190,7 @@ function RawLitho() {
         <ConfirmDialog
           title="Import this JSON file?"
           message={buildImportConfirmationMessage(importer.pendingImport)}
-          details="Cancel keeps your current data."
+          facts={buildImportConfirmationFacts(importer.pendingImport)}
           confirmLabel="Import"
           cancelLabel="Cancel"
           busyLabel="Importing…"

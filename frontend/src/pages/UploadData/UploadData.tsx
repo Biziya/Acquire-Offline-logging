@@ -148,6 +148,7 @@ function UploadData() {
   const { toast, showToast, hideToast } = useToast();
   const [isImporting, setIsImporting] = useState(false);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [isDiscardOpen, setIsDiscardOpen] = useState(false);
   const [lookups, setLookups] = useState(createInitialLookups);
   // Imported By: null until a trusted Windows identity source exists.
   const currentUser = useCurrentUser();
@@ -462,6 +463,17 @@ function UploadData() {
     requestControllerRef.current = null;
     resetDataset();
     setIsImporting(false);
+    setIsDiscardOpen(false);
+  };
+
+  // Cancel and the remove-file button both discard the file and every edit,
+  // so they ask first. With nothing loaded there is nothing to lose.
+  const requestCancel = () => {
+    if (!selectedFile && !workingDocument) {
+      handleCancel();
+      return;
+    }
+    setIsDiscardOpen(true);
   };
 
   return (
@@ -486,7 +498,7 @@ function UploadData() {
             onFileReject={(message) => showToast({ type: "warning", message })}
             selectedFileName={selectedFile?.name || ""}
             recordCount={rows.length}
-            onFileRemove={handleCancel}
+            onFileRemove={requestCancel}
             isRemoveDisabled={isImporting}
           />
           <DatasetSummary summary={summary} />
@@ -595,11 +607,12 @@ function UploadData() {
           <ConfirmDialog
             title="Upload to database?"
             message="These records will be added to the database."
-            details={`${numberFormat.format(rows.length)} records · project ${displayValue(workingDocument.project)}, drillhole ${displayValue(workingDocument.drillhole)}. ${
-              isEdited
-                ? "Your edited version will be uploaded."
-                : "The original file will be uploaded unchanged."
-            }`}
+            facts={[
+              ["Records", numberFormat.format(rows.length)],
+              ["Project", displayValue(workingDocument.project)],
+              ["Drillhole", displayValue(workingDocument.drillhole)],
+              ["Version", isEdited ? "Edited" : "Original file"],
+            ]}
             confirmLabel="Upload"
             cancelLabel="Cancel"
             busyLabel="Uploading…"
@@ -610,11 +623,27 @@ function UploadData() {
           />
         )}
 
+        {isDiscardOpen && (
+          <ConfirmDialog
+            title={isImporting ? "Stop the upload?" : "Discard this upload?"}
+            message={
+              isImporting
+                ? "The upload is cancelled and the file is cleared."
+                : "The file and your edits are removed from this PC. Nothing is sent to the database."
+            }
+            confirmLabel={isImporting ? "Stop upload" : "Discard"}
+            cancelLabel={isImporting ? "Keep uploading" : "Keep editing"}
+            tone="danger"
+            onConfirm={handleCancel}
+            onCancel={() => setIsDiscardOpen(false)}
+          />
+        )}
+
         <div className="mt-3 flex justify-between gap-2 max-[680px]:flex-col-reverse">
           <button
             className={`${SECONDARY_BUTTON} max-[680px]:w-full`}
             type="button"
-            onClick={handleCancel}
+            onClick={requestCancel}
           >
             Cancel
           </button>

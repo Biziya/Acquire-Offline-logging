@@ -7,7 +7,9 @@ import { uiConfig } from "../config/uiConfig";
 const ICON = "size-5 shrink-0";
 // Neutral text until a previously persisted identity is available.
 const NO_USER_LABEL = "User not identified";
-const LABEL = "whitespace-nowrap font-semibold";
+// min-w-0 + truncate: while the sidebar animates open, a label never pushes
+// past its link (which would show a horizontal scrollbar).
+const LABEL = "min-w-0 truncate whitespace-nowrap font-semibold";
 // Light focus ring that shows on the dark sidebar.
 const SIDE_FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-rl-side-text";
 // From package.json, set at build time (vite.config.ts).
@@ -122,7 +124,7 @@ function Sidebar() {
       <hr className="mx-3.5 mt-0 mb-1 shrink-0 border-0 border-t border-rl-side-hover" />
 
       <nav
-        className={`grid min-h-0 flex-1 content-start gap-0.5 overflow-y-auto px-1.5 py-1 ${
+        className={`grid min-h-0 flex-1 content-start gap-0.5 overflow-x-hidden overflow-y-auto px-1.5 py-1 ${
           collapsed ? "justify-items-center" : ""
         }`}
         aria-label="Main navigation"
@@ -162,7 +164,7 @@ function Sidebar() {
         remains (name and version are in its tooltip).
       */}
       <div
-        className={`shrink-0 py-2.5 ${
+        className={`shrink-0 overflow-x-hidden py-2.5 ${
           collapsed ? "px-0 text-center" : "px-3.5"
         }`}
         title={collapsed ? `${userLabel}\n${VERSION_LABEL}` : undefined}

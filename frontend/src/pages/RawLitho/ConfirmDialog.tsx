@@ -1,7 +1,6 @@
 import { useEffect, useId, useRef } from "react";
 import {
   DANGER_FILLED_BUTTON,
-  DIALOG_TITLE,
   PRIMARY_BUTTON,
   SECONDARY_BUTTON,
 } from "../../components/uiStyles";
@@ -10,6 +9,9 @@ interface ConfirmDialogProps {
   title: string;
   message: string;
   details?: string;
+  // Label / value pairs shown in a small box under the message
+  // (records, drillhole, …).
+  facts?: ReadonlyArray<readonly [string, string]>;
   confirmLabel?: string;
   cancelLabel?: string;
   busyLabel?: string;
@@ -29,8 +31,9 @@ const CONFIRM_TONE = {
 };
 
 /*
- * Shared confirmation modal. Used by the JSON import confirmation, the
- * Remove Last Row confirmation and the Upload Data database upload.
+ * Shared confirmation modal: a body (title, message, optional facts and
+ * details) above a footer bar with the buttons. Used by the JSON import, Remove
+ * last row, the Upload Data database upload and Upload Data's Cancel.
  *
  * `initialFocus` defaults to the cancel button: for a destructive dialog the
  * safe option should be the one Enter reaches first.
@@ -39,6 +42,7 @@ function ConfirmDialog({
   title,
   message,
   details,
+  facts,
   confirmLabel = "Confirm",
   cancelLabel = "Cancel",
   busyLabel,
@@ -92,33 +96,48 @@ function ConfirmDialog({
       role="presentation"
     >
       <div
-        className="w-[min(400px,100%)] animate-dialog-in rounded-ui border border-rl-border bg-white px-[22px] pt-5 pb-[18px] shadow-popup"
+        className="w-[min(440px,100%)] animate-dialog-in overflow-hidden rounded-ui border border-rl-border bg-white shadow-popup"
         role="alertdialog"
         aria-modal="true"
         aria-labelledby={`${id}-title`}
         aria-describedby={`${id}-message`}
       >
-        <h2
-          className={`${DIALOG_TITLE} mb-1.5`}
-          id={`${id}-title`}
-        >
-          {title}
-        </h2>
+        <div className="px-5 pt-5 pb-4">
+          <h2
+            className="m-0 text-[1.0625rem] leading-snug font-bold text-rl-text"
+            id={`${id}-title`}
+          >
+            {title}
+          </h2>
 
-        <p
-          className="m-0 text-[0.875rem] leading-normal text-rl-text-muted"
-          id={`${id}-message`}
-        >
-          {message}
-        </p>
-
-        {details && (
-          <p className="mt-2 mb-0 text-[0.8125rem] leading-[1.45] text-rl-text-muted">
-            {details}
+          <p
+            className="mt-1.5 mb-0 text-[0.875rem] leading-normal text-rl-text"
+            id={`${id}-message`}
+          >
+            {message}
           </p>
-        )}
 
-        <div className="mt-5 flex justify-end gap-2">
+          {facts && facts.length > 0 && (
+            <dl className="mt-3 mb-0 grid gap-1 rounded-ui border border-rl-grid bg-rl-navy-softer px-3 py-2 text-[0.8125rem]">
+              {facts.map(([label, value]) => (
+                <div key={label} className="flex justify-between gap-4">
+                  <dt className="text-rl-text-muted">{label}</dt>
+                  <dd className="m-0 min-w-0 truncate font-semibold text-rl-text tabular-nums" title={value}>
+                    {value}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          )}
+
+          {details && (
+            <p className="mt-2 mb-0 text-[0.8125rem] leading-[1.45] text-rl-text-muted">
+              {details}
+            </p>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-2 border-t border-rl-border bg-rl-navy-softer px-5 py-3">
           <button
             ref={cancelButtonRef}
             className={SECONDARY_BUTTON}
