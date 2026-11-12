@@ -21,8 +21,8 @@ describe("YAML page configuration", () => {
       "py", "ox", "sedim", "redoxCode", "lithologyComments", "granulo", "hardness",
     ]);
     expect(readUploadDataConfig(uploadDataText)).toMatchObject({
-      rowHeight: 28,
       overscan: 10,
+      statusColumnWidth: 40,
     });
     expect(readDatabaseViewerConfig(databaseViewerText)).toEqual({
       title: "Database Viewer",
@@ -31,13 +31,13 @@ describe("YAML page configuration", () => {
   });
 
   it("controls column visibility, labels and row settings", () => {
-    const text = uploadDataText
+    const text = rawLithoText
       .replace('lithoCode: { label: "Litho Code", width: 79, visible: true }',
         'lithoCode: { label: "Code", width: 79, visible: false }')
-      .replace("rowHeight: 28", "rowHeight: 40");
-    const config = readUploadDataConfig(text);
+      .replace("rowHeight: 26", "rowHeight: 40");
+    const config = readRawLithoConfig(text);
     expect(config.rowHeight).toBe(40);
-    expect(config.columns.some((column) => column.key === "lithoCode")).toBe(false);
+    expect(config.columns.find((column) => column.key === "lithoCode")).toMatchObject({ label: "Code", visible: false });
   });
 
   it.each([

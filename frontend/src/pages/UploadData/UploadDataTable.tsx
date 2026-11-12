@@ -1,35 +1,37 @@
 import type { RowField } from "../../types/domain";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { isRecord } from "../../types/validation";
-import { canLeaveCell } from "../RawLitho/tableNavigation";
+import { canLeaveCell, isKeyAlreadyHandled } from "../RawLitho/tableNavigation";
 import { parseClipboardText } from "../RawLitho/rawLithoClipboard";
+import LookupAutocomplete from "../RawLitho/LookupAutocomplete";
+import { rawLithoConfig } from "../RawLitho/config";
+import {
+  COMPACT_COLUMN_KEYS,
+  REQUIRED_COLUMN_KEYS,
+  tableColumns as columns,
+} from "../RawLitho/constants";
+import { RAW_LITHO_LOOKUP_BY_FIELD } from "../../services/rawLithoLookupConfig";
 import { cellText, isEditableValue, type CellEdit } from "./uploadDataDocument";
-import type { RowStatus, UploadValidation } from "./uploadDataValidation";
+import type { RowStatus, UploadLookups, UploadValidation } from "./uploadDataValidation";
 import { uploadDataConfig } from "./config";
 import {
   BODY_CELL,
+  CELL_INPUT,
   HEADER_CELL,
+  REQUIRED_MARK,
   TABLE,
   TABLE_FRAME,
   bodyRowClass,
   toPercentWidths,
 } from "../../components/dataTableStyles";
-import {
-  DROPDOWN_OPTION_ACTIVE,
-  DROPDOWN_OPTION_HOVER,
-  TABLE_DROPDOWN_MENU,
-  TABLE_DROPDOWN_OPTION,
-} from "../../components/dropdownStyles";
-import { useAnchoredMenuStyle } from "../../components/useAnchoredMenuStyle";
 
 interface UploadDataTableProps {
   rows: readonly unknown[];
   /* Indices into `rows`, in display order, after search and filter. */
   visibleRows: readonly number[];
   validation: UploadValidation | null;
-  lookupOptions: Partial<Record<RowField, readonly string[]>>;
+  lookups: UploadLookups;
   isReadOnly: boolean;
   onEdit: (edits: CellEdit[]) => void;
 }
@@ -40,21 +42,15 @@ interface CellPosition {
   column: number;
 }
 
-const {
-  columns,
-  rowHeight,
-  overscan,
-  maxHeightVh,
-  minWidth,
-  indexColumnWidth,
-  statusColumnWidth,
-} = uploadDataConfig;
-
-// Configured widths are proportions: the table always fills the section.
+// Same columns, widths and row height as Raw Litho, plus the Status column.
+const { rowHeight, minWidth, indexColumnWidth } = rawLithoConfig;
+const { overscan, maxHeightVh, statusColumnWidth } = uploadDataConfig;
 const [indexWidth, statusWidth, ...columnWidths] = toPercentWidths([
   indexColumnWidth,
   statusColumnWidth,
-  ...columns.map((column) => column.width),
+  ...rawLithoConfig.columns
+    .filter((column) => column.visible)
+    .map((column) => column.width),
 ]);
 
 // Strongest first: the Ctrl + click selection shows over error / warning.
@@ -74,30 +70,6 @@ const STATUS_MARKS: Record<RowStatus, { icon: string; className: string; text: s
   warning: { icon: "M12 7v6M12 17h.01", className: "text-rl-warning", text: "Warning" },
   error: { icon: "m7 7 10 10M17 7 7 17", className: "text-rl-danger", text: "Invalid" },
 };
-
-const LOOKUP_MENU_ID = "upload-data-lookup-menu";
-
-// The cell whose lookup menu is open, by record and field so a filter change
-// cannot move the menu to another cell.
-interface OpenMenu {
-  rowIndex: number;
-  field: RowField;
-}
-
-function normalize(text: string) {
-  return text.trim().toLocaleLowerCase();
-}
-
-/*
- * The options the lookup menu lists for a cell: all of them while the cell is
- * empty or holds an exact code, otherwise the codes containing the typed text
- * (what the browser's <datalist> suggested before).
- */
-function matchingOptions(options: readonly string[], text: string) {
-  const query = normalize(text);
-  if (!query || options.some((option) => normalize(option) === query)) return options;
-  return options.filter((option) => normalize(option).includes(query));
-}
 
 function selectionKey(rowIndex: number, field: RowField) {
   return `${rowIndex}:${field}`;
@@ -123,7 +95,7 @@ function UploadDataTable({
   rows,
   visibleRows,
   validation,
-  lookupOptions,
+  lookups,
   isReadOnly,
   onEdit,
 }: UploadDataTableProps) {
@@ -131,20 +103,6 @@ function UploadDataTable({
   const pendingFocus = useRef<CellPosition | null>(null);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [notice, setNotice] = useState("");
-  const [openMenu, setOpenMenu] = useState<OpenMenu | null>(null);
-
-  const getMenuAnchor = useCallback(
-    () =>
-      openMenu
-        ? scrollRef.current?.querySelector<HTMLElement>(
-            `input[data-row-index="${openMenu.rowIndex}"][data-field="${openMenu.field}"]`,
-          ) ?? null
-        : null,
-    [openMenu],
-  );
-  // Closes when the row scrolls out of the virtualised window.
-  const closeMenu = useCallback(() => setOpenMenu(null), []);
-  const menuStyle = useAnchoredMenuStyle(Boolean(openMenu), getMenuAnchor, closeMenu);
 
   const virtualizer = useVirtualizer({
     count: visibleRows.length,
@@ -193,14 +151,15 @@ function UploadDataTable({
    * Tab / Shift + Tab: next / previous cell, wrapping across records.
    * ArrowLeft / ArrowRight: the same, once the caret is at the edge of the text.
    * ArrowUp / ArrowDown and Enter: the same column in the previous / next record.
-   * At either end of the table Tab leaves it as usual.
+   * At either end of the table Tab leaves it as usual. Keys a lookup cell
+   * already used (its list, or a move between rendered cells) are skipped.
    */
   function handleKeyDown(event: React.KeyboardEvent<HTMLTableSectionElement>) {
     if (event.key === "Escape") {
       setSelected(new Set());
-      setOpenMenu(null);
       return;
     }
+    if (isKeyAlreadyHandled(event)) return;
     if (event.altKey || event.ctrlKey || event.metaKey) return;
 
     const current = getCellPosition(event.target);
@@ -369,45 +328,6 @@ function UploadDataTable({
     );
   }
 
-  // Raw Litho's lookup menu look, portalled so the table frame never clips it.
-  function renderLookupMenu({ rowIndex, field }: OpenMenu) {
-    const value = cellText(rows[rowIndex], field);
-    const options = matchingOptions(lookupOptions[field] ?? [], value);
-    if (options.length === 0) return null;
-
-    return createPortal(
-      <ul
-        id={LOOKUP_MENU_ID}
-        className={TABLE_DROPDOWN_MENU}
-        role="listbox"
-        style={menuStyle}
-      >
-        {options.map((option) => {
-          const isCurrent = normalize(option) === normalize(value);
-          return (
-            <li
-              key={option}
-              className={`${TABLE_DROPDOWN_OPTION} cursor-pointer ${DROPDOWN_OPTION_HOVER}${
-                isCurrent ? ` ${DROPDOWN_OPTION_ACTIVE}` : ""
-              }`}
-              role="option"
-              aria-selected={isCurrent}
-              onMouseDown={(event) => {
-                // Keep focus in the cell, as Raw Litho does.
-                event.preventDefault();
-                setOpenMenu(null);
-                if (option !== value) onEdit([{ rowIndex, field, text: option }]);
-              }}
-            >
-              {option}
-            </li>
-          );
-        })}
-      </ul>,
-      document.body,
-    );
-  }
-
   const items = virtualizer.getVirtualItems();
   const paddingTop = items[0]?.start ?? 0;
   const paddingBottom =
@@ -430,7 +350,7 @@ function UploadDataTable({
           <thead>
             <tr>
               <th className={HEADER_CELL} style={{ width: indexWidth }}>
-                #
+                Ins
               </th>
               <th className={HEADER_CELL} style={{ width: statusWidth }}>
                 Status
@@ -442,6 +362,11 @@ function UploadDataTable({
                   style={{ width: columnWidths[columnIndex] }}
                 >
                   {column.label}
+                  {REQUIRED_COLUMN_KEYS.has(column.key) && (
+                    <abbr className={REQUIRED_MARK} title="Required field">
+                      *
+                    </abbr>
+                  )}
                 </th>
               ))}
             </tr>
@@ -478,7 +403,7 @@ function UploadDataTable({
                   style={{ height: rowHeight }}
                   aria-rowindex={item.index + 2}
                 >
-                  <td className={`${BODY_CELL} text-rl-text-muted`}>{rowIndex + 1}</td>
+                  <td className={BODY_CELL}>{rowIndex + 1}</td>
                   <td
                     className={`${BODY_CELL} font-bold ${mark?.className ?? ""}`}
                     title={messages.join("\n") || mark?.text}
@@ -513,10 +438,15 @@ function UploadDataTable({
                       : (severity && CELL_STATES[severity]) || CELL_STATES.normal;
                     const isEditable =
                       isRecord(row) && isEditableValue(row[column.key]);
-                    const hasOptions = Boolean(lookupOptions[column.key]?.length);
-                    const canOpenMenu = hasOptions && isEditable && !isReadOnly;
-                    const isMenuOpen =
-                      openMenu?.rowIndex === rowIndex && openMenu.field === column.key;
+                    const lookup = RAW_LITHO_LOOKUP_BY_FIELD[column.key];
+                    const isCompact = COMPACT_COLUMN_KEYS.has(column.key);
+                    const value = cellText(row, column.key);
+                    const dataAttributes = {
+                      "data-cell": `${item.index}:${columnIndex}`,
+                      "data-row-index": rowIndex,
+                      "data-field": column.key,
+                    } as const;
+                    const lookupState = lookups.state[column.key];
 
                     return (
                       <td
@@ -524,43 +454,47 @@ function UploadDataTable({
                         className={`${BODY_CELL} focus-within:relative focus-within:z-[1] ${state}`}
                         title={cellIssues?.map((issue) => issue.message).join("\n")}
                       >
-                        <input
-                          className={`h-full w-full min-w-0 border-0 bg-transparent px-1 text-[0.8125rem] text-rl-text outline-none read-only:text-rl-text-muted focus:font-semibold focus:text-rl-text-strong ${
-                            column.key === "lithologyComments" ? "text-left" : "text-center"
-                          }`}
-                          type="text"
-                          inputMode={
-                            column.key === "lithoFrom" || column.key === "lithoTo"
-                              ? "decimal"
-                              : undefined
-                          }
-                          value={cellText(row, column.key)}
-                          readOnly={isReadOnly || !isEditable}
-                          role={hasOptions ? "combobox" : undefined}
-                          aria-autocomplete={hasOptions ? "list" : undefined}
-                          aria-expanded={hasOptions ? isMenuOpen : undefined}
-                          aria-controls={isMenuOpen ? LOOKUP_MENU_ID : undefined}
-                          autoComplete="off"
-                          aria-label={`${column.label}, record ${rowIndex + 1}`}
-                          aria-invalid={severity === "error" || undefined}
-                          data-cell={`${item.index}:${columnIndex}`}
-                          data-row-index={rowIndex}
-                          data-field={column.key}
-                          onChange={(event) => {
-                            onEdit([
-                              { rowIndex, field: column.key, text: event.target.value },
-                            ]);
-                            if (canOpenMenu) setOpenMenu({ rowIndex, field: column.key });
-                          }}
-                          onClick={(event) => {
-                            if (canOpenMenu && !event.ctrlKey && !event.metaKey) {
-                              setOpenMenu({ rowIndex, field: column.key });
+                        {lookup && isEditable ? (
+                          <LookupAutocomplete
+                            rowIndex={rowIndex}
+                            lookup={lookup}
+                            records={lookup.options ?? lookups.records[column.key] ?? []}
+                            value={value}
+                            onValueChange={(text) =>
+                              onEdit([{ rowIndex, field: column.key, text }])
                             }
-                          }}
-                          onBlur={() => {
-                            if (isMenuOpen) setOpenMenu(null);
-                          }}
-                        />
+                            isEnabled={!isReadOnly}
+                            isLoading={!lookup.options && lookupState === "loading"}
+                            error={
+                              !lookup.options && lookupState === "unavailable"
+                                ? `${lookup.label} unavailable`
+                                : ""
+                            }
+                            isCompact={isCompact}
+                            inputData={dataAttributes}
+                          />
+                        ) : (
+                          <input
+                            {...dataAttributes}
+                            className={`${CELL_INPUT} ${isCompact ? "px-0.5" : "px-1"}`}
+                            type="text"
+                            inputMode={
+                              column.key === "lithoFrom" || column.key === "lithoTo"
+                                ? "decimal"
+                                : undefined
+                            }
+                            value={value}
+                            readOnly={isReadOnly || !isEditable}
+                            autoComplete="off"
+                            aria-label={`${column.label}, record ${rowIndex + 1}`}
+                            aria-invalid={severity === "error" || undefined}
+                            onChange={(event) =>
+                              onEdit([
+                                { rowIndex, field: column.key, text: event.target.value },
+                              ])
+                            }
+                          />
+                        )}
                       </td>
                     );
                   })}
@@ -586,8 +520,6 @@ function UploadDataTable({
       <p className="mt-1.5 mb-0 min-h-[1.2em] text-[0.8125rem] text-rl-text-muted" aria-live="polite">
         {notice}
       </p>
-
-      {openMenu && renderLookupMenu(openMenu)}
     </>
   );
 }

@@ -1,5 +1,3 @@
-import type { RowField } from "../../types/domain";
-import { columns as schemaColumns } from "../../types/rawLithoSchema";
 import { createConfigReader } from "../../config/yamlConfig";
 import configText from "./config.yaml?raw";
 
@@ -15,25 +13,12 @@ export function readUploadDataConfig(text: string) {
 
   return {
     title: reader.string(reader.root.title, "title"),
-    rowHeight: reader.integer(table.rowHeight, "table.rowHeight"),
     overscan: reader.integer(table.overscan, "table.overscan", 0),
     maxHeightVh,
-    minWidth: reader.integer(table.minWidth, "table.minWidth"),
-    indexColumnWidth: reader.integer(
-      table.indexColumnWidth,
-      "table.indexColumnWidth",
-    ),
     statusColumnWidth: reader.integer(
       table.statusColumnWidth,
       "table.statusColumnWidth",
     ),
-    columns: reader
-      .columns<RowField>(
-        table.columns,
-        "table.columns",
-        schemaColumns.map(({ key }) => key),
-      )
-      .filter((column) => column.visible),
     searchDebounceMs: reader.integer(
       search.debounceMs,
       "search.debounceMs",

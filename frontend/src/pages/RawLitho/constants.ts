@@ -64,9 +64,8 @@ export const COMPACT_COLUMN_KEYS = new Set<RowField>(
 /*
  * Every user-facing notification in one place.
  *
- * Messages are deliberately 2-5 words: a toast reports status at a glance, it
- * does not explain. Detail belongs next to the offending field (the required
- * and duplicate cell styling) or inside a dialog.
+ * A success says what happened in a few words. A warning or error also says
+ * what to do next.
  *
  * Types: success | warning | error | info
  *   success  the action completed
@@ -84,23 +83,23 @@ export const TOAST_NOTIFICATIONS = {
     type: "success",
   },
   saveSuccess: {
-    message: "Changes saved",
+    message: "Saved. The JSON file is in your downloads.",
     type: "success",
   },
   saveFailed: {
-    message: "Save failed",
+    message: "Couldn't save. Your edits are still here, so try Save JSON again.",
     type: "error",
   },
   actionFailed: {
-    message: "Action failed",
+    message: "Couldn't remove the row. Try again.",
     type: "error",
   },
   importSuccess: {
-    message: "Import complete",
+    message: "File imported",
     type: "success",
   },
   importFailed: {
-    message: "Import failed",
+    message: "Couldn't import the file",
     type: "error",
   },
   importCancelled: {
@@ -108,35 +107,35 @@ export const TOAST_NOTIFICATIONS = {
     type: "info",
   },
   cachedDrillholesLoaded: {
-    message: "Using offline data",
+    message: "Server is offline. Showing the drillhole list saved on this PC.",
     type: "info",
   },
   drillholeCacheFailed: {
-    message: "Offline cache failed",
+    message: "Couldn't keep a copy of the drillhole list for offline use",
     type: "warning",
   },
   draftSaveFailed: {
-    message: "Changes not saved",
+    message: "Couldn't save your last edit on this PC. Keep this page open and try again.",
     type: "error",
   },
   draftLoadFailed: {
-    message: "Could not load data",
+    message: "Couldn't load the saved rows for this drillhole. Reload the page to try again.",
     type: "error",
   },
   missingRequiredFields: {
-    message: "Complete required fields",
+    message: "Fill in the required (*) cells of the last row first",
     type: "warning",
   },
   duplicateInterval: {
-    message: "Duplicate interval",
+    message: "This From / To interval is already in the table",
     type: "warning",
   },
   invalidDepthRange: {
-    message: "Invalid depth range",
+    message: "From must be less than To. The previous depth was kept.",
     type: "warning",
   },
   invalidLookupValue: {
-    message: "Invalid lookup codes",
+    message: "Some codes aren't in their list. Fix them, then save.",
     type: "warning",
   },
   cellsCopied: {
@@ -144,23 +143,23 @@ export const TOAST_NOTIFICATIONS = {
     type: "info",
   },
   invalidPasteValue: {
-    message: "Invalid pasted value",
+    message: "Some pasted values don't fit these columns. Nothing was pasted.",
     type: "warning",
   },
   pasteShapeMismatch: {
-    message: "Selection does not match clipboard",
+    message: "The copied cells don't match the selected cells. Nothing was pasted.",
     type: "warning",
   },
   pasteOutOfRange: {
-    message: "Paste exceeds table",
+    message: "The copied cells don't fit in the table. Nothing was pasted.",
     type: "warning",
   },
   pasteNotEditable: {
-    message: "Cells not editable",
+    message: "These cells can't be edited. Nothing was pasted.",
     type: "warning",
   },
   clipboardUnavailable: {
-    message: "Clipboard unavailable",
+    message: "Couldn't use the clipboard. Allow clipboard access in the browser and try again.",
     type: "error",
   },
 } satisfies Record<string, ToastNotification>;

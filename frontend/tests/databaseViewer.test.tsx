@@ -111,7 +111,7 @@ describe("Database Viewer page", () => {
     vi.mocked(getDataViewerDrillholes).mockRejectedValue(new Error("HTTP 500"));
     render(<DatabaseViewer />);
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Unable to load drillholes");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't load the drillhole list");
     expect(screen.getByRole("combobox", { name: "Drillhole" })).toBeDisabled();
   });
 
@@ -299,7 +299,7 @@ describe("Database Viewer page", () => {
     render(<DatabaseViewer />);
 
     await chooseDrillhole(user, "GTZO_0001_1");
-    expect(await screen.findByRole("alert")).toHaveTextContent("Unable to load drillhole records");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't load this drillhole's records");
     expect(screen.getByText("Records unavailable")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Retry" }));

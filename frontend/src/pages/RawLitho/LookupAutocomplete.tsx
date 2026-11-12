@@ -6,7 +6,7 @@ import {
   isClearCellRequest,
   markKeyAsHandled,
 } from "./tableNavigation";
-import { CELL_INPUT } from "./rawLithoStyles";
+import { CELL_INPUT } from "../../components/dataTableStyles";
 import {
   DROPDOWN_MUTED,
   DROPDOWN_OPTION_ACTIVE,
@@ -22,15 +22,14 @@ interface LookupAutocompleteProps {
   records: readonly LookupRecord[];
   value: string;
   onValueChange: (value: string) => void;
-  isPageEnabled: boolean;
+  isEnabled: boolean;
   isLoading: boolean;
   error: string;
   isCompact?: boolean;
   isRequired?: boolean;
+  // Extra data-* attributes for the input (Upload Data finds cells by them).
+  inputData?: Record<`data-${string}`, string | number>;
 }
-
-
-
 
 const MATCH_LIMIT = 5;
 const LOOKUP_OPEN_EVENT = "raw-litho-lookup-open";
@@ -65,11 +64,12 @@ function LookupAutocomplete({
   records,
   value,
   onValueChange,
-  isPageEnabled,
+  isEnabled,
   isLoading,
   error,
   isCompact = false,
   isRequired = false,
+  inputData,
 }: LookupAutocompleteProps) {
   const generatedId = useId();
   const instanceId = `lookup-${generatedId}`;
@@ -136,8 +136,8 @@ function LookupAutocomplete({
   const highlightedIndex = optionIndex ?? defaultIndex;
   const highlightedSuggestion = suggestions[highlightedIndex] ?? null;
 
-  const isDisabled = !isPageEnabled || (!isLoading && options.length === 0);
-  const showSuggestions = isOpen && isPageEnabled;
+  const isDisabled = !isEnabled || (!isLoading && options.length === 0);
+  const showSuggestions = isOpen && isEnabled;
 
   useEffect(() => {
     setQuery(toInputValue(value));
@@ -348,6 +348,7 @@ function LookupAutocomplete({
     <div className="relative h-full min-w-0">
       <input
         ref={inputRef}
+        {...inputData}
         className={`peer ${CELL_INPUT} ${isCompact ? "px-[9px]" : "px-[13px]"}`}
         type="text"
         role="combobox"

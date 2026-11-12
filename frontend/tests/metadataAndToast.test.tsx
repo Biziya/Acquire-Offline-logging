@@ -170,7 +170,7 @@ describe("sidebar user", () => {
       </MemoryRouter>,
     );
 
-  it("places the only divider under branding and keeps cached identity above status", async () => {
+  it("draws dividers under branding and under the user, above the status", async () => {
     await cacheVerifiedWindowsIdentity("CORP\\jdoe", null);
     const { container } = renderSidebar();
     const user = await screen.findByText("CORP\\jdoe");
@@ -178,7 +178,8 @@ describe("sidebar user", () => {
     const status = await screen.findByRole("status");
 
     expect(divider).not.toBeNull();
-    expect(container.querySelectorAll("hr")).toHaveLength(1);
+    const dividers = container.querySelectorAll("hr");
+    expect(dividers).toHaveLength(2);
     expect(screen.getByText("AcQuire WEB").compareDocumentPosition(divider as Node)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
@@ -187,6 +188,8 @@ describe("sidebar user", () => {
     );
     expect(user.parentElement).not.toHaveClass("border-t");
     expect(user.compareDocumentPosition(status)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(user.compareDocumentPosition(dividers[1] as Node)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(dividers[1]?.compareDocumentPosition(status)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     await waitFor(() => expect(status).toHaveTextContent("Online"));
   });
 

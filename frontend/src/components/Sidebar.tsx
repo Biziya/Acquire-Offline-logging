@@ -178,7 +178,7 @@ function Sidebar() {
             >
               {userLabel}
             </p>
-            <div className="h-2" />
+            <hr className="my-2 border-0 border-t border-rl-side-hover" />
           </>
         )}
         <StatusIndicator />

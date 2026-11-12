@@ -56,7 +56,7 @@ function AutocompleteHarness({
                 setValue(next);
                 onChange(next);
               }}
-              isPageEnabled
+              isEnabled
               isLoading={false}
               error=""
             />

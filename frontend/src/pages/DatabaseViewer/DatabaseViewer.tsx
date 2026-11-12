@@ -57,7 +57,7 @@ function DatabaseViewer() {
   function loadRecords(nextHoleId: string) {
     loadDataViewerRecords(nextHoleId).then((outcome) => {
       if (outcome === "error")
-        showToast({ type: "error", message: "Unable to load drillhole records" });
+        showToast({ type: "error", message: "Couldn't load this drillhole's records. Check that the server is online." });
     });
   }
 

@@ -174,7 +174,7 @@ describe("Upload Data page", () => {
     });
     await user.click(screen.getByRole("button", { name: "Upload to database" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Fix blocking errors",
+      "Fix them before uploading.",
     );
     expect(screen.queryByRole("button", { name: "Upload" })).toBeNull();
     expect(importUploadData).not.toHaveBeenCalled();
@@ -207,7 +207,7 @@ describe("Upload Data page", () => {
       target: { files: [new File(["{"], "bad.json", { type: "application/json" })] },
     });
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Invalid JSON file",
+      "This file isn't valid JSON",
     );
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Upload to database" })).toBeDisabled(),
@@ -250,7 +250,7 @@ describe("Upload Data drag and drop", () => {
 
     fireEvent.drop(zone(), drag([new File(["x"], "notes.txt", { type: "text/plain" })]));
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Unsupported file type",
+      "Choose a .json file",
     );
     expect(screen.getByLabelText("Lithology Comments, record 1")).toBeInTheDocument();
     expect(within(zone()).getByText("upload.json")).toBeInTheDocument();
@@ -282,7 +282,7 @@ describe("Upload Data drag and drop", () => {
 
     // An unreadable replacement shows the error, not a success state.
     fireEvent.drop(zone(), drag([new File(["{"], "broken.json", { type: "application/json" })]));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Invalid JSON file");
+    expect(await screen.findByRole("alert")).toHaveTextContent("This file isn't valid JSON");
     expect(within(zone()).queryByText("File loaded")).toBeNull();
 
     fireEvent.drop(zone(), drag([jsonFile(uploadDocument())]));

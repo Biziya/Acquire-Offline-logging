@@ -12,7 +12,7 @@ import {
 // cannot drift apart. Nothing from Raw Litho's editing code is used.
 import { rawLithoConfig } from "../RawLitho/config";
 import { INDEX_COLUMN_WIDTH, tableColumns } from "../RawLitho/constants";
-import { CELL_INPUT } from "../RawLitho/rawLithoStyles";
+import { CELL_INPUT } from "../../components/dataTableStyles";
 import { databaseViewerConfig } from "./config";
 import {
   intervalKey,

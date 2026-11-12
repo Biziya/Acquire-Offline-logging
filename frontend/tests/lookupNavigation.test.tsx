@@ -40,7 +40,7 @@ function grid(value = "Last") {
       rowIndex={row}
       lookup={{ fieldKey: "lithoCode", codeProperty: "code", label: `Column ${col}` }}
       records={["A", "B", "C", "D", "E", "F", "Last"].map(code => ({ code }))}
-      value={value} onValueChange={change} isPageEnabled isLoading={false} error=""
+      value={value} onValueChange={change} isEnabled isLoading={false} error=""
     /></td>)}
   </tr>)}</tbody></table>);
   return change;

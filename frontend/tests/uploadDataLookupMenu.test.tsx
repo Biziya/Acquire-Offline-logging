@@ -17,7 +17,10 @@ function renderTable(onEdit = vi.fn(), isReadOnly = false) {
       rows={rows}
       visibleRows={[0, 1]}
       validation={null}
-      lookupOptions={{ lithoCode: ["SS", "SH", "CL"] }}
+      lookups={{
+        records: { lithoCode: [{ lithoCode: "SS" }, { lithoCode: "SH" }, { lithoCode: "CL" }] },
+        state: { lithoCode: "ready" },
+      }}
       isReadOnly={isReadOnly}
       onEdit={onEdit}
     />,
@@ -25,20 +28,18 @@ function renderTable(onEdit = vi.fn(), isReadOnly = false) {
   return onEdit;
 }
 
-// The browser's <datalist> popup is replaced by the Raw Litho lookup menu.
-describe("Upload Data lookup menu", () => {
-  it("opens the white Raw Litho menu on click and selects a code", async () => {
+// Lookup cells are the same cell Raw Litho uses.
+describe("Upload Data lookup cells", () => {
+  it("shows the dropdown arrow and opens the list on focus", async () => {
     const user = userEvent.setup();
     const onEdit = renderTable();
-    expect(document.querySelector("datalist")).toBeNull();
 
-    const cell = screen.getByRole("combobox", { name: "Litho Code, record 1" });
+    const cell = screen.getByRole("combobox", { name: /Litho Code, row 1/ });
+    expect(cell.parentElement?.querySelector("[data-open]")).not.toBeNull();
+
     await user.click(cell);
-
-    const menu = screen.getByRole("listbox");
-    expect(menu).toHaveClass("bg-white", "rounded-ui", "border-rl-border");
-    expect(screen.getByRole("option", { name: "SS" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("option", { name: "SS" })).toHaveClass("bg-rl-navy-soft");
+    expect(screen.getByRole("listbox")).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Empty" })).toBeInTheDocument();
 
     fireEvent.mouseDown(screen.getByRole("option", { name: "CL" }));
     expect(onEdit).toHaveBeenCalledWith([{ rowIndex: 0, field: "lithoCode", text: "CL" }]);
@@ -46,25 +47,35 @@ describe("Upload Data lookup menu", () => {
     expect(cell).toHaveFocus();
   });
 
+  it("keeps typed text as a draft until Enter picks a match", async () => {
+    const user = userEvent.setup();
+    const onEdit = renderTable();
+
+    await user.click(screen.getByRole("combobox", { name: /Litho Code, row 2/ }));
+    await user.keyboard("C");
+    expect(onEdit).not.toHaveBeenCalled();
+
+    await user.keyboard("{Enter}");
+    expect(onEdit).toHaveBeenCalledWith([{ rowIndex: 1, field: "lithoCode", text: "CL" }]);
+  });
+
   it("closes on Escape and when focus leaves the cell", async () => {
     const user = userEvent.setup();
     renderTable();
 
-    await user.click(screen.getByRole("combobox", { name: "Litho Code, record 2" }));
-    expect(screen.getByRole("listbox")).toBeInTheDocument();
+    await user.click(screen.getByRole("combobox", { name: /Litho Code, row 2/ }));
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("listbox")).toBeNull();
 
-    await user.click(screen.getByRole("combobox", { name: "Litho Code, record 2" }));
+    await user.click(screen.getByRole("combobox", { name: /Litho Code, row 2/ }));
     await user.tab();
     expect(screen.queryByRole("listbox")).toBeNull();
   });
 
-  it("never opens while the table is read-only", async () => {
-    const user = userEvent.setup();
+  it("is disabled while the table is read-only", () => {
     renderTable(vi.fn(), true);
 
-    await user.click(screen.getByRole("combobox", { name: "Litho Code, record 1" }));
+    expect(screen.getByRole("combobox", { name: /Litho Code, row 1/ })).toBeDisabled();
     expect(screen.queryByRole("listbox")).toBeNull();
   });
 });

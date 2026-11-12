@@ -43,6 +43,7 @@ import {
 import {
   HEADER_CELL,
   TABLE,
+  REQUIRED_MARK,
   TABLE_FRAME,
 } from "../../components/dataTableStyles";
 import { rawLithoConfig } from "./config";
@@ -388,7 +389,7 @@ function RawLithoTable({
                     {column.label}
                     {isRequired && (
                       <abbr
-                        className="ml-px cursor-help text-[0.85em] font-bold text-rl-required no-underline"
+                        className={REQUIRED_MARK}
                         title="Required field"
                       >
                         *

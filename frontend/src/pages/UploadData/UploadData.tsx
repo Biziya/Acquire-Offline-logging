@@ -1,4 +1,4 @@
-import type { DatasetInfo, RowField } from "../../types/domain";
+import type { DatasetInfo } from "../../types/domain";
 import { errorMessage, isAbortError, isRecord } from "../../types/validation";
 import {
   useDeferredValue,
@@ -14,10 +14,7 @@ import UploadDataTable from "./UploadDataTable";
 import { importUploadData } from "../../services/Api/uploadData";
 import { getVerifiedWindowsIdentity } from "../../services/currentUser";
 import { getRawLithoLookup } from "../../services/Api/rawLithoApi";
-import {
-  RAW_LITHO_ALL_LOOKUPS,
-  RAW_LITHO_LOOKUPS,
-} from "../../services/rawLithoLookupConfig";
+import { RAW_LITHO_LOOKUPS } from "../../services/rawLithoLookupConfig";
 import {
   applyCellEdits,
   cellText,
@@ -33,6 +30,7 @@ import {
   type UploadValidation,
 } from "./uploadDataValidation";
 import { uploadDataConfig } from "./config";
+import { tableColumns } from "../RawLitho/constants";
 import { useUploadDataDraft, type DraftSource } from "./useUploadDataDraft";
 import { useCurrentUser } from "../../hooks/useCurrentUser";
 import { useToast } from "../../hooks/useToast";
@@ -53,6 +51,10 @@ import {
   STEP_NUMBER,
 } from "./uploadDataStyles";
 import { formatCount } from "../../utils/format";
+
+function recordsWithErrors(count: number) {
+  return count === 1 ? "1 record has errors" : `${formatCount(count)} records have errors`;
+}
 
 type StatusFilter = "all" | RowStatus;
 
@@ -102,7 +104,7 @@ function filterRows(
       pinned.has(index) ||
       ((status === "all" || validation?.rowStatus[index] === status) &&
         (!search ||
-          uploadDataConfig.columns.some((column) =>
+          tableColumns.some((column) =>
             cellText(row, column.key).toLocaleLowerCase().includes(search),
           )))
     ) {
@@ -117,7 +119,7 @@ function describeValidation(validation: UploadValidation | null) {
   if (!validation) return "—";
   if (validation.hasBlockingErrors) {
     return validation.counts.error > 0
-      ? `${formatCount(validation.counts.error)} records have errors`
+      ? recordsWithErrors(validation.counts.error)
       : "Has errors (see Validation summary)";
   }
   const hasWarnings =
@@ -252,23 +254,6 @@ function UploadData() {
     [deferredDocument, pinnedRows, search, statusFilter, validation],
   );
 
-  const lookupOptions = useMemo(() => {
-    const options: Partial<Record<RowField, string[]>> = {};
-
-    RAW_LITHO_ALL_LOOKUPS.forEach((lookup) => {
-      const records = lookup.options ?? lookups.records[lookup.fieldKey] ?? [];
-      options[lookup.fieldKey] = Array.from(
-        new Set(
-          records.flatMap((record) => {
-            const code = record[lookup.codeProperty];
-            return typeof code === "string" && code.trim() ? [code.trim()] : [];
-          }),
-        ),
-      );
-    });
-
-    return options;
-  }, [lookups.records]);
 
   const rows = workingDocument ? getDocumentRows(workingDocument) : [];
   const summary: DatasetInfo = {
@@ -311,7 +296,7 @@ function UploadData() {
     // Refused before anything is reset, so the loaded dataset (and its edits)
     // survives a wrong file.
     if (!isJsonFile) {
-      showToast({ type: "warning", message: "Unsupported file type" });
+      showToast({ type: "warning", message: "Choose a .json file" });
       return;
     }
 
@@ -341,7 +326,7 @@ function UploadData() {
       }
 
       console.error("Unable to read the selected JSON dataset.", error);
-      showToast({ type: "error", message: "Invalid JSON file" });
+      showToast({ type: "error", message: "This file isn't valid JSON. Check the file and try again." });
     }
   };
 
@@ -379,8 +364,8 @@ function UploadData() {
         type: "warning",
         message:
           current.counts.error > 0
-            ? `Fix blocking errors (${formatCount(current.counts.error)} invalid records)`
-            : "Fix blocking errors",
+            ? `${recordsWithErrors(current.counts.error)}. Fix them before uploading.`
+            : "Fix the errors before uploading",
       });
       return;
     }
@@ -436,13 +421,13 @@ function UploadData() {
         // draft) for checking or a corrected re-upload; Cancel clears it.
         showToast({
           type: "success",
-          message: response.message || "Upload complete.",
+          message: response.message || "Upload complete",
         });
       }
     } catch (error) {
       if (requestControllerRef.current === controller && !isAbortError(error)) {
         // The draft and its edits stay, so Upload to Database can be retried.
-        showToast({ type: "error", message: errorMessage(error) || "Upload failed" });
+        showToast({ type: "error", message: errorMessage(error) || "Upload failed. Try again." });
       }
     } finally {
       if (requestControllerRef.current === controller) {
@@ -565,7 +550,7 @@ function UploadData() {
                   rows={rows}
                   visibleRows={visibleRows}
                   validation={validation}
-                  lookupOptions={lookupOptions}
+                  lookups={lookups}
                   isReadOnly={isImporting}
                   onEdit={handleEdit}
                 />

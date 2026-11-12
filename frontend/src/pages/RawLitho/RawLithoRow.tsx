@@ -14,7 +14,7 @@ import {
 } from "./constants";
 import { handleCellNavigation, isClearCellRequest } from "./tableNavigation";
 import { rawLithoConfig } from "./config";
-import { CELL_INPUT } from "./rawLithoStyles";
+import { CELL_INPUT } from "../../components/dataTableStyles";
 import { BODY_CELL, bodyRowClass } from "../../components/dataTableStyles";
 import { RAW_LITHO_LOOKUP_BY_FIELD } from "../../services/rawLithoLookupConfig";
 import { findConditionalRuleIssues, hasValue } from "./rawLithoValidation";
@@ -160,7 +160,7 @@ function RawLithoRow({
                 onValueChange={(value) =>
                   onRowChange(row.id, column.key, value)
                 }
-                isPageEnabled={isEnabled}
+                isEnabled={isEnabled}
                 isLoading={lookup.source === "local" ? false : status.isLoading}
                 error={lookup.source === "local" ? "" : status.error}
                 isCompact={isCompact}

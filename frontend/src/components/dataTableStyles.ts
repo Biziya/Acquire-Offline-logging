@@ -44,3 +44,15 @@ export function toPercentWidths(widths: readonly number[]) {
 
   return widths.map((width) => `${((width / total) * 100).toFixed(3)}%`);
 }
+
+// Cell input (plain and lookup). The cell itself draws the focus ring.
+export const CELL_INPUT = [
+  "h-full w-full min-w-0 border-0 bg-transparent py-px text-center text-[0.8125rem] text-rl-text",
+  "outline-none focus:font-semibold focus:text-rl-text-strong",
+  "read-only:text-rl-text-muted",
+  "disabled:cursor-not-allowed disabled:bg-transparent disabled:text-rl-text-disabled",
+].join(" ");
+
+// The red * after a required column's header.
+export const REQUIRED_MARK =
+  "ml-px cursor-help text-[0.85em] font-bold text-rl-required no-underline";

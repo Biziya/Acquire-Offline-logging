@@ -38,7 +38,7 @@ export function useDataViewerDrillholes(showToast: Notify) {
         // A list already shown stays usable; only a first load fails visibly.
         if (cachedDrillholes) return;
         setError(LOAD_ERROR);
-        showToast({ type: "error", message: "Unable to load drillholes" });
+        showToast({ type: "error", message: "Couldn't load the drillhole list. Check that the server is online." });
       })
       .finally(() => {
         if (!controller.signal.aborted) setIsLoading(false);
