@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import Sidebar from "./components/Sidebar";
 import KeyboardShortcuts from "./components/KeyboardShortcuts";
+import NewYearGreeting from "./components/NewYearGreeting/NewYearGreeting";
 import RawLitho from "./pages/RawLitho/RawLitho";
 import UploadData from "./pages/UploadData/UploadData";
 import DatabaseViewer from "./pages/DatabaseViewer/DatabaseViewer";
@@ -22,6 +23,7 @@ function App() {
 
       <main className="relative flex h-screen min-w-0 flex-1 flex-col overflow-hidden px-4 pt-3 pb-3 [&_h1]:pr-10">
         <KeyboardShortcuts />
+        <NewYearGreeting />
         <Routes>
           <Route path="/raw-litho" element={<RawLitho />} />
           <Route path="/database-viewer" element={<DatabaseViewer />} />

@@ -15,6 +15,7 @@ src/
 │   ├── StatusIndicator.tsx    polls GET /api/status
 │   ├── KeyboardShortcuts.tsx  help button and the shortcuts popup
 │   ├── ConfirmDialog.tsx      the confirmation modal used by Raw Litho and Upload Data
+│   ├── NewYearGreeting/       New Year card from the Data team; dates and text in its config.yaml
 │   ├── Toast.tsx              the one toast used by every page
 │   ├── PageTitle.tsx          page heading
 │   ├── useAnchoredMenuStyle.ts  keeps a portalled dropdown under its input

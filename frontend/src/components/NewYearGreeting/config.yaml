@@ -1,0 +1,22 @@
+# New Year greeting shown once per user when the site opens.
+# Dates are month-day, both days included. A window may cross the year end
+# (for example start "12-25", end "01-15").
+# {year} is replaced with the year being welcomed.
+start: "11-12"
+end: "12-31"
+
+title:
+  mn: "Шинэ оны мэнд хүргэе!"
+  en: "Happy New Year {year}!"
+
+message:
+  mn: |-
+    Он цагийн тооллоор учран золгож буй шинэ жилдээ
+    Од хийморь орчлонгийн сайн сайхан бүхнээр дүүрэн байхыг билэгдэн
+    Ажлын амжилт амьдралд тань аз жаргал сайн сайхан бүхнийг хүсье
+  en: >-
+    As we welcome the new year, may it bring you good fortune and every good
+    thing. Wishing you success at work and happiness in life.
+
+signature: "Data team"
+button: "Баярлалаа!"
