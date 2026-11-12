@@ -18,6 +18,7 @@ import { CELL_INPUT } from "./rawLithoStyles";
 import { BODY_CELL, bodyRowClass } from "../../components/dataTableStyles";
 import { RAW_LITHO_LOOKUP_BY_FIELD } from "../../services/rawLithoLookupConfig";
 import { findConditionalRuleIssues, hasValue } from "./rawLithoValidation";
+import { DEPTH_FIELDS } from "../../types/rawLithoSchema";
 
 interface RawLithoRowProps {
   row: RawLithoRowRecord;
@@ -36,7 +37,6 @@ interface RawLithoRowProps {
 
 
 
-const DEPTH_FIELDS = new Set<RowField>(["lithoFrom", "lithoTo"]);
 
 
 

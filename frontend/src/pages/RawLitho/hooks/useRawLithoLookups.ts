@@ -25,7 +25,7 @@ function createInitialLookupStatus(): LookupStatuses {
   return Object.fromEntries(
     RAW_LITHO_LOOKUPS.map((lookup) => [
       lookup.fieldKey,
-      { isLoading: true, error: "", source: null },
+      { isLoading: true, error: "" },
     ]),
   );
 }
@@ -63,7 +63,6 @@ export function useRawLithoLookups() {
         setStatus(lookup.fieldKey, {
           isLoading: true,
           error: "",
-          source: "cache",
         });
         return true;
       } catch (error) {
@@ -76,7 +75,7 @@ export function useRawLithoLookups() {
     }
 
     async function loadLookup(lookup: ApiLookupDefinition) {
-      setStatus(lookup.fieldKey, { isLoading: true, error: "", source: null });
+      setStatus(lookup.fieldKey, { isLoading: true, error: "" });
       const hasCachedRecords = await loadFromCache(lookup);
 
       try {
@@ -87,7 +86,6 @@ export function useRawLithoLookups() {
         setStatus(lookup.fieldKey, {
           isLoading: false,
           error: "",
-          source: "backend",
         });
 
         saveLookupCache(lookup.cacheKey, records).catch((error) =>
@@ -102,7 +100,6 @@ export function useRawLithoLookups() {
           error: hasCachedRecords
             ? ""
             : `${lookup.label} unavailable`,
-          source: hasCachedRecords ? "cache" : null,
         });
       }
     }

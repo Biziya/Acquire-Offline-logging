@@ -1,4 +1,3 @@
-using BackendApi.Data;
 using BackendApi.Models.Drillholes;
 using BackendApi.Repositories.Drillholes;
 using Microsoft.AspNetCore.Mvc;
@@ -28,21 +27,8 @@ public sealed class DrillholesController : ControllerBase
     public async Task<ActionResult<IReadOnlyList<DrillholeResponse>>> GetAll(
         CancellationToken cancellationToken)
     {
-        try
-        {
-            return Ok(await _repository.GetAllAsync(cancellationToken));
-        }
-        catch (Exception exception) when (DatabaseAccessErrors.Find(exception) is not null)
-        {
-            return DatabaseAccessDenied.Result(this, _logger, exception, "read drillholes");
-        }
-        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
-        {
-            _logger.LogError(exception, "Failed to retrieve drillholes.");
-
-            return StatusCode(
-                StatusCodes.Status500InternalServerError,
-                new { error = "Unable to retrieve drillholes." });
-        }
+        return await DatabaseAccessDenied.ReadAsync(
+            this, _logger, "read drillholes", "Unable to retrieve drillholes.",
+            () => _repository.GetAllAsync(cancellationToken), cancellationToken);
     }
 }

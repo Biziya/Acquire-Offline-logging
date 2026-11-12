@@ -14,9 +14,9 @@ import Toast from "../../components/Toast";
 import RawLithoFilters from "../RawLitho/RawLithoFilters";
 import { SMALL_BUTTON, SECTION_TITLE, HELPER_TEXT } from "../../components/uiStyles";
 import PageTitle from "../../components/PageTitle";
+import { formatCount } from "../../utils/format";
 
 const { title } = databaseViewerConfig;
-const numberFormat = new Intl.NumberFormat("en-US");
 
 const EMPTY_MESSAGES = {
   idle: "Select a drillhole to view its records.",
@@ -67,7 +67,7 @@ function DatabaseViewer() {
   if (view.status === "loading") recordStatus = "Loading records…";
   else if (view.status === "error") recordStatus = "Records unavailable";
   else if (loaded)
-    recordStatus = `${numberFormat.format(loaded.totalIntervals)} intervals · ${numberFormat.format(loaded.totalRecords)} stored values`;
+    recordStatus = `${formatCount(loaded.totalIntervals)} intervals · ${formatCount(loaded.totalRecords)} stored values`;
 
   return (
     <section className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden">
@@ -98,7 +98,7 @@ function DatabaseViewer() {
         )}
         {loaded && loaded.hiddenValues > 0 && (
           <p className="m-0 text-[0.8125rem] text-rl-warning-text" role="note">
-            {numberFormat.format(loaded.hiddenValues)} stored values have no
+            {formatCount(loaded.hiddenValues)} stored values have no
             Raw Litho column and are not shown
           </p>
         )}
@@ -127,7 +127,6 @@ function DatabaseViewer() {
           key={toast.id}
           message={toast.message}
           type={toast.type}
-          isVisible
           onClose={() => hideToast(toast.id)}
         />
       )}

@@ -1,6 +1,6 @@
 import type { LookupData, RowField } from "../../types/domain";
 import { isRecord } from "../../types/validation";
-import { columnByKey, columns } from "../../types/rawLithoSchema";
+import { columnByKey, columns, DEPTH_FIELDS } from "../../types/rawLithoSchema";
 import {
   RAW_LITHO_ALL_LOOKUPS,
   RAW_LITHO_LOOKUPS,
@@ -57,17 +57,12 @@ export interface UploadValidation {
   hasBlockingErrors: boolean;
 }
 
-const DEPTH_FIELDS: readonly RowField[] = ["lithoFrom", "lithoTo"];
 const TEXT_FIELDS = columns
   .map(({ key }) => key)
-  .filter((key) => !DEPTH_FIELDS.includes(key));
+  .filter((key) => !DEPTH_FIELDS.has(key));
 
 function label(field: RowField) {
   return columnByKey[field].label;
-}
-
-function isBlank(value: unknown) {
-  return !hasValue(value);
 }
 
 /* Codes accepted per lookup field; null when the codes cannot be checked. */
@@ -103,12 +98,12 @@ function validateMetadata(document: UploadDocument): UploadIssue[] {
     ["project", "Project"],
     ["drillhole", "Drillhole"],
   ] as const) {
-    if (typeof document[key] !== "string" || isBlank(document[key])) {
+    if (typeof document[key] !== "string" || !hasValue(document[key])) {
       issues.push({ severity: "error", message: `${name} is required.` });
     }
   }
 
-  if (document.campaign === undefined || isBlank(document.campaign)) {
+  if (document.campaign === undefined || !hasValue(document.campaign)) {
     issues.push({ severity: "warning", message: "Campaign is missing." });
   } else if (typeof document.campaign !== "string") {
     issues.push({ severity: "error", message: "Campaign must be text." });
@@ -218,8 +213,8 @@ function validateRow(
     const value = row[field];
     // A depth holding empty text is already reported as an error above.
     const isEmptyDepthText =
-      DEPTH_FIELDS.includes(field) && typeof value === "string";
-    if (isBlank(value) && !isEmptyDepthText) {
+      DEPTH_FIELDS.has(field) && typeof value === "string";
+    if (!hasValue(value) && !isEmptyDepthText) {
       issues.push({ severity: "warning", field, message: `${label(field)} is required.` });
     }
   });

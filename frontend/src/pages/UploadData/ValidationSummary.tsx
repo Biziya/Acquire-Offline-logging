@@ -7,12 +7,12 @@ import {
   SECTION_HEADING_TEXT,
   STEP_NUMBER,
 } from "./uploadDataStyles";
+import { formatCount } from "../../utils/format";
 
 interface ValidationSummaryProps {
   validation: UploadValidation | null;
 }
 
-const numberFormat = new Intl.NumberFormat("en-US");
 
 const COUNTS = [
   ["total", "Total records", "text-rl-text"],
@@ -46,7 +46,7 @@ function ValidationSummary({ validation }: ValidationSummaryProps) {
           >
             <dt className={FIELD_LABEL}>{label}</dt>
             <dd className={`m-0 text-base font-bold ${color}`}>
-              {validation ? numberFormat.format(validation.counts[key]) : "—"}
+              {validation ? formatCount(validation.counts[key]) : "—"}
             </dd>
           </div>
         ))}

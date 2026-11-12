@@ -38,7 +38,7 @@ public sealed class UploadDataController : ControllerBase
 
     /// <summary>
     /// Validates an exported lithology JSON file and stores it through
-    /// dbo.InsertUpdateCoreDescr_WellCAD ('Raw core import_JSON').
+    /// dbo.insertAcQuireOfflineBek ('Raw core import_JSON').
     /// </summary>
     [HttpPost]
     [Consumes("multipart/form-data")]

@@ -24,7 +24,7 @@ import { isRecord } from "../../types/validation";
  * to change.
  */
 
-export const RECENT_DRILLHOLE_LIMIT = 3;
+const RECENT_DRILLHOLE_LIMIT = 3;
 /* Selections remembered, so a working drillhole keeps its place after a few
    selections of drillholes without data. */
 export const SELECTION_HISTORY_LIMIT = 20;

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createEmptyRow } from "../src/pages/RawLitho/constants";
+import { createSchemaRow } from "../src/types/rawLithoSchema";
 import {
   addDocumentRow,
   commitDepth,
@@ -24,7 +24,7 @@ const complete = () => ({
   ...createBlankDocument({ drillhole: "A" }),
   rows: [
     {
-      ...createEmptyRow("legacy-id"),
+      ...createSchemaRow("legacy-id"),
       lithoFrom: "10",
       lithoTo: "15",
       lithoCode: "L",
@@ -124,7 +124,7 @@ describe("document operations", () => {
     expect(result.reverted).toBe(true);
     expect(result.document.rows[0]?.lithoFrom).toBe("10");
     source.rows.push({
-      ...createEmptyRow("shallow"),
+      ...createSchemaRow("shallow"),
       lithoFrom: "2",
       lithoTo: "8",
     });
@@ -210,8 +210,8 @@ describe("document operations", () => {
 
   it("counts a draft as working data only when a row holds a value", () => {
     expect(hasWorkingData(createBlankDocument({ drillhole: "A" }))).toBe(false);
-    expect(hasWorkingData({ rows: [{ ...createEmptyRow(1), lithoFrom: "  " }] })).toBe(false);
-    expect(hasWorkingData({ rows: [{ ...createEmptyRow(1), lithoCode: "SS" }] })).toBe(true);
+    expect(hasWorkingData({ rows: [{ ...createSchemaRow(1), lithoFrom: "  " }] })).toBe(false);
+    expect(hasWorkingData({ rows: [{ ...createSchemaRow(1), lithoCode: "SS" }] })).toBe(true);
     expect(hasWorkingData(null)).toBe(false);
     expect(hasWorkingData({ rows: "broken" })).toBe(false);
   });

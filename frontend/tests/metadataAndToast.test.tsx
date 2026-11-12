@@ -12,7 +12,7 @@ import {
   normalizeRawLithoDocument,
   readRawLithoImport,
 } from "../src/pages/RawLitho/rawLithoHelpers";
-import { createEmptyRow } from "../src/pages/RawLitho/constants";
+import { createSchemaRow } from "../src/types/rawLithoSchema";
 import {
   readRawLithoDraft,
   writeRawLithoDraft,
@@ -75,7 +75,7 @@ describe("edited_by metadata", () => {
       ...createRawLithoDocument({
         drillhole: "EDIT-HOLE",
         created_by: CREATOR,
-        rows: [createEmptyRow(1)],
+        rows: [createSchemaRow(1)],
       }),
       edited_by: EDITOR,
     });
@@ -94,7 +94,7 @@ describe("edited_by metadata", () => {
 
   it("keeps the previous editor when no trusted identity is available", async () => {
     await writeRawLithoDraft("ANON-EDIT", {
-      ...createRawLithoDocument({ drillhole: "ANON-EDIT", rows: [createEmptyRow(1)] }),
+      ...createRawLithoDocument({ drillhole: "ANON-EDIT", rows: [createSchemaRow(1)] }),
       edited_by: EDITOR,
     });
     const { result } = await openDrillhole("ANON-EDIT", null);
@@ -120,7 +120,7 @@ describe("global toast configuration", () => {
   it("keeps an error toast until the user closes it", () => {
     vi.useFakeTimers();
     const onClose = vi.fn();
-    render(<Toast message="Upload failed" type="error" isVisible onClose={onClose} />);
+    render(<Toast message="Upload failed" type="error" onClose={onClose} />);
 
     act(() => vi.advanceTimersByTime(60_000));
     expect(onClose).not.toHaveBeenCalled();
@@ -134,7 +134,7 @@ describe("global toast configuration", () => {
   ] as const)("closes a %s toast after %i ms", (type, duration) => {
     vi.useFakeTimers();
     const onClose = vi.fn();
-    render(<Toast message="Message" type={type} isVisible onClose={onClose} />);
+    render(<Toast message="Message" type={type} onClose={onClose} />);
 
     act(() => vi.advanceTimersByTime(duration - 1));
     expect(onClose).not.toHaveBeenCalled();
@@ -146,11 +146,11 @@ describe("global toast configuration", () => {
     vi.useFakeTimers();
     const onClose = vi.fn();
     const view = render(
-      <Toast key={1} message="Row added" type="success" isVisible onClose={onClose} />,
+      <Toast key={1} message="Row added" type="success" onClose={onClose} />,
     );
     act(() => vi.advanceTimersByTime(2000));
     view.rerender(
-      <Toast key={2} message="Row added" type="success" isVisible onClose={onClose} />,
+      <Toast key={2} message="Row added" type="success" onClose={onClose} />,
     );
     act(() => vi.advanceTimersByTime(2000));
     expect(onClose).not.toHaveBeenCalled();

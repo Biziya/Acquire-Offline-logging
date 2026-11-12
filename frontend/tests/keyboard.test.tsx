@@ -5,13 +5,13 @@ import { describe, expect, it, vi } from "vitest";
 import type { RawLithoDocument } from "../src/types/domain";
 import LookupAutocomplete from "../src/pages/RawLitho/LookupAutocomplete";
 import RawLithoTable from "../src/pages/RawLitho/RawLithoTable";
-import ConfirmDialog from "../src/pages/RawLitho/ConfirmDialog";
+import ConfirmDialog from "../src/components/ConfirmDialog";
 import { useRawLithoWorkspace } from "../src/pages/RawLitho/hooks/useRawLithoWorkspace";
 import { useRemoveRowConfirmation } from "../src/pages/RawLitho/hooks/useRemoveRowConfirmation";
 import {
   TOAST_NOTIFICATIONS,
-  createEmptyRow,
 } from "../src/pages/RawLitho/constants";
+import { createSchemaRow } from "../src/types/rawLithoSchema";
 import {
   createRawLithoDocument,
   normalizeRawLithoDocument,
@@ -258,7 +258,7 @@ function TableHarness() {
 }
 function validRow(id: string, from: number, to: number) {
   return {
-    ...createEmptyRow(id),
+    ...createSchemaRow(id),
     lithoFrom: String(from),
     lithoTo: String(to),
     lithoCode: "Unknown",

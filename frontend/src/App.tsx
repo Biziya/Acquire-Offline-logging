@@ -7,8 +7,7 @@ import DatabaseViewer from "./pages/DatabaseViewer/DatabaseViewer";
 import AccessDenied from "./pages/AccessDenied/AccessDenied";
 import { useAccessCheck } from "./hooks/useAccessCheck";
 
-// Home (pages/Home.tsx) is hidden for now: the root, and any unknown
-// address, opens Raw Litho instead of a blank page.
+// The root and any unknown address open Raw Litho.
 // Only members of the allowed AD group see the app (services/websiteAccess.ts).
 function App() {
   const { access, retry } = useAccessCheck();

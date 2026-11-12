@@ -10,7 +10,7 @@ import { deferred } from "./deferred";
 
 vi.mock("../src/services/IndexDB/rawLithoDraftDb", () => ({
   buildRawLithoDraftKey: (key: unknown) => typeof key === "string" && key.trim() ? key.trim() : null,
-  readRawLithoDraft: vi.fn(), writeRawLithoDraft: vi.fn(), hasRawLithoDraft: vi.fn(),
+  readRawLithoDraft: vi.fn(), writeRawLithoDraft: vi.fn(),
 }));
 
 const stored = new Map<string, RawLithoDocument>();
@@ -26,7 +26,7 @@ function Harness({ selectionKey = "" }: { selectionKey?: string }) {
     <button onClick={importer.confirmImport}>Confirm</button>
     <button onClick={importer.cancelImport}>Cancel</button>
     <output data-testid="status">{importer.status}</output>
-    <output data-testid="target">{importer.pendingImport?.drillhole ?? ""}</output>
+    <output data-testid="target">{importer.pendingImport?.document.drillhole ?? ""}</output>
   </>;
 }
 
@@ -43,7 +43,6 @@ async function prepare(draft = imported) {
 
 beforeEach(() => {
   stored.clear();
-  vi.mocked(db.hasRawLithoDraft).mockImplementation(async key => key ? stored.has(key) : false);
   vi.mocked(db.readRawLithoDraft).mockImplementation(async key => key ? stored.get(key) : undefined);
   vi.mocked(db.writeRawLithoDraft).mockImplementation(async (key, draft) => { if (key) stored.set(key, draft); });
 });

@@ -1,5 +1,5 @@
 import type { DatasetInfo, RowField } from "../../types/domain";
-import { isAbortError, errorMessage } from "../../types/validation";
+import { errorMessage, isAbortError, isRecord } from "../../types/validation";
 import {
   useDeferredValue,
   useEffect,
@@ -38,7 +38,7 @@ import { useCurrentUser } from "../../hooks/useCurrentUser";
 import { useToast } from "../../hooks/useToast";
 import Toast from "../../components/Toast";
 import PageTitle from "../../components/PageTitle";
-import ConfirmDialog from "../RawLitho/ConfirmDialog";
+import ConfirmDialog from "../../components/ConfirmDialog";
 import {
   HELPER_TEXT,
   PRIMARY_BUTTON,
@@ -52,6 +52,7 @@ import {
   SECTION_HEADING_TEXT,
   STEP_NUMBER,
 } from "./uploadDataStyles";
+import { formatCount } from "../../utils/format";
 
 type StatusFilter = "all" | RowStatus;
 
@@ -60,14 +61,8 @@ interface FileInfo {
   size: number;
 }
 
-const numberFormat = new Intl.NumberFormat("en-US");
 const CONTROL = `${FIELD_CONTROL} px-2.5`;
 
-function isJsonDocument(dataset: unknown): dataset is Record<string, unknown> {
-  return (
-    dataset !== null && typeof dataset === "object" && !Array.isArray(dataset)
-  );
-}
 
 function displayValue(value: unknown, empty = "—") {
   return typeof value === "string" && value.trim() ? value.trim() : empty;
@@ -122,7 +117,7 @@ function describeValidation(validation: UploadValidation | null) {
   if (!validation) return "—";
   if (validation.hasBlockingErrors) {
     return validation.counts.error > 0
-      ? `${numberFormat.format(validation.counts.error)} records have errors`
+      ? `${formatCount(validation.counts.error)} records have errors`
       : "Has errors (see Validation summary)";
   }
   const hasWarnings =
@@ -287,7 +282,7 @@ function UploadData() {
     createdBy: displayValue(workingDocument?.created_by),
     editedBy: displayValue(workingDocument?.edited_by),
     importedBy: workingDocument ? (currentUser ?? "—") : "—",
-    totalRecords: workingDocument ? numberFormat.format(rows.length) : "—",
+    totalRecords: workingDocument ? formatCount(rows.length) : "—",
     fileSize: selectedFile
       ? `${formatFileSize(selectedFile.size)}${isEdited ? " (original file)" : ""}`
       : "—",
@@ -333,7 +328,7 @@ function UploadData() {
         return;
       }
 
-      if (!isJsonDocument(dataset)) {
+      if (!isRecord(dataset)) {
         throw new Error("The JSON root must be an object");
       }
 
@@ -384,7 +379,7 @@ function UploadData() {
         type: "warning",
         message:
           current.counts.error > 0
-            ? `Fix blocking errors (${numberFormat.format(current.counts.error)} invalid records)`
+            ? `Fix blocking errors (${formatCount(current.counts.error)} invalid records)`
             : "Fix blocking errors",
       });
       return;
@@ -555,8 +550,8 @@ function UploadData() {
                     className={`${HELPER_TEXT} ml-auto`}
                     aria-live="polite"
                   >
-                    Showing {numberFormat.format(visibleRows.length)} of{" "}
-                    {numberFormat.format(rows.length)} records
+                    Showing {formatCount(visibleRows.length)} of{" "}
+                    {formatCount(rows.length)} records
                     {isEdited && (
                       <span className="ml-2 rounded-ui bg-rl-navy-soft px-1.5 py-0.5 text-[0.75rem] font-semibold text-rl-navy">
                         Edited
@@ -592,7 +587,6 @@ function UploadData() {
             key={toast.id}
             message={toast.message}
             type={toast.type}
-            isVisible
             onClose={() => hideToast(toast.id)}
           />
         )}
@@ -608,13 +602,12 @@ function UploadData() {
             title="Upload to database?"
             message="These records will be added to the database."
             facts={[
-              ["Records", numberFormat.format(rows.length)],
+              ["Records", formatCount(rows.length)],
               ["Project", displayValue(workingDocument.project)],
               ["Drillhole", displayValue(workingDocument.drillhole)],
               ["Version", isEdited ? "Edited" : "Original file"],
             ]}
             confirmLabel="Upload"
-            cancelLabel="Cancel"
             busyLabel="Uploading…"
             isBusy={isImporting}
             tone="primary"

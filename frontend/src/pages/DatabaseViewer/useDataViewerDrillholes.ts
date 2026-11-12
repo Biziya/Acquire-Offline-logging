@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { Drillhole, Notify } from "../../types/domain";
 import { isAbortError } from "../../types/validation";
 import { getDataViewerDrillholes } from "../../services/Api/dataViewerApi";
@@ -22,9 +22,6 @@ export function useDataViewerDrillholes(showToast: Notify) {
   const [isLoading, setIsLoading] = useState(cachedDrillholes === null);
   const [error, setError] = useState("");
 
-  const showToastRef = useRef(showToast);
-  showToastRef.current = showToast;
-
   useEffect(() => {
     const controller = new AbortController();
 
@@ -41,14 +38,14 @@ export function useDataViewerDrillholes(showToast: Notify) {
         // A list already shown stays usable; only a first load fails visibly.
         if (cachedDrillholes) return;
         setError(LOAD_ERROR);
-        showToastRef.current({ type: "error", message: "Unable to load drillholes" });
+        showToast({ type: "error", message: "Unable to load drillholes" });
       })
       .finally(() => {
         if (!controller.signal.aborted) setIsLoading(false);
       });
 
     return () => controller.abort();
-  }, []);
+  }, [showToast]);
 
   return { drillholes, isLoading, error };
 }

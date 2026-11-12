@@ -65,7 +65,6 @@ export type LookupData = Partial<Record<RowField, readonly LookupRecord[]>>;
 export interface LookupStatus {
   isLoading: boolean;
   error: string;
-  source: "cache" | "backend" | null;
 }
 
 export type LookupStatuses = Partial<Record<RowField, LookupStatus>>;
@@ -102,15 +101,12 @@ export type RowChange = (rowId: RowId, field: RowField, value: string) => void;
 export interface ImportPlan {
   document: RawLithoDocument;
   draftKey: string;
-  drillhole: string;
-  rowCount: number;
   willReplaceExistingDraft: boolean;
 }
 
 export interface ImportResult {
   document: RawLithoDocument;
   draftKey: string;
-  nextRowId?: number;
 }
 
 export interface DraftSession {

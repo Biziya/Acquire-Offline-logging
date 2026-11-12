@@ -1,11 +1,11 @@
 import type { ImportWriteOptions } from "../../services/IndexDB/rawLithoSaveQueue";
 import { rawLithoSaveQueue } from "../../services/IndexDB/rawLithoSaveQueue";
 import type { ImportPlan, ImportResult, LookupData } from "../../types/domain";
-import { getNextRowId, readRawLithoImport } from "./rawLithoHelpers";
+import { readRawLithoImport } from "./rawLithoHelpers";
 import { hasInvalidLookupValues } from "./rawLithoValidation";
 import {
   buildRawLithoDraftKey,
-  hasRawLithoDraft,
+  readRawLithoDraft,
 } from "../../services/IndexDB/rawLithoDraftDb";
 
 /*
@@ -18,11 +18,8 @@ export async function prepareRawLithoImport(
   lookupData: LookupData,
 ): Promise<ImportPlan> {
   const importedDocument = await readRawLithoImport(file);
-  const draftKey = buildRawLithoDraftKey(importedDocument.drillhole);
-
-  if (!draftKey) {
-    throw new Error("The imported file does not contain a Drillhole value.");
-  }
+  // readRawLithoImport already rejects a file without a drillhole.
+  const draftKey = buildRawLithoDraftKey(importedDocument.drillhole) ?? "";
 
   const containsUnknownCodes = hasInvalidLookupValues(
     importedDocument.rows,
@@ -39,19 +36,8 @@ export async function prepareRawLithoImport(
   return {
     document: importedDocument,
     draftKey,
-    drillhole: importedDocument.drillhole,
-    rowCount: importedDocument.rows.length,
-    willReplaceExistingDraft: await hasExistingDraftSafely(draftKey),
+    willReplaceExistingDraft: Boolean(await readRawLithoDraft(draftKey)),
   };
-}
-
-async function hasExistingDraftSafely(draftKey: string) {
-  try {
-    return await hasRawLithoDraft(draftKey);
-  } catch (error) {
-    console.error("Unable to check for an existing Raw Litho draft.", error);
-    throw error;
-  }
 }
 
 /* Writes the already-validated document. Only called after confirmation. */
@@ -70,24 +56,19 @@ export async function applyRawLithoImport(
   return {
     document: importPlan.document,
     draftKey: importPlan.draftKey,
-    nextRowId: getNextRowId(importPlan.document.rows),
   };
 }
 
-export function buildImportConfirmationMessage(importPlan: ImportPlan | null) {
-  if (!importPlan) return "";
-
+export function buildImportConfirmationMessage(importPlan: ImportPlan) {
   return importPlan.willReplaceExistingDraft
     ? "It replaces the data saved on this PC for this drillhole. You can't undo this."
     : "The rows will be saved on this PC.";
 }
 
 // Shown in the confirmation's facts box, under the message.
-export function buildImportConfirmationFacts(importPlan: ImportPlan | null) {
-  if (!importPlan) return [];
-
+export function buildImportConfirmationFacts(importPlan: ImportPlan) {
   return [
-    ["Drillhole", importPlan.drillhole],
-    ["Rows", String(importPlan.rowCount)],
+    ["Drillhole", importPlan.document.drillhole],
+    ["Rows", String(importPlan.document.rows.length)],
   ] as const;
 }

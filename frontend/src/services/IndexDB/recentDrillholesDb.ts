@@ -7,7 +7,7 @@ import { readValue, SESSION_STORE, writeValue } from "./rawLithoDatabase";
  * Stored next to the active session in the existing `session` store, so the
  * ordering survives a reload without a schema change. The ordering rules (how
  * many are kept, where they appear) live in
- * `pages/RawLitho/drillholeOrdering.js`; this module only reads and writes.
+ * `pages/RawLitho/drillholeOrdering.ts`; this module only reads and writes.
  */
 const RECENT_DRILLHOLES_KEY = "recent-drillholes";
 

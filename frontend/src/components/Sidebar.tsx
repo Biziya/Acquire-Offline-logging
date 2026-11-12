@@ -129,7 +129,6 @@ function Sidebar() {
         }`}
         aria-label="Main navigation"
       >
-        {/* Home is hidden for now; "/" opens Raw Litho (App.tsx). */}
         <NavLink
           to="/raw-litho"
           className={linkClassName}

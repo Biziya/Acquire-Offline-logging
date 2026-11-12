@@ -1,7 +1,7 @@
 namespace BackendApi.Models.UploadData;
 
 /// <summary>
-/// One validated upload, passed to <c>dbo.InsertUpdateCoreDescr_WellCAD</c>.
+/// One validated upload, passed to <c>dbo.insertAcQuireOfflineBek</c>.
 /// </summary>
 public sealed class UploadDataRequest
 {

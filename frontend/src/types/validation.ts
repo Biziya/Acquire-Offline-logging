@@ -4,10 +4,6 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-export function isUnknownArray(value: unknown): value is unknown[] {
-  return Array.isArray(value);
-}
-
 export function isDrillhole(value: unknown): value is Drillhole {
   return (
     isRecord(value) &&
@@ -23,7 +19,7 @@ export function isLookupRecords(
   codeProperty?: string,
 ): value is LookupRecord[] {
   return (
-    isUnknownArray(value) &&
+    Array.isArray(value) &&
     value.every(
       (record) =>
         isRecord(record) &&

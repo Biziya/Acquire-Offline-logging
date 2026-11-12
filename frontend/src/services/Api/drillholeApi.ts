@@ -1,16 +1,5 @@
-import type { Drillhole } from "../../types/domain";
-import { isRecord } from "../../types/validation";
+import { isDrillhole } from "../../types/validation";
 import { buildApiUrl } from "./apiConfig";
-
-function isValidDrillhole(record: unknown): record is Drillhole {
-  return (
-    isRecord(record) &&
-    typeof record.holeId === "string" &&
-    record.holeId.trim() !== "" &&
-    typeof record.projectCode === "string" &&
-    typeof record.campaign === "string"
-  );
-}
 
 export async function getDrillholes(signal?: AbortSignal) {
   // Windows credentials: the backend may read as the signed-in user.
@@ -25,7 +14,7 @@ export async function getDrillholes(signal?: AbortSignal) {
 
   const records: unknown = await response.json();
 
-  if (!Array.isArray(records) || !records.every(isValidDrillhole)) {
+  if (!Array.isArray(records) || !records.every(isDrillhole)) {
     throw new Error("The drillhole API returned an invalid response.");
   }
 

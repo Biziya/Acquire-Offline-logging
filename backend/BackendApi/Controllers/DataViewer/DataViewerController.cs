@@ -36,22 +36,9 @@ public sealed class DataViewerController : ControllerBase
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<IReadOnlyList<string>>> GetDrillholes(CancellationToken cancellationToken)
     {
-        try
-        {
-            return Ok(await _records.GetHoleIdsAsync(cancellationToken));
-        }
-        catch (Exception exception) when (DatabaseAccessErrors.Find(exception) is not null)
-        {
-            return DatabaseAccessDenied.Result(this, _logger, exception, "read drillholes");
-        }
-        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
-        {
-            _logger.LogError(exception, "Failed to retrieve the Data Viewer drillholes.");
-
-            return StatusCode(
-                StatusCodes.Status500InternalServerError,
-                new { error = "Unable to retrieve drillholes." });
-        }
+        return await DatabaseAccessDenied.ReadAsync(
+            this, _logger, "read drillholes", "Unable to retrieve drillholes.",
+            () => _records.GetHoleIdsAsync(cancellationToken), cancellationToken);
     }
 
     /// <summary>

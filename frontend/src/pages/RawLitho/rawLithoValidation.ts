@@ -186,12 +186,6 @@ export function findFirstConditionalRuleIssue(rows: readonly RawLithoRow[]) {
   return null;
 }
 
-export function validateRequiredFields(row: RawLithoRow | undefined) {
-  const missingFields = getMissingRequiredFields(row);
-
-  return { isValid: missingFields.length === 0, missingFields };
-}
-
 /*
  * Comparable key for a Litho From / Litho To pair. Numbers are compared by
  * value, so "120" and "120.0" count as the same interval. Returns null while
@@ -275,8 +269,4 @@ export function findRowIssue(
   }
 
   return null;
-}
-
-export function isRowValid(row: RawLithoRow | undefined, rows: RawLithoRow[]) {
-  return findRowIssue(row, rows) === null;
 }

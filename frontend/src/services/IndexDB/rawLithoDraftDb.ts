@@ -57,18 +57,6 @@ export function writeRawLithoDraft(
   return writeValue(DRAFT_STORE, draftKey, lithoDocument);
 }
 
-export function deleteRawLithoDraft(draftKey: string | null) {
-  if (!draftKey) return Promise.resolve();
-
-  return deleteValue(DRAFT_STORE, draftKey);
-}
-
-export async function hasRawLithoDraft(draftKey: string | null) {
-  if (!draftKey) return false;
-
-  return Boolean(await readRawLithoDraft(draftKey));
-}
-
 function normalizePage(page: unknown) {
   const parsedPage = Number(page);
 

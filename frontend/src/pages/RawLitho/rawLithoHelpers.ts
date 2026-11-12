@@ -3,11 +3,11 @@ import type {
   RawLithoRow,
   RowField,
   RowId,
-  Drillhole,
   DocumentFallback,
   Clock,
 } from "../../types/domain";
-import { COMMENT_FIELD_KEYS, columns, createEmptyRow } from "./constants";
+import { COMMENT_FIELD_KEYS } from "./constants";
+import { columns, createSchemaRow } from "../../types/rawLithoSchema";
 import { sortRawLithoDocumentRows } from "./rawLithoSorting";
 
 let fallbackRowId = 0;
@@ -133,7 +133,7 @@ export function normalizeRawLithoRows(rows: unknown): RawLithoRow[] {
 
     usedIds.add(String(rowId));
 
-    const normalized = createEmptyRow(rowId);
+    const normalized = createSchemaRow(rowId);
     for (const fieldKey of ROW_FIELD_KEYS)
       normalized[fieldKey] = normalizeFieldValue(fieldKey, row[fieldKey]);
     // An already-normal row is returned as is: keeping unchanged rows'
@@ -145,7 +145,7 @@ export function normalizeRawLithoRows(rows: unknown): RawLithoRow[] {
   });
 
   if (normalizedRows.length === 0) {
-    normalizedRows.push(createEmptyRow(createStableRowId(usedIds)));
+    normalizedRows.push(createSchemaRow(createStableRowId(usedIds)));
   }
 
   return normalizedRows;
@@ -291,19 +291,6 @@ export function isStandardRawLithoDocument(
     return ROW_FIELD_KEYS.every(
       (fieldKey) => hasOwn(row, fieldKey) && typeof row[fieldKey] === "string",
     );
-  });
-}
-
-export function buildRawLithoSnapshot(
-  selectedDrillhole: Drillhole | null,
-  rows: RawLithoRow[],
-  previousDocument: Partial<RawLithoDocument> = {},
-) {
-  return touchRawLithoDocument(previousDocument, {
-    project: selectedDrillhole?.projectCode ?? previousDocument.project ?? "",
-    campaign: selectedDrillhole?.campaign ?? previousDocument.campaign ?? "",
-    drillhole: selectedDrillhole?.holeId ?? previousDocument.drillhole ?? "",
-    rows,
   });
 }
 

@@ -159,6 +159,8 @@ export const columnByKey = {
 
 export const columns: readonly ColumnDefinition[] = Object.values(columnByKey);
 
+export const DEPTH_FIELDS: ReadonlySet<RowField> = new Set<RowField>(["lithoFrom", "lithoTo"]);
+
 function hasCompleteRowFields(value: unknown): value is RawLithoRow {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     return false;

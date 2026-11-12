@@ -9,7 +9,7 @@ import {
   touchRawLithoDocument,
 } from "../src/pages/RawLitho/rawLithoHelpers";
 import { createBlankDocument } from "../src/pages/RawLitho/rawLithoDocumentOperations";
-import { createEmptyRow } from "../src/pages/RawLitho/constants";
+import { createSchemaRow } from "../src/types/rawLithoSchema";
 import {
   readRawLithoDraft,
   writeRawLithoDraft,
@@ -93,7 +93,7 @@ describe("Raw Litho workspace creator", () => {
   it("keeps the original creator, and gives a legacy draft none, when someone else opens it", async () => {
     await writeRawLithoDraft(
       "OLD-HOLE",
-      createRawLithoDocument({ drillhole: "OLD-HOLE", created_by: CREATOR, rows: [createEmptyRow(1)] }),
+      createRawLithoDocument({ drillhole: "OLD-HOLE", created_by: CREATOR, rows: [createSchemaRow(1)] }),
     );
     const owned = await openDrillhole("OLD-HOLE", CURRENT);
     expect(owned.result.current.rawLithoDocument.created_by).toBe(CREATOR);
@@ -101,7 +101,7 @@ describe("Raw Litho workspace creator", () => {
 
     await writeRawLithoDraft(
       "LEGACY-HOLE",
-      createRawLithoDocument({ drillhole: "LEGACY-HOLE", rows: [createEmptyRow(1)] }),
+      createRawLithoDocument({ drillhole: "LEGACY-HOLE", rows: [createSchemaRow(1)] }),
     );
     const legacy = await openDrillhole("LEGACY-HOLE", CURRENT);
     expect(legacy.result.current.rawLithoDocument).not.toHaveProperty("created_by");
@@ -135,7 +135,7 @@ describe("Raw Litho workspace creator", () => {
     // A stored legacy draft stays without a creator after the identity arrives.
     await writeRawLithoDraft(
       "LEGACY-LATE",
-      createRawLithoDocument({ drillhole: "LEGACY-LATE", rows: [createEmptyRow(1)] }),
+      createRawLithoDocument({ drillhole: "LEGACY-LATE", rows: [createSchemaRow(1)] }),
     );
     const legacy = open("LEGACY-LATE");
     act(() => legacy.result.current.selectDrillhole("LEGACY-LATE"));

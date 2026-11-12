@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import RawLithoTable from "../src/pages/RawLitho/RawLithoTable";
 import { useRawLithoWorkspace } from "../src/pages/RawLitho/hooks/useRawLithoWorkspace";
-import { createEmptyRow } from "../src/pages/RawLitho/constants";
+import { createSchemaRow } from "../src/types/rawLithoSchema";
 import { createRawLithoDocument } from "../src/pages/RawLitho/rawLithoHelpers";
 import { writeRawLithoDraft } from "../src/services/IndexDB/rawLithoDraftDb";
 import type * as Validation from "../src/pages/RawLitho/rawLithoValidation";
@@ -61,7 +61,7 @@ function Harness() {
 describe("Raw Litho editing render cost", () => {
   it("re-renders only the edited row when one cell changes on a full page", async () => {
     const rows = Array.from({ length: 50 }, (_, index) => ({
-      ...createEmptyRow(`r${index}`),
+      ...createSchemaRow(`r${index}`),
       lithoFrom: String(index),
       lithoTo: String(index + 1),
     }));

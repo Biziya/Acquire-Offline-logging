@@ -34,14 +34,12 @@ public static class ConfigurationExtensions
     }
 
     /// <summary>
-    /// Reads a named connection string and fails fast when it is missing.
+    /// Reads DefaultConnection and fails fast when it is missing.
     /// </summary>
-    public static string GetRequiredConnectionString(
-        this IConfiguration configuration,
-        string name = DefaultConnectionName) =>
-        configuration.GetConnectionString(name)
+    public static string GetRequiredConnectionString(this IConfiguration configuration) =>
+        configuration.GetConnectionString(DefaultConnectionName)
             ?? throw new InvalidOperationException(
-                $"Connection string '{name}' is not configured.");
+                $"Connection string '{DefaultConnectionName}' is not configured.");
 
     /// <summary>
     /// DefaultConnection pointed at the database holding MyApps.CoreDescrData,

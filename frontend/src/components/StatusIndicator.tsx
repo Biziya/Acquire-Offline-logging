@@ -12,7 +12,7 @@ const STATUS = {
 } as const;
 
 function StatusIndicator() {
-  const [connectionStatus, setConnectionStatus] = useState("checking");
+  const [connectionStatus, setConnectionStatus] = useState<keyof typeof STATUS>("checking");
 
   useEffect(() => {
     let stopped = false;
@@ -54,7 +54,7 @@ function StatusIndicator() {
     };
   }, []);
 
-  const status = STATUS[connectionStatus as keyof typeof STATUS] ?? STATUS.checking;
+  const status = STATUS[connectionStatus];
 
   return (
     <div

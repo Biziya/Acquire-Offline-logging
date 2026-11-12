@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import type { ImportResult } from "../../types/domain";
-import ConfirmDialog from "./ConfirmDialog";
+import ConfirmDialog from "../../components/ConfirmDialog";
 import PageTitle from "../../components/PageTitle";
 import RawLithoFilters from "./RawLithoFilters";
 import RawLithoTable from "./RawLithoTable";
@@ -48,7 +48,6 @@ function RawLitho() {
     totalPages,
     isPageEnabled,
     selectDrillhole,
-    applyImportedDocument,
   } = workspace;
 
   /*
@@ -65,21 +64,12 @@ function RawLitho() {
     [rememberDrillholeSelection, selectDrillhole],
   );
 
-  // An imported drillhole is opened like a selected one, so it counts as
-  // recently worked on too.
-  const handleImported = useCallback(
-    (result: ImportResult) => {
-      applyImportedDocument(result);
-      rememberDrillholeSelection(result.document.drillhole);
-    },
-    [applyImportedDocument, rememberDrillholeSelection],
-  );
-
   const importer = useRawLithoImport({
     lookupData,
     selectionKey: selectedHoleId,
     showToast,
-    onImported: handleImported,
+    // An imported drillhole opens like a selected one.
+    onImported: (result: ImportResult) => handleDrillholeChange(result.document.drillhole),
   });
 
   // Recent Working Drillholes first, then All Drillholes (drillholeOrdering.ts).
@@ -181,7 +171,6 @@ function RawLitho() {
           key={toast.id}
           message={toast.message}
           type={toast.type}
-          isVisible
           onClose={() => hideToast(toast.id)}
         />
       )}
@@ -192,7 +181,6 @@ function RawLitho() {
           message={buildImportConfirmationMessage(importer.pendingImport)}
           facts={buildImportConfirmationFacts(importer.pendingImport)}
           confirmLabel="Import"
-          cancelLabel="Cancel"
           busyLabel="Importing…"
           isBusy={importer.isImporting}
           initialFocus="confirm"
@@ -206,7 +194,6 @@ function RawLitho() {
           title="Remove last row?"
           message="This row will be deleted."
           confirmLabel="Remove"
-          cancelLabel="Cancel"
           busyLabel="Removing…"
           isBusy={removal.isRemoving}
           onConfirm={removal.confirmRemoveLastRow}

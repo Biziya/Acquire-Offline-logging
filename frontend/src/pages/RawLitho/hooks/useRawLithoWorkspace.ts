@@ -3,7 +3,6 @@ import type {
   AddRowResult,
   Drillhole,
   DraftSession,
-  ImportResult,
   Notify,
   RawLithoDocument,
   RowField,
@@ -17,7 +16,6 @@ import {
   createBlankDocument,
   editRow,
   removeDocumentLastRow,
-  sortDocument,
 } from "../rawLithoDocumentOperations";
 import { getPageForRowIndex } from "../rawLithoSorting";
 import type { CellEdit } from "../rawLithoClipboard";
@@ -79,7 +77,6 @@ export function useRawLithoWorkspace({
   const {
     draftKey,
     isPageEnabled,
-    isRestoringSession,
     stageDocument,
     canEdit,
     prepareSelection,
@@ -139,7 +136,6 @@ export function useRawLithoWorkspace({
   );
   const updateRow = (id: RowId, field: RowField, value: string) =>
     commitDocument(editRow(documentRef.current, id, field, value));
-  const sortRows = () => commitDocument(sortDocument(documentRef.current));
   const commitDepthEdit = (id: RowId, field: RowField, previous: string) => {
     if (!canEdit(draftKey)) return;
     const result = commitDepth(documentRef.current, id, field, previous);
@@ -185,12 +181,6 @@ export function useRawLithoWorkspace({
     return flushPendingSaves();
   };
 
-  const applyImportedDocument = useCallback(
-    (result: ImportResult) => {
-      selectDrillhole(result.document.drillhole);
-    },
-    [selectDrillhole],
-  );
   const totalPages = totalPagesFor(rawLithoDocument);
   const changeTablePage = useCallback(
     (page: number) => setCurrentPage(Math.min(Math.max(page, 1), totalPages)),
@@ -219,22 +209,17 @@ export function useRawLithoWorkspace({
     rows: rawLithoDocument.rows,
     currentPage,
     totalPages,
-    draftKey,
     isPageEnabled,
-    isRestoringSession,
     selectDrillhole,
     updateRow: stableUpdateRow,
     commitDepthEdit: stableCommitDepthEdit,
-    sortRows,
     pasteCells,
     tryAddRow,
     removeLastRow,
     changeTablePage,
-    applyImportedDocument,
     setRawLithoDocument: commitDocument,
     flushPendingSaves,
     retryDraftLoad: persistence.retryLoad,
     loadError: persistence.loadError,
-    saveError: persistence.saveError,
   };
 }

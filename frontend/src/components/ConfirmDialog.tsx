@@ -3,12 +3,11 @@ import {
   DANGER_FILLED_BUTTON,
   PRIMARY_BUTTON,
   SECONDARY_BUTTON,
-} from "../../components/uiStyles";
+} from "./uiStyles";
 
 interface ConfirmDialogProps {
   title: string;
   message: string;
-  details?: string;
   // Label / value pairs shown in a small box under the message
   // (records, drillhole, …).
   facts?: ReadonlyArray<readonly [string, string]>;
@@ -31,8 +30,7 @@ const CONFIRM_TONE = {
 };
 
 /*
- * Shared confirmation modal: a body (title, message, optional facts and
- * details) above a footer bar with the buttons. Used by the JSON import, Remove
+ * Shared confirmation modal: a body (title, message, optional facts) above a footer bar with the buttons. Used by the JSON import, Remove
  * last row, the Upload Data database upload and Upload Data's Cancel.
  *
  * `initialFocus` defaults to the cancel button: for a destructive dialog the
@@ -41,7 +39,6 @@ const CONFIRM_TONE = {
 function ConfirmDialog({
   title,
   message,
-  details,
   facts,
   confirmLabel = "Confirm",
   cancelLabel = "Cancel",
@@ -128,12 +125,6 @@ function ConfirmDialog({
                 </div>
               ))}
             </dl>
-          )}
-
-          {details && (
-            <p className="mt-2 mb-0 text-[0.8125rem] leading-[1.45] text-rl-text-muted">
-              {details}
-            </p>
           )}
         </div>
 

@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { RawLithoRow } from "../src/types/domain";
 import RawLithoTable from "../src/pages/RawLitho/RawLithoTable";
 import { useRawLithoWorkspace } from "../src/pages/RawLitho/hooks/useRawLithoWorkspace";
-import { createEmptyRow } from "../src/pages/RawLitho/constants";
+import { createSchemaRow } from "../src/types/rawLithoSchema";
 import { createRawLithoDocument } from "../src/pages/RawLitho/rawLithoHelpers";
 import {
   CONDITIONAL_RULE_MESSAGES as MESSAGES,
@@ -69,8 +69,8 @@ describe("conditional Raw Litho rules", () => {
 
   it("finds the first broken rule in table order for the Save warning", () => {
     const rows = [
-      { ...createEmptyRow("a"), lithoCode: "SS" },
-      { ...createEmptyRow("b"), lithoCode: "26C" },
+      { ...createSchemaRow("a"), lithoCode: "SS" },
+      { ...createSchemaRow("b"), lithoCode: "26C" },
     ];
     expect(findFirstConditionalRuleIssue(rows)).toEqual({
       rowIndex: 1,
@@ -82,7 +82,7 @@ describe("conditional Raw Litho rules", () => {
 
   it("blocks the Upload Data upload with the same rules", () => {
     const row = (overrides: Partial<RawLithoRow>) => ({
-      ...createEmptyRow("1"),
+      ...createSchemaRow("1"),
       id: 1,
       lithoFrom: "0",
       lithoTo: "5",
@@ -151,7 +151,7 @@ function Harness() {
 
 function storedRow(id: string, from: number, to: number, overrides: Partial<RawLithoRow> = {}) {
   return {
-    ...createEmptyRow(id),
+    ...createSchemaRow(id),
     lithoFrom: String(from),
     lithoTo: String(to),
     lithoCode: "SS",

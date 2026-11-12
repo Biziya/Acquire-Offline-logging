@@ -8,7 +8,8 @@ import type {
   RowField,
   RowId,
 } from "../../types/domain";
-import { createEmptyRow, createRowFromPrevious } from "./constants";
+import { createRowFromPrevious } from "./constants";
+import { createSchemaRow } from "../../types/rawLithoSchema";
 import {
   createRawLithoDocument,
   getNextRowId,
@@ -27,7 +28,7 @@ import type { CellEdit } from "./rawLithoClipboard";
 export function createBlankDocument(
   fallback: DocumentFallback = {},
 ): RawLithoDocument {
-  return createRawLithoDocument({ ...fallback, rows: [createEmptyRow(1)] });
+  return createRawLithoDocument({ ...fallback, rows: [createSchemaRow(1)] });
 }
 
 export function editRow(

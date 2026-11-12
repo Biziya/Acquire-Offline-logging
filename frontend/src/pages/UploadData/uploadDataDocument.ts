@@ -1,5 +1,6 @@
 import type { RowField } from "../../types/domain";
 import { isRecord } from "../../types/validation";
+import { DEPTH_FIELDS } from "../../types/rawLithoSchema";
 
 /*
  * The working copy of an imported JSON document.
@@ -18,7 +19,6 @@ export interface CellEdit {
   text: string;
 }
 
-const DEPTH_FIELDS = new Set<RowField>(["lithoFrom", "lithoTo"]);
 
 export function getDocumentRows(document: UploadDocument): readonly unknown[] {
   return Array.isArray(document.rows) ? document.rows : [];

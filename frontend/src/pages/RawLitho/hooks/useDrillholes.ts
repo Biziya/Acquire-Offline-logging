@@ -1,7 +1,6 @@
 import type {
   Drillhole,
   Notify,
-  ToastNotification,
 } from "../../../types/domain";
 import { isAbortError } from "../../../types/validation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -62,13 +61,6 @@ export function useDrillholes(showToast: Notify) {
   // callback being rebuilt on every change.
   const recentHoleIdsRef = useRef<string[]>([]);
 
-  // Held in a ref so the loader effect runs once, not on every render.
-  const showToastRef = useRef(showToast);
-  showToastRef.current = showToast;
-  const notify = useCallback((notification: ToastNotification) => {
-    showToastRef.current?.(notification);
-  }, []);
-
   useEffect(() => {
     const abortController = new AbortController();
     const { signal } = abortController;
@@ -85,7 +77,7 @@ export function useDrillholes(showToast: Notify) {
 
       setDrillholes(cachedRecords);
       setError("");
-      notify(TOAST_NOTIFICATIONS.cachedDrillholesLoaded);
+      showToast(TOAST_NOTIFICATIONS.cachedDrillholesLoaded);
     }
 
     async function loadDrillholes() {
@@ -97,7 +89,7 @@ export function useDrillholes(showToast: Notify) {
         if (signal.aborted) return;
 
         setDrillholes(records);
-        cacheDrillholes(records, signal, notify);
+        cacheDrillholes(records, signal, showToast);
       } catch (loadError) {
         if (isAbortError(loadError)) return;
 
@@ -110,7 +102,7 @@ export function useDrillholes(showToast: Notify) {
 
     loadDrillholes();
     return () => abortController.abort();
-  }, [notify]);
+  }, [showToast]);
 
   // --- restore the remembered selections ----------------------------------
   useEffect(() => {

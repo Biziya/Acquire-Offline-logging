@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { HELPER_TEXT, SECONDARY_BUTTON, SECTION_TITLE } from "../../components/uiStyles";
 import {
-  ICON_BUTTON,
+  REMOVE_BUTTON,
   SECTION,
   SECTION_HEADING,
   SECTION_HEADING_TEXT,
   STEP_NUMBER,
 } from "./uploadDataStyles";
+import { formatCount } from "../../utils/format";
 
 interface UploadFileSectionProps {
   onFileSelect: (file: File) => void;
@@ -20,7 +21,6 @@ interface UploadFileSectionProps {
   isRemoveDisabled: boolean;
 }
 
-const recordFormat = new Intl.NumberFormat("en-US");
 
 function hasFiles(event: DragEvent | React.DragEvent) {
   return Array.from(event.dataTransfer?.types ?? []).includes("Files");
@@ -153,7 +153,7 @@ function UploadFileSection({
                 {selectedFileName}
               </span>
               <button
-                className={ICON_BUTTON}
+                className={REMOVE_BUTTON}
                 type="button"
                 aria-label="Remove selected file"
                 title={isRemoveDisabled ? "Wait for the upload to finish" : "Remove selected file"}
@@ -164,7 +164,7 @@ function UploadFileSection({
               </button>
             </span>
             <span className={HELPER_TEXT}>
-              {recordFormat.format(recordCount)}{" "}
+              {formatCount(recordCount)}{" "}
               {recordCount === 1 ? "record" : "records"}
             </span>
             <button

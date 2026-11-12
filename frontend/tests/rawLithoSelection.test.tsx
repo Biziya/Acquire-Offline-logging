@@ -5,7 +5,7 @@ import type { Drillhole, RawLithoDocument } from "../src/types/domain";
 import { useRawLithoWorkspace } from "../src/pages/RawLitho/hooks/useRawLithoWorkspace";
 import { useWorkingDrillholes } from "../src/pages/RawLitho/hooks/useWorkingDrillholes";
 import RawLithoFilters from "../src/pages/RawLitho/RawLithoFilters";
-import { createEmptyRow } from "../src/pages/RawLitho/constants";
+import { createSchemaRow } from "../src/types/rawLithoSchema";
 import { createBlankDocument } from "../src/pages/RawLitho/rawLithoDocumentOperations";
 import {
   readRawLithoDraft,
@@ -139,7 +139,7 @@ describe("Recently worked on", () => {
     const blank = createBlankDocument({ drillhole: "BLANK" });
     const worked = (holeId: string) => ({
       ...createBlankDocument({ drillhole: holeId }),
-      rows: [{ ...createEmptyRow(1), lithoCode: "SS" }],
+      rows: [{ ...createSchemaRow(1), lithoCode: "SS" }],
     });
     await writeRawLithoDraft("BLANK", blank);
     await writeRawLithoDraft("SAVED", worked("SAVED"));

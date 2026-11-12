@@ -12,7 +12,7 @@ const string CorsPolicy = "FrontendCors";
 var builder = WebApplication.CreateBuilder(args);
 
 // ============================================
-// 1. Controllers and Swagger
+// Controllers and Swagger
 // ============================================
 
 builder.Services.AddControllers();
@@ -20,7 +20,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 // ============================================
-// 2. Database Repositories
+// Database Repositories
 // ============================================
 
 // Opens every SQL connection; runs it as the request's Windows user when
@@ -47,7 +47,7 @@ builder.Services.AddScoped<
     DataViewerRepository>();
 
 // ============================================
-// 3. Windows Authentication
+// Windows Authentication
 // ============================================
 
 builder.Services
@@ -83,7 +83,7 @@ builder.Services
     });
 
 // ============================================
-// 4. CORS Configuration
+// CORS Configuration
 // ============================================
 
 builder.Services.AddCors(options =>
@@ -99,7 +99,7 @@ builder.Services.AddCors(options =>
 });
 
 // ============================================
-// 5. Build Application
+// Build Application
 // ============================================
 
 var app = builder.Build();
@@ -140,14 +140,14 @@ else
 }
 
 // ============================================
-// 6. Swagger
+// Swagger
 // ============================================
 
 app.UseSwagger();
 app.UseSwaggerUI();
 
 // ============================================
-// 7. HTTPS (Local Development Only)
+// HTTPS (Local Development Only)
 // ============================================
 
 if (app.Environment.IsDevelopment())
@@ -156,7 +156,7 @@ if (app.Environment.IsDevelopment())
 }
 
 // ============================================
-// 8. Middleware
+// Middleware
 // ============================================
 
 app.UseRouting();
@@ -167,13 +167,13 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 // ============================================
-// 9. API Routes
+// API Routes
 // ============================================
 
 app.MapControllers();
 
 // ============================================
-// 10. Run Application
+// Run Application
 // ============================================
 
 app.Run();

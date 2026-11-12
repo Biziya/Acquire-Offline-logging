@@ -35,14 +35,14 @@ describe("complete column schema", () => {
     const host = ts.createCompilerHost(options);
     const original = host.getSourceFile;
     host.getSourceFile = (fileName, languageVersion, onError, createNew) => {
-      const source = files.get(fileName);
+      const source = files.get(resolve(fileName));
       return source === undefined ? original(fileName, languageVersion, onError, createNew) : ts.createSourceFile(fileName, source, languageVersion, true);
     };
     const program = ts.createProgram([...files.keys()], options, host);
     const diagnostics = ts.getPreEmitDiagnostics(program);
-    expect(diagnostics.filter(item => item.file?.fileName === resolve("schema-probe-0.ts"))).toEqual([]);
+    expect(diagnostics.filter(item => item.file && resolve(item.file.fileName) === resolve("schema-probe-0.ts"))).toEqual([]);
     for (let index = 1; index < variants.length; index += 1) {
-      expect(diagnostics.some(item => item.file?.fileName === resolve(`schema-probe-${index}.ts`)), `probe ${index} must fail compilation`).toBe(true);
+      expect(diagnostics.some(item => item.file && resolve(item.file.fileName) === resolve(`schema-probe-${index}.ts`)), `probe ${index} must fail compilation`).toBe(true);
     }
   });
 

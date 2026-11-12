@@ -7,7 +7,6 @@ import type {
 import { columnByKey, createSchemaRow } from "../../types/rawLithoSchema";
 import { toPercentWidths } from "../../components/dataTableStyles";
 import { rawLithoConfig } from "./config";
-export { columns } from "../../types/rawLithoSchema";
 
 // This list controls table presentation only: which columns are shown, in
 // which order, with which header and width (config.yaml). The complete
@@ -108,10 +107,6 @@ export const TOAST_NOTIFICATIONS = {
     message: "Import cancelled",
     type: "info",
   },
-  importNeedsLookupCorrection: {
-    message: "Fix lookup codes",
-    type: "warning",
-  },
   cachedDrillholesLoaded: {
     message: "Using offline data",
     type: "info",
@@ -172,10 +167,6 @@ export const TOAST_NOTIFICATIONS = {
 
 export const RAW_LITHO_ROWS_PER_PAGE = rawLithoConfig.rowsPerPage;
 
-export function createEmptyRow(id: RowId): RawLithoRow {
-  return createSchemaRow(id);
-}
-
 /*
  * Builds the row that follows `previousRow`.
  *
@@ -187,7 +178,7 @@ export function createRowFromPrevious(
   previousRow: RawLithoRow | undefined,
   id: RowId,
 ) {
-  const nextRow = createEmptyRow(id);
+  const nextRow = createSchemaRow(id);
 
   nextRow.lithoFrom = previousRow?.lithoTo ?? "";
   ROW_COPY_FIELD_KEYS.forEach((fieldKey) => {

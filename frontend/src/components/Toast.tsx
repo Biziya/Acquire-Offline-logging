@@ -5,7 +5,6 @@ import { uiConfig } from "../config/uiConfig";
 interface ToastProps {
   message: string;
   type: ToastNotification["type"];
-  isVisible: boolean;
   onClose: () => void;
 }
 
@@ -54,8 +53,8 @@ const TOAST_ACCENTS = {
   info: "[--toast-accent:var(--color-rl-cell-ring)]",
 };
 
-function Toast({ message, type, isVisible, onClose }: ToastProps) {
-  const duration = uiConfig.toastDuration[type] ?? uiConfig.toastDuration.info;
+function Toast({ message, type, onClose }: ToastProps) {
+  const duration = uiConfig.toastDuration[type];
   const staysOpen = type === "error";
   const [isFadingOut, setIsFadingOut] = useState(false);
   const onCloseRef = useRef(onClose);
@@ -65,11 +64,7 @@ function Toast({ message, type, isVisible, onClose }: ToastProps) {
   }, [onClose]);
 
   useEffect(() => {
-    if (!isVisible || staysOpen) {
-      return undefined;
-    }
-
-    setIsFadingOut(false);
+    if (staysOpen) return undefined;
 
     const fadeTimer = window.setTimeout(
       () => setIsFadingOut(true),
@@ -81,18 +76,14 @@ function Toast({ message, type, isVisible, onClose }: ToastProps) {
       window.clearTimeout(fadeTimer);
       window.clearTimeout(closeTimer);
     };
-  }, [duration, isVisible, staysOpen]);
-
-  if (!isVisible) {
-    return null;
-  }
+  }, [duration, staysOpen]);
 
   const isAssertive = ASSERTIVE_TYPES.has(type);
 
   return (
     <div
       className={`${TOAST_CLASS} ${staysOpen ? "pointer-events-auto" : "pointer-events-none pr-3.5"} ${
-        TOAST_ACCENTS[type] ?? TOAST_ACCENTS.info
+        TOAST_ACCENTS[type]
       } ${isFadingOut ? "animate-toast-out" : "animate-toast-in"}`}
       role={isAssertive ? "alert" : "status"}
       aria-live={isAssertive ? "assertive" : "polite"}
@@ -108,7 +99,7 @@ function Toast({ message, type, isVisible, onClose }: ToastProps) {
         strokeLinejoin="round"
         aria-hidden="true"
       >
-        <path d={TOAST_ICON_PATHS[type] ?? TOAST_ICON_PATHS.info} />
+        <path d={TOAST_ICON_PATHS[type]} />
       </svg>
       <span>{message}</span>
       {staysOpen && (

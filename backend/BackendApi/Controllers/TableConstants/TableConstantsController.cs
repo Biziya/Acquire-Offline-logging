@@ -1,4 +1,3 @@
-using BackendApi.Data;
 using BackendApi.Models.TableConstants;
 using BackendApi.Repositories.TableConstants;
 using Microsoft.AspNetCore.Mvc;
@@ -29,21 +28,8 @@ public sealed class TableConstantsController : ControllerBase
     public async Task<ActionResult<TableConstantsResponse>> Get(
         CancellationToken cancellationToken)
     {
-        try
-        {
-            return Ok(await _repository.GetAllAsync(cancellationToken));
-        }
-        catch (Exception exception) when (DatabaseAccessErrors.Find(exception) is not null)
-        {
-            return DatabaseAccessDenied.Result(this, _logger, exception, "read table constants");
-        }
-        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
-        {
-            _logger.LogError(exception, "Failed to retrieve table constants.");
-
-            return StatusCode(
-                StatusCodes.Status500InternalServerError,
-                new { error = "Unable to retrieve table constants." });
-        }
+        return await DatabaseAccessDenied.ReadAsync(
+            this, _logger, "read table constants", "Unable to retrieve table constants.",
+            () => _repository.GetAllAsync(cancellationToken), cancellationToken);
     }
 }

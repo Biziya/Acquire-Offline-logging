@@ -30,6 +30,36 @@ public static class DatabaseAccessDenied
             new { error = Message(controller, action) });
     }
 
+    /// <summary>
+    /// Runs a database read: 200 with the result, 403 when SQL Server denies
+    /// permission, 500 with <paramref name="failureMessage"/> on any other error.
+    /// </summary>
+    public static async Task<ActionResult<T>> ReadAsync<T>(
+        ControllerBase controller,
+        ILogger logger,
+        string action,
+        string failureMessage,
+        Func<Task<T>> read,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return controller.Ok(await read());
+        }
+        catch (Exception exception) when (DatabaseAccessErrors.Find(exception) is not null)
+        {
+            return Result(controller, logger, exception, action);
+        }
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            logger.LogError(exception, "Failed to {Action}.", action);
+
+            return controller.StatusCode(
+                StatusCodes.Status500InternalServerError,
+                new { error = failureMessage });
+        }
+    }
+
     private static string UserName(ControllerBase controller) =>
         controller.User.Identity?.Name is { Length: > 0 } name ? name : "This account";
 }
