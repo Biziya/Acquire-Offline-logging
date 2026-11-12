@@ -84,7 +84,7 @@ function DatabaseViewer() {
 
       <div className="mb-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1">
         <h2 className={SECTION_TITLE}>
-          Database Records
+          Database records
         </h2>
         <p className={HELPER_TEXT} aria-live="polite">
           {recordStatus}
