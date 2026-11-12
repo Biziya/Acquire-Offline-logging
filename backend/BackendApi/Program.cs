@@ -1,3 +1,4 @@
+using BackendApi.Auth;
 using BackendApi.Data;
 using BackendApi.Repositories.DataViewer;
 using BackendApi.Repositories.Drillholes;
@@ -55,20 +56,30 @@ builder.Services
 
 builder.Services.AddAuthorization();
 
-// Running as the Windows user needs one on every request that reaches the
-// database: anonymous calls get 401 + WWW-Authenticate: Negotiate. Endpoints
-// marked [AllowAnonymous] (status) are unaffected. Read when the options are
+// Every endpoint not marked [AllowAnonymous] (status) needs a Windows user when
+// database calls run as that user, or when Auth:AllowedGroup limits the website
+// to one AD group: anonymous calls get 401 + WWW-Authenticate: Negotiate, and
+// a signed-in user outside the group gets 403. Read when the options are
 // built, so test settings apply.
 builder.Services
     .AddOptions<AuthorizationOptions>()
     .Configure<IConfiguration>((options, configuration) =>
     {
-        if (configuration.ImpersonatesWindowsUser())
+        var allowedGroup = configuration.GetAllowedGroup();
+
+        if (!configuration.ImpersonatesWindowsUser() && allowedGroup is null)
         {
-            options.FallbackPolicy = new AuthorizationPolicyBuilder()
-                .RequireAuthenticatedUser()
-                .Build();
+            return;
         }
+
+        var policy = new AuthorizationPolicyBuilder().RequireAuthenticatedUser();
+
+        if (allowedGroup is not null)
+        {
+            policy.RequireAssertion(context => AllowedGroupAccess.IsAllowed(context.User, allowedGroup));
+        }
+
+        options.FallbackPolicy = policy.Build();
     });
 
 // ============================================
@@ -107,6 +118,25 @@ try
 catch (Exception exception) when (exception is InvalidOperationException or ArgumentException)
 {
     app.Logger.LogError(exception, "The CoreDescrData connection string is missing or invalid.");
+}
+
+// Website access by AD group. Blank is fine for local development, but outside
+// it every Windows user could use the website.
+var allowedGroup = app.Configuration.GetAllowedGroup();
+
+if (allowedGroup is not null)
+{
+    app.Logger.LogInformation("Website access limited to AD group {AllowedGroup}", allowedGroup);
+}
+else if (app.Environment.IsDevelopment())
+{
+    app.Logger.LogWarning("{Key} is not set: AD group access check is off.", BackendApi.Data.ConfigurationExtensions.AllowedGroupKey);
+}
+else
+{
+    app.Logger.LogError(
+        "{Key} is not set: AD group access check is OFF, so any user can use the website. Set it to the allowed group, e.g. BDOM\\AcQuire_Uploaders.",
+        BackendApi.Data.ConfigurationExtensions.AllowedGroupKey);
 }
 
 // ============================================

@@ -3,48 +3,61 @@ import { createPortal } from "react-dom";
 import { DIALOG_TITLE } from "./uiStyles";
 
 type Separator = "+" | "/" | "then";
+type Scope = "Raw Litho" | "Upload Data";
 interface Shortcut {
   keys: string[];
   description: string;
   separator?: Separator;
   // Set when a shortcut works on one page only.
-  scope?: "Raw Litho" | "Upload Data";
+  scope?: Scope;
 }
 
 // Only shortcuts the handlers implement; Database Viewer has none. Detailed
 // behavior lives with the handlers (tableNavigation.ts, useRawLithoShortcuts.ts,
-// LookupAutocomplete.tsx, RawLithoTable.tsx, UploadDataTable.tsx).
-const GROUPS: { title: string; items: Shortcut[] }[] = [
+// LookupAutocomplete.tsx, RawLithoRow.tsx, RawLithoTable.tsx,
+// RawLithoFilters.tsx, UploadDataTable.tsx).
+const GROUPS: { title: string; scope?: Scope; items: Shortcut[] }[] = [
   {
-    title: "Table navigation",
+    title: "Move around",
     items: [
       { keys: ["Tab"], description: "Next cell" },
       { keys: ["Shift", "Tab"], description: "Previous cell", separator: "+" },
-      { keys: ["←", "→"], description: "Previous / next cell at text edge", separator: "/" },
-      { keys: ["↑", "↓"], description: "Previous / next row", separator: "/" },
-      { keys: ["Enter"], description: "Next row", scope: "Upload Data" },
+      { keys: ["←", "→"], description: "Cell left / right at text end", separator: "/" },
+      { keys: ["↑", "↓"], description: "Row above / below", separator: "/" },
+      { keys: ["Enter"], description: "Row below", scope: "Upload Data" },
       { keys: ["PgUp", "PgDn"], description: "Previous / next page", separator: "/", scope: "Raw Litho" },
       { keys: ["Esc", "Tab"], description: "Leave the table", separator: "then", scope: "Raw Litho" },
     ],
   },
   {
-    title: "Editing and selection",
+    title: "Edit and select",
     items: [
-      { keys: ["Enter"], description: "Open list / confirm value", scope: "Raw Litho" },
+      { keys: ["Enter"], description: "Open list / pick value", scope: "Raw Litho" },
+      { keys: ["Enter"], description: "Save From / To depth", scope: "Raw Litho" },
       { keys: ["F2"], description: "Browse list with ↑ ↓", scope: "Raw Litho" },
-      { keys: ["Esc"], description: "Close list, clear selection" },
       { keys: ["Delete"], description: "Clear cell", scope: "Raw Litho" },
-      { keys: ["Ctrl", "Click"], description: "Select multiple cells", separator: "+" },
-      { keys: ["Ctrl", "C"], description: "Copy", separator: "+" },
-      { keys: ["Ctrl", "V"], description: "Paste", separator: "+" },
+      { keys: ["Esc"], description: "Close list, clear selection" },
+      { keys: ["Ctrl", "Click"], description: "Select several cells", separator: "+" },
+      { keys: ["Ctrl", "C"], description: "Copy cells", separator: "+" },
+      { keys: ["Ctrl", "V"], description: "Paste cells", separator: "+" },
     ],
   },
   {
     title: "Rows",
+    scope: "Raw Litho",
     items: [
-      { keys: ["F4"], description: "Add row", scope: "Raw Litho" },
-      { keys: ["Tab", "↓"], description: "Add row from the last cell", separator: "/", scope: "Raw Litho" },
-      { keys: ["F5"], description: "Remove last row", scope: "Raw Litho" },
+      { keys: ["F4"], description: "Add row" },
+      { keys: ["Tab", "↓"], description: "Add row from last cell", separator: "/" },
+      { keys: ["F5"], description: "Remove last row" },
+    ],
+  },
+  {
+    title: "Drillhole search",
+    scope: "Raw Litho",
+    items: [
+      { keys: ["↑", "↓"], description: "Move through list", separator: "/" },
+      { keys: ["Enter"], description: "Choose drillhole" },
+      { keys: ["Esc"], description: "Close list" },
     ],
   },
 ];
@@ -106,37 +119,37 @@ export default function KeyboardShortcuts() {
       </button>
       {open && createPortal(
         <div ref={popupRef} id={id} role="dialog" aria-labelledby={`${id}-title`}
-          className="fixed top-11 right-4 z-[1200] max-h-[calc(100dvh-3.75rem)] w-[min(21rem,calc(100vw-2rem))] overflow-y-auto rounded-ui border border-rl-border bg-white p-3 text-rl-text shadow-[0_10px_24px_rgb(16_35_61/16%)]"
+          className="fixed top-11 right-4 z-[1200] max-h-[calc(100dvh-3.75rem)] w-[min(24rem,calc(100vw-2rem))] overflow-y-auto rounded-ui border border-rl-border bg-white p-3 text-rl-text shadow-[0_10px_24px_rgb(16_35_61/16%)]"
           onKeyDown={event => {
             // Popup keys must not reach Raw Litho's window shortcuts.
             event.stopPropagation();
           }}>
-          <div className="mb-2 flex items-center justify-between gap-3">
+          <div className="mb-1 flex items-center justify-between gap-3">
             <h2 id={`${id}-title`} className={DIALOG_TITLE}>Keyboard shortcuts</h2>
             <button ref={closeRef} type="button" className={ICON_BUTTON} aria-label="Close keyboard shortcuts" onClick={close}>
               <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
             </button>
           </div>
-          <p className="m-0 mb-3 text-xs text-rl-text-muted">Raw Litho and Upload Data tables</p>
-          <div className="grid gap-3">
-            {GROUPS.map(group => <section key={group.title}>
-              <h3 className="m-0 mb-2 text-xs font-semibold text-rl-navy">{group.title}</h3>
-              <dl className="m-0 grid gap-2 text-xs">
-                {group.items.map(({ keys, description, separator, scope }) => <div key={`${keys.join()} ${description}`} className="grid grid-cols-[8rem_minmax(0,1fr)] items-start gap-2">
-                  <dt className="flex flex-wrap items-center gap-1" aria-label={keys.join(separator ? SEPARATOR_LABEL[separator] : " ")}>
-                    {keys.map((key, index) => <span key={key} className="inline-flex items-center gap-1">
-                      {separator && index > 0 && <span aria-hidden="true" className="text-rl-text-muted">{separator}</span>}
-                      <kbd className="rounded-ui border border-rl-border bg-rl-navy-softer px-1 py-0.5 font-sans text-xs">{key}</kbd>
-                    </span>)}
-                  </dt>
-                  <dd className="m-0 leading-relaxed">
-                    {description}
-                    {scope && <span className="ml-1 text-rl-text-muted">· {scope}</span>}
-                  </dd>
-                </div>)}
-              </dl>
-            </section>)}
-          </div>
+          {GROUPS.map(group => <section key={group.title} className="border-t border-rl-border pt-1.5 mt-1.5 first-of-type:mt-0">
+            <h3 className="m-0 mb-1 flex items-baseline justify-between gap-2 text-xs font-semibold text-rl-navy">
+              {group.title}
+              {group.scope && <span className="font-normal text-rl-text-muted">{group.scope} only</span>}
+            </h3>
+            <dl className="m-0 grid gap-0.5 text-xs">
+              {group.items.map(({ keys, description, separator, scope }) => <div key={`${keys.join()} ${description}`} className="grid grid-cols-[6.5rem_minmax(0,1fr)] items-center gap-2">
+                <dt className="flex items-center gap-1 whitespace-nowrap" aria-label={keys.join(separator ? SEPARATOR_LABEL[separator] : " ")}>
+                  {keys.map((key, index) => <span key={key} className="inline-flex items-center gap-1">
+                    {separator && index > 0 && <span aria-hidden="true" className="text-rl-text-muted">{separator}</span>}
+                    <kbd className="rounded-ui border border-rl-border bg-rl-navy-softer px-1 font-sans text-xs leading-[1.125rem]">{key}</kbd>
+                  </span>)}
+                </dt>
+                <dd className="m-0 flex min-w-0 items-center gap-2 leading-5">
+                  <span className="truncate" title={description}>{description}</span>
+                  {scope && <span className="ml-auto shrink-0 text-rl-text-muted">{scope}</span>}
+                </dd>
+              </div>)}
+            </dl>
+          </section>)}
         </div>, document.body,
       )}
     </>

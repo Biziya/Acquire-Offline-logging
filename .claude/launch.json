@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "frontend", "run", "dev"],
+      "port": 5174
+    },
+    {
+      "name": "backend-group-member",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "backend/BackendApi", "--launch-profile", "http", "--", "--Auth:AllowedGroup=BUILTIN\\Users"],
+      "port": 7047
+    },
+    {
+      "name": "backend-not-member",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "backend/BackendApi", "--launch-profile", "http", "--", "--Auth:AllowedGroup=BUILTIN\\Backup Operators"],
+      "port": 7047
+    }
+  ]
+}

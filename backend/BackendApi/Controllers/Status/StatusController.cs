@@ -1,3 +1,5 @@
+using BackendApi.Auth;
+using BackendApi.Data;
 using BackendApi.Models.Status;
 using Microsoft.AspNetCore.Authentication.Negotiate;
 using Microsoft.AspNetCore.Authorization;
@@ -41,8 +43,13 @@ public sealed class StatusController : ControllerBase
         }
 
         // Preserve UserName for existing metadata consumers; the display cache
-        // also needs the original Windows authority for local accounts.
-        return Ok(new StatusResponse(Online, Message, ToDisplayName(name), name));
+        // also needs the original Windows authority for local accounts. A user
+        // outside the allowed AD group still gets 200 here, so the website can
+        // show who was refused.
+        var allowedGroup = HttpContext.RequestServices?.GetService<IConfiguration>()?.GetAllowedGroup();
+        var isAuthorized = AllowedGroupAccess.IsAllowed(User, allowedGroup);
+
+        return Ok(new StatusResponse(Online, Message, ToDisplayName(name), name, isAuthorized));
     }
 
     /*

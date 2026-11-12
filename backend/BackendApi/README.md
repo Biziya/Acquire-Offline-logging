@@ -355,7 +355,8 @@ response adds `userName`:
 - Only a name proven by Windows is returned; nothing the client sends is
   used. No credentials or other OS details are returned.
 - Besides this, only `POST /api/upload-data` requires authentication (it takes
-  the uploader from it); plain `/api/status` and the other APIs stay anonymous.
+  the uploader from it); plain `/api/status` and the other APIs stay anonymous,
+  unless `Auth:AllowedGroup` is set (see *Website access by AD group*).
 - The frontend asks once (`frontend/src/services/currentUser.ts`) and uses the
   name for the sidebar, `created_by`, `edited_by` and Upload Data's
   "Imported By". Without Windows credentials (another browser zone, a
@@ -369,6 +370,36 @@ response adds `userName`:
 
 Upload Data sends the same verified user to the procedure as `@usr`; see
 *Uploader identity and authorization* below.
+
+## Website access by AD group (`Auth:AllowedGroup`)
+
+Only members of one Active Directory group may use the website. Set the group
+name on the server, for example `BDOM\AcQuire_Uploaders`:
+
+- In `appsettings.Production.json`: `"Auth": { "AllowedGroup": "BDOM\\AcQuire_Uploaders" }`.
+- Or as an IIS environment variable: `Auth__AllowedGroup=BDOM\AcQuire_Uploaders`.
+
+When it is set:
+
+| Request | Answer |
+| --- | --- |
+| No Windows login | `401` + `WWW-Authenticate: Negotiate` |
+| Signed in, not in the group | `403` |
+| Signed in, in the group (nested groups count) | normal response |
+| `GET /api/status` (plain online check) | always anonymous |
+| `GET /api/status?includeUser=true` | `200`, plus `"isAuthorized": true/false` |
+
+The frontend (`frontend/src/services/websiteAccess.ts`) shows an *Access
+denied* page with the user's `BDOM\` name instead of the app. While the backend
+cannot be reached, it uses the last answer saved in the browser. The backend
+is what enforces access.
+
+- Membership comes from the Windows login token (`User.IsInRole`), not a live
+  LDAP query. A user who was just added to or removed from the group must
+  sign out of Windows and back in.
+- IIS: Windows Authentication must stay on.
+- Blank (the default) turns the check off. The API logs a warning in
+  Development and an error in any other environment.
 
 ## Upload Data endpoint
 

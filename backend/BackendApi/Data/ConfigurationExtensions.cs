@@ -22,6 +22,17 @@ public static class ConfigurationExtensions
     public static bool ImpersonatesWindowsUser(this IConfiguration configuration) =>
         configuration.GetValue<bool>(ImpersonateWindowsUserKey);
 
+    // Only members of this Active Directory group (e.g. "BDOM\AcQuire_Uploaders")
+    // may use the website; blank turns the check off. See Auth/AllowedGroupAccess.
+    public const string AllowedGroupKey = "Auth:AllowedGroup";
+
+    /// <summary>The AD group allowed into the website, or null when the check is off.</summary>
+    public static string? GetAllowedGroup(this IConfiguration configuration)
+    {
+        var group = configuration[AllowedGroupKey]?.Trim();
+        return string.IsNullOrEmpty(group) ? null : group;
+    }
+
     /// <summary>
     /// Reads a named connection string and fails fast when it is missing.
     /// </summary>

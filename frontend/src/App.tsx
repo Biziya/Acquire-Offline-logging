@@ -4,10 +4,19 @@ import KeyboardShortcuts from "./components/KeyboardShortcuts";
 import RawLitho from "./pages/RawLitho/RawLitho";
 import UploadData from "./pages/UploadData/UploadData";
 import DatabaseViewer from "./pages/DatabaseViewer/DatabaseViewer";
+import AccessDenied from "./pages/AccessDenied/AccessDenied";
+import { useAccessCheck } from "./hooks/useAccessCheck";
 
 // Home (pages/Home.tsx) is hidden for now: the root, and any unknown
 // address, opens Raw Litho instead of a blank page.
+// Only members of the allowed AD group see the app (services/websiteAccess.ts).
 function App() {
+  const { access, retry } = useAccessCheck();
+
+  if (access?.status !== "allowed") {
+    return <AccessDenied access={access} onRetry={retry} />;
+  }
+
   return (
     <div className="flex min-h-screen">
       <Sidebar />

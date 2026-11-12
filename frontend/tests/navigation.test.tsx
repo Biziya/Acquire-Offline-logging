@@ -11,6 +11,12 @@ vi.mock("../src/pages/UploadData/UploadData", () => ({ default: () => <h1>Upload
 vi.mock("../src/components/StatusIndicator", () => ({ default: () => null }));
 vi.mock("../src/hooks/useCurrentUser", () => ({ useCurrentUser: () => null }));
 vi.mock("../src/hooks/useCachedWindowsIdentity", () => ({ useCachedWindowsIdentity: () => null }));
+vi.mock("../src/hooks/useAccessCheck", () => ({
+  useAccessCheck: () => ({
+    access: { status: "allowed", userName: "BDOM\\jdoe", source: "backend" },
+    retry: () => undefined,
+  }),
+}));
 
 function renderAt(path: string) {
   return render(

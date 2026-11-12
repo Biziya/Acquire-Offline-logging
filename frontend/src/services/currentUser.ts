@@ -36,6 +36,12 @@ const VERIFIED_USER_TTL_MS = 60_000;
 export interface VerifiedWindowsIdentity {
   userName: string;
   fullUsername: string;
+  /*
+   * Whether this user may use the website (member of the backend's
+   * Auth:AllowedGroup AD group). A backend that does not report it has no
+   * group check, so a missing field means true.
+   */
+  isAuthorized: boolean;
 }
 
 let request: Promise<VerifiedWindowsIdentity | null> | null = null;
@@ -67,8 +73,9 @@ async function requestCurrentUser(): Promise<VerifiedWindowsIdentity | null> {
       reportedFullUsername && reportedFullUsername.length <= MAX_USER_NAME_LENGTH
         ? reportedFullUsername
         : userName;
+    const isAuthorized = !(isRecord(body) && body.isAuthorized === false);
     await cacheVerifiedWindowsIdentity(fullUsername, cached).catch(() => undefined);
-    return { userName, fullUsername };
+    return { userName, fullUsername, isAuthorized };
   } catch {
     return null;
   }

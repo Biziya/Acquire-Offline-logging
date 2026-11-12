@@ -38,6 +38,10 @@ internal sealed class TestAuthHandler(
 {
     public const string UserHeader = "X-Test-User";
 
+    // Comma-separated AD groups the test user belongs to, e.g. "BDOM\Loggers";
+    // each becomes a role claim, so IsInRole works as with a Windows login.
+    public const string GroupsHeader = "X-Test-Groups";
+
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
         if (!Request.Headers.TryGetValue(UserHeader, out var userName))
@@ -45,7 +49,11 @@ internal sealed class TestAuthHandler(
             return Task.FromResult(AuthenticateResult.NoResult());
         }
 
-        var identity = new ClaimsIdentity([new Claim(ClaimTypes.Name, userName.ToString())], "Test");
+        var groups = Request.Headers[GroupsHeader].ToString()
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(group => new Claim(ClaimTypes.Role, group));
+
+        var identity = new ClaimsIdentity([new Claim(ClaimTypes.Name, userName.ToString()), .. groups], "Test");
 
         return Task.FromResult(AuthenticateResult.Success(
             new AuthenticationTicket(new ClaimsPrincipal(identity), Scheme.Name)));

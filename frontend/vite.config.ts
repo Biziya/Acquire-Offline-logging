@@ -5,25 +5,22 @@ import tailwindcss from "@tailwindcss/vite";
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const target = env.VITE_API_PROXY_TARGET || "http://localhost:7047";
+  /*
+   * Windows Integrated Authentication (NTLM) authenticates a connection, not
+   * a request: its handshake must reach the backend over one socket. With
+   * Auth:AllowedGroup (or Database:ImpersonateWindowsUser) every API needs the
+   * Windows user, not only /api/status?includeUser=true, so this dev-only
+   * agent keeps a single upstream connection alive for all of /api.
+   */
+  const windowsAuthAgent = new Agent({ keepAlive: true, maxSockets: 1 });
   return {
     plugins: [react(), tailwindcss()],
     server: {
       proxy: {
-        /*
-         * Windows Integrated Authentication (NTLM) authenticates a connection,
-         * not a request: its handshake for /api/status?includeUser=true must
-         * reach the backend over one socket. This dev-only agent keeps a
-         * single upstream connection alive for /api/status. Listed first so it
-         * wins over "/api".
-         */
-        "/api/status": {
-          target,
-          changeOrigin: true,
-          agent: new Agent({ keepAlive: true, maxSockets: 1 }),
-        },
         "/api": {
           target,
           changeOrigin: true,
+          agent: windowsAuthAgent,
         },
       },
     },

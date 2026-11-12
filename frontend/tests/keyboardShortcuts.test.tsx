@@ -32,7 +32,7 @@ describe("keyboard shortcuts popup", () => {
     await user.click(trigger);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     await user.click(trigger);
-    await user.click(screen.getByText("Table navigation"));
+    await user.click(screen.getByText("Move around"));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Outside" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -45,7 +45,7 @@ describe("keyboard shortcuts popup", () => {
     await user.click(screen.getByRole("button", { name: "Keyboard shortcuts" }));
     const popup = screen.getByRole("dialog");
     expect(within(popup).getAllByRole("heading", { level: 3 }).map(h => h.textContent))
-      .toEqual(["Table navigation", "Editing and selection", "Rows"]);
+      .toEqual(["Move around", "Edit and select", "RowsRaw Litho only", "Drillhole searchRaw Litho only"]);
     const shiftTab = popup.querySelector('[aria-label="Shift + Tab"]')!;
     expect(shiftTab).toHaveTextContent("Shift+Tab");
     expect(within(shiftTab as HTMLElement).getByText("+")).toBeInTheDocument();
@@ -53,7 +53,12 @@ describe("keyboard shortcuts popup", () => {
       "PgUp / PgDn", "Esc then Tab", "F2", "Delete", "F4", "F5", "Tab / ↓"]) {
       expect(popup.querySelector(`[aria-label="${label}"]`), label).toBeInTheDocument();
     }
-    expect(within(popup).getAllByRole("definition")).toHaveLength(17);
+    expect(within(popup).getAllByRole("definition")).toHaveLength(21);
+    // One line per shortcut: keys never wrap, long descriptions are cut off.
+    for (const term of within(popup).getAllByRole("term")) expect(term).toHaveClass("whitespace-nowrap");
+    for (const definition of within(popup).getAllByRole("definition")) {
+      expect(definition.firstElementChild).toHaveClass("truncate");
+    }
     // Every row is unique: no duplicate key + description pairs.
     const rows = [...popup.querySelectorAll("dl > div")].map(row => row.textContent);
     expect(new Set(rows).size).toBe(rows.length);
