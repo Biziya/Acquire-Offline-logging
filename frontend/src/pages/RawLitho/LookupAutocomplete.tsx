@@ -270,7 +270,8 @@ function LookupAutocomplete({
   }
 
   let placeholder = "";
-  if (isLoading && options.length === 0) placeholder = "Loading...";
+  // A bare ellipsis fits the narrow lookup cells (CA, OM, PY…) unclipped.
+  if (isLoading && options.length === 0) placeholder = "…";
   // A failed lookup shows no "Unavailable" label in every row; the reason is
   // kept for screen readers through aria-describedby.
   else if (error && options.length === 0) placeholder = "";
