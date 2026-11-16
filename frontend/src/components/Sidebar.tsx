@@ -100,26 +100,24 @@ function Sidebar() {
       }`}
       data-collapsed={collapsed}
     >
-      <div
-        className={`flex h-12 items-center py-1 ${
-          collapsed ? "justify-center px-1.5" : "justify-between px-2"
+      {/* The whole header (app name + arrow) is one button that collapses or expands the sidebar. */}
+      <button
+        className={`mx-1.5 my-1 flex h-12 shrink-0 cursor-pointer items-center gap-2 rounded-ui border-0 bg-transparent text-rl-side-muted hover:bg-rl-side-hover hover:text-white ${SIDE_FOCUS} ${
+          collapsed ? "justify-center px-0" : "justify-between px-2"
         }`}
+        type="button"
+        onClick={() => setCollapsed((current) => !current)}
+        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        aria-expanded={!collapsed}
       >
         {!collapsed && (
           <span className="min-w-0 overflow-hidden text-base font-bold text-ellipsis whitespace-nowrap text-white">
             {uiConfig.appName}
           </span>
         )}
-        <button
-          className={`flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-ui border-0 bg-transparent text-rl-side-muted hover:bg-rl-side-hover hover:text-white ${SIDE_FOCUS}`}
-          type="button"
-          onClick={() => setCollapsed((current) => !current)}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          aria-expanded={!collapsed}
-        >
-          <ToggleIcon collapsed={collapsed} />
-        </button>
-      </div>
+        <ToggleIcon collapsed={collapsed} />
+      </button>
 
       <hr className="mx-3.5 mt-0 mb-1 shrink-0 border-0 border-t border-rl-side-hover" />
 
