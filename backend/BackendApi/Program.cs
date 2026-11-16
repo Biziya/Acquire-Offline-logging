@@ -76,7 +76,11 @@ builder.Services
 
         if (allowedGroups.Count > 0)
         {
-            policy.RequireAssertion(context => AllowedGroupAccess.IsAllowed(context.User, allowedGroups));
+            policy.RequireAssertion(context => AllowedGroupAccess.IsAllowed(
+                context.User,
+                allowedGroups,
+                (context.Resource as HttpContext)?.RequestServices
+                    .GetService<ILoggerFactory>()?.CreateLogger(typeof(AllowedGroupAccess))));
         }
 
         options.FallbackPolicy = policy.Build();

@@ -38,10 +38,20 @@ How the website knows who the user is and decides whether they may use it.
 | `Auth:AllowedGroup` | `"BDOM\\AcQuire_Uploaders"` | Older single-group key. Still read and added to the list |
 | `Database:ImpersonateWindowsUser` | `false` | Run every database call as the browser user |
 
-Each group is written as `DOMAIN\Group`; without the domain Windows cannot
-match it. In JSON the backslash is doubled.
+Each group is written with where it lives, and in JSON the backslash is doubled:
 
-`appsettings.json` lists `BDOM\Bek-Test-Group`. `appsettings.Development.json`
+| Group made in | Write it as | Read by the API as |
+| --- | --- | --- |
+| Active Directory Users and Computers (domain group) | `BDOM\\Group` | `BDOM\Group` |
+| Local Users and Groups on the IIS server (local group) | `.\\Group` | `SERVERNAME\Group` |
+
+A local group only exists on the computer where it was made, so it must be made
+on the server that runs the API. Writing a local group as `BDOM\…` never
+matches: Windows looks for a domain group of that name, does not find it, and
+the user gets `403`. The log then shows
+`BDOM\user is not in any allowed group (…)` with the group names the server used.
+
+`appsettings.json` lists `.\Bek-Test-Group`, a local group on the IIS server. `appsettings.Development.json`
 sets `"AllowedGroups": [ "" ]` to switch the check off for `dotnet run` and the
 tests. An empty `[]` would not do it: .NET merges arrays from settings files by
 position, so an empty array leaves the base file's groups in place. The blank
@@ -203,6 +213,8 @@ not enough). Until then the old membership applies.
 | Symptom | Likely cause |
 | --- | --- |
 | Group member gets Access denied / `403` | Has not signed out of Windows since being added; group written without `DOMAIN\`; typo in the group name |
+| Member of a group made in Local Users and Groups gets `403` | Group written as `BDOM\Group`; write `.\Group` and make the group on the IIS server itself |
+| What did the server decide? | The log has a `<user> is not in any allowed group (…)` warning for each refusal, listing the exact group names checked; `Group … could not be resolved` appears when Windows fails to look a group up (e.g. domain unreachable) |
 | Everyone gets in | `Auth:AllowedGroups` is empty in the settings the server actually uses (check the startup log) |
 | Browser shows a login prompt, or `401` never turns into `200` | Site is not in the Local intranet zone; IIS Windows Authentication is off |
 | A configured group never matches | Windows cannot resolve it (domain unreachable, wrong domain); other groups still work |

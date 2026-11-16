@@ -47,7 +47,8 @@ public sealed class StatusController : ControllerBase
         // in none of the allowed AD groups still gets 200 here, so the website
         // can show who was refused.
         var allowedGroups = HttpContext.RequestServices?.GetService<IConfiguration>()?.GetAllowedGroups() ?? [];
-        var isAuthorized = AllowedGroupAccess.IsAllowed(User, allowedGroups);
+        var logger = HttpContext.RequestServices?.GetService<ILogger<StatusController>>();
+        var isAuthorized = AllowedGroupAccess.IsAllowed(User, allowedGroups, logger);
 
         return Ok(new StatusResponse(Online, Message, ToDisplayName(name), name, isAuthorized));
     }

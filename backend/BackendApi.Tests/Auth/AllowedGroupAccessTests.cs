@@ -60,6 +60,22 @@ public sealed class AllowedGroupAccessTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public void DotPrefixMeansALocalGroupOnThisComputer()
+    {
+        var localGroup = $@"{Environment.MachineName}\Bek-Test-Group";
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                [$"{AppConfig.AllowedGroupsKey}:0"] = @" .\Bek-Test-Group ",
+                [$"{AppConfig.AllowedGroupsKey}:1"] = localGroup.ToLowerInvariant(),
+                [$"{AppConfig.AllowedGroupsKey}:2"] = Group,
+            })
+            .Build();
+
+        Assert.Equal([localGroup, Group], AppConfig.GetAllowedGroups(configuration));
+    }
+
+    [Fact]
     public void NoKeysMeansNoGroups()
     {
         Assert.Empty(AppConfig.GetAllowedGroups(new ConfigurationBuilder().Build()));

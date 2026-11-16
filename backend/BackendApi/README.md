@@ -55,7 +55,7 @@ in `Auth/`, and DBA scripts in `Sql/`. Database access uses
 | `CoreDescrData:Database` | not set | not set | Database for Upload Data and Data Viewer; unset means `DefaultConnection`'s |
 | `CoreDescrData:UseWindowsAuthentication` | `false` | `true` | Upload Data and Data Viewer connect with `Integrated Security=True` |
 | `Database:ImpersonateWindowsUser` | `false` | `false` | Run every database call as the browser user |
-| `Auth:AllowedGroups` | `["BDOM\\Bek-Test-Group"]` | `[""]` (check off) | AD groups allowed to use the website (a member of any one is let in); empty turns the check off |
+| `Auth:AllowedGroups` | `[".\\Bek-Test-Group"]` | `[""]` (check off) | AD groups allowed to use the website (a member of any one is let in); empty turns the check off |
 | `Auth:AllowedGroup` | not set | not set | Older single-group key, still read and added to the list |
 | `UploadData:MaxFileSizeBytes` | not set | not set | Upload size limit, default 10 MB |
 
@@ -122,6 +122,12 @@ or as IIS environment variables, one per group:
 `Auth__AllowedGroups__0=BDOM\AcQuire_Uploaders`,
 `Auth__AllowedGroups__1=BDOM\Bek-Test-Group`. The older single key
 `Auth:AllowedGroup` still works and is added to the list.
+
+A group made in Active Directory is written `BDOM\Group`. A local group made
+in Local Users and Groups on the IIS server is written `.\Group` (the API reads
+it as `SERVERNAME\Group`). Writing a local group as `BDOM\…` never matches.
+The current `appsettings.json` uses `.\\Bek-Test-Group`, a local group on the
+server.
 
 With at least one group set, a request without a Windows login gets `401` with
 `WWW-Authenticate: Negotiate`, and a signed-in user in none of the groups gets

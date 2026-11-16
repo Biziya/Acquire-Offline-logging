@@ -14,6 +14,12 @@
       "port": 7047
     },
     {
+      "name": "backend-local-group",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "backend/BackendApi", "--launch-profile", "http", "--", "--Auth:AllowedGroups:0=.\\Bek-Test-Group"],
+      "port": 7047
+    },
+    {
       "name": "backend-not-member",
       "runtimeExecutable": "dotnet",
       "runtimeArgs": ["run", "--project", "backend/BackendApi", "--launch-profile", "http", "--", "--Auth:AllowedGroups:0=BUILTIN\\Backup Operators"],

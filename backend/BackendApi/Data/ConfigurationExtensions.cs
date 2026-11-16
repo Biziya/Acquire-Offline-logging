@@ -22,9 +22,10 @@ public static class ConfigurationExtensions
     public static bool ImpersonatesWindowsUser(this IConfiguration configuration) =>
         configuration.GetValue<bool>(ImpersonateWindowsUserKey);
 
-    // Only members of at least one of these Active Directory groups (e.g.
-    // "BDOM\AcQuire_Uploaders") may use the website; an empty list turns the
-    // check off. See Auth/AllowedGroupAccess and Auth/README.md.
+    // Only members of at least one of these groups may use the website; an
+    // empty list turns the check off. A domain group is written "BDOM\Group";
+    // a local group on the server the API runs on is written ".\Group".
+    // See Auth/AllowedGroupAccess and Auth/README.md.
     public const string AllowedGroupsKey = "Auth:AllowedGroups";
 
     // Older single-group key, still read and merged into the list.
@@ -33,7 +34,8 @@ public static class ConfigurationExtensions
     /// <summary>
     /// The AD groups allowed into the website (Auth:AllowedGroups plus the
     /// older Auth:AllowedGroup), trimmed and without blanks or duplicates.
-    /// Empty when the check is off.
+    /// ".\Group" becomes "{this computer's name}\Group". Empty when the check
+    /// is off.
     /// </summary>
     public static IReadOnlyList<string> GetAllowedGroups(this IConfiguration configuration)
     {
@@ -45,10 +47,17 @@ public static class ConfigurationExtensions
         return groups
             .Select(group => group?.Trim())
             .Where(group => !string.IsNullOrEmpty(group))
-            .Select(group => group!)
+            .Select(group => ToMachineGroup(group!))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
+
+    // A local group is named after its computer ("WEBSRV01\Bek-Test-Group");
+    // ".\" lets the same setting work on any server.
+    private static string ToMachineGroup(string group) =>
+        group.StartsWith(@".\", StringComparison.Ordinal)
+            ? $@"{Environment.MachineName}\{group[2..]}"
+            : group;
 
     /// <summary>
     /// Reads DefaultConnection and fails fast when it is missing.
