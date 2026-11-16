@@ -55,7 +55,7 @@ in `Auth/`, and DBA scripts in `Sql/`. Database access uses
 | `CoreDescrData:Database` | not set | not set | Database for Upload Data and Data Viewer; unset means `DefaultConnection`'s |
 | `CoreDescrData:UseWindowsAuthentication` | `false` | `true` | Upload Data and Data Viewer connect with `Integrated Security=True` |
 | `Database:ImpersonateWindowsUser` | `false` | `false` | Run every database call as the browser user |
-| `Auth:AllowedGroups` | `[]` | `[]` | AD groups allowed to use the website (a member of any one is let in); empty turns the check off |
+| `Auth:AllowedGroups` | `["BDOM\\Bek-Test-Group"]` | `[""]` (check off) | AD groups allowed to use the website (a member of any one is let in); empty turns the check off |
 | `Auth:AllowedGroup` | not set | not set | Older single-group key, still read and added to the list |
 | `UploadData:MaxFileSizeBytes` | not set | not set | Upload size limit, default 10 MB |
 

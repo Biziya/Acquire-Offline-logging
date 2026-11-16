@@ -41,6 +41,13 @@ How the website knows who the user is and decides whether they may use it.
 Each group is written as `DOMAIN\Group`; without the domain Windows cannot
 match it. In JSON the backslash is doubled.
 
+`appsettings.json` lists `BDOM\Bek-Test-Group`. `appsettings.Development.json`
+sets `"AllowedGroups": [ "" ]` to switch the check off for `dotnet run` and the
+tests. An empty `[]` would not do it: .NET merges arrays from settings files by
+position, so an empty array leaves the base file's groups in place. The blank
+entry replaces position 0 and blanks are ignored. If `appsettings.json` ever
+lists more groups, add one `""` per group in the Development file.
+
 ```json
 "Auth": {
   "AllowedGroups": [ "BDOM\\AcQuire_Uploaders", "BDOM\\Bek-Test-Group" ]
