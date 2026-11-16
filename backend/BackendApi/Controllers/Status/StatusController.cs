@@ -44,10 +44,10 @@ public sealed class StatusController : ControllerBase
 
         // Preserve UserName for existing metadata consumers; the display cache
         // also needs the original Windows authority for local accounts. A user
-        // outside the allowed AD group still gets 200 here, so the website can
-        // show who was refused.
-        var allowedGroup = HttpContext.RequestServices?.GetService<IConfiguration>()?.GetAllowedGroup();
-        var isAuthorized = AllowedGroupAccess.IsAllowed(User, allowedGroup);
+        // in none of the allowed AD groups still gets 200 here, so the website
+        // can show who was refused.
+        var allowedGroups = HttpContext.RequestServices?.GetService<IConfiguration>()?.GetAllowedGroups() ?? [];
+        var isAuthorized = AllowedGroupAccess.IsAllowed(User, allowedGroups);
 
         return Ok(new StatusResponse(Online, Message, ToDisplayName(name), name, isAuthorized));
     }

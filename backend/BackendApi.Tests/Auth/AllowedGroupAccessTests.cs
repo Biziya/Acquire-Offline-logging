@@ -2,9 +2,11 @@ using System.Net;
 using System.Security.Claims;
 using System.Text.Json.Nodes;
 using BackendApi.Auth;
+using AppConfig = BackendApi.Data.ConfigurationExtensions;
 using BackendApi.Models.Drillholes;
 using BackendApi.Repositories.Drillholes;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace BackendApi.Tests.Auth;
@@ -20,11 +22,47 @@ public sealed class AllowedGroupAccessTests : IClassFixture<ApiFactory>
         _factory = factory;
     }
 
+    private const string SecondGroup = @"BDOM\Bek-Test-Group";
+
     [Fact]
     public void NoGroupConfiguredAllowsEveryone()
     {
-        Assert.True(AllowedGroupAccess.IsAllowed(new ClaimsPrincipal(), null));
-        Assert.True(AllowedGroupAccess.IsAllowed(null, "  "));
+        Assert.True(AllowedGroupAccess.IsAllowed(new ClaimsPrincipal(), []));
+        Assert.True(AllowedGroupAccess.IsAllowed(null, ["  "]));
+    }
+
+    [Fact]
+    public void MemberOfAnyConfiguredGroupIsAllowed()
+    {
+        var secondGroupMember = new ClaimsPrincipal(new ClaimsIdentity(
+            [new Claim(ClaimTypes.Name, @"BDOM\bek"), new Claim(ClaimTypes.Role, SecondGroup)], "Windows"));
+        var outsider = new ClaimsPrincipal(new ClaimsIdentity(
+            [new Claim(ClaimTypes.Name, @"BDOM\other"), new Claim(ClaimTypes.Role, @"BDOM\Someone_Else")], "Windows"));
+
+        Assert.True(AllowedGroupAccess.IsAllowed(secondGroupMember, [Group, SecondGroup]));
+        Assert.False(AllowedGroupAccess.IsAllowed(outsider, [Group, SecondGroup]));
+    }
+
+    [Fact]
+    public void ConfiguredGroupsMergeBothKeysWithoutBlanksOrDuplicates()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                [$"{AppConfig.AllowedGroupsKey}:0"] = $" {Group} ",
+                [$"{AppConfig.AllowedGroupsKey}:1"] = "",
+                [$"{AppConfig.AllowedGroupsKey}:2"] = SecondGroup,
+                [AppConfig.AllowedGroupKey] = Group.ToLowerInvariant(),
+            })
+            .Build();
+
+        Assert.Equal([Group, SecondGroup], AppConfig.GetAllowedGroups(configuration));
+    }
+
+    [Fact]
+    public void NoKeysMeansNoGroups()
+    {
+        Assert.Empty(AppConfig.GetAllowedGroups(new ConfigurationBuilder().Build()));
     }
 
     [Fact]
@@ -36,9 +74,47 @@ public sealed class AllowedGroupAccessTests : IClassFixture<ApiFactory>
             [new Claim(ClaimTypes.Name, @"BDOM\other")], "Windows"));
         var anonymous = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Role, Group)]));
 
-        Assert.True(AllowedGroupAccess.IsAllowed(member, Group));
-        Assert.False(AllowedGroupAccess.IsAllowed(outsider, Group));
-        Assert.False(AllowedGroupAccess.IsAllowed(anonymous, Group));
+        Assert.True(AllowedGroupAccess.IsAllowed(member, [Group]));
+        Assert.False(AllowedGroupAccess.IsAllowed(outsider, [Group]));
+        Assert.False(AllowedGroupAccess.IsAllowed(anonymous, [Group]));
+    }
+
+    [Fact]
+    public async Task MemberOfTheSecondGroupCanReadData()
+    {
+        var response = await Send([Group, SecondGroup], "/api/drillholes", @"BDOM\bek", SecondGroup);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task UserInNoneOfTheGroupsIsForbidden()
+    {
+        var response = await Send([Group, SecondGroup], "/api/drillholes", @"BDOM\other", @"BDOM\Someone_Else");
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task OlderSingleGroupKeyStillWorks()
+    {
+        var client = _factory
+            .WithWebHostBuilder(builder =>
+            {
+                builder.UseSetting(AppConfig.AllowedGroupKey, Group);
+                builder.UseSetting(AppConfig.ImpersonateWindowsUserKey, "false");
+                builder.ConfigureTestServices(services =>
+                    services.AddSingleton<IDrillholeRepository>(new EmptyDrillholes()));
+            })
+            .CreateClient();
+
+        var request = new HttpRequestMessage(HttpMethod.Get, "/api/drillholes");
+        request.Headers.Add(TestAuthHandler.UserHeader, @"BDOM\other");
+        request.Headers.Add(TestAuthHandler.GroupsHeader, @"BDOM\Someone_Else");
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
     [Fact]
@@ -111,13 +187,20 @@ public sealed class AllowedGroupAccessTests : IClassFixture<ApiFactory>
         Assert.True(body["isAuthorized"]!.GetValue<bool>());
     }
 
-    private Task<HttpResponseMessage> Send(string allowedGroup, string path, string? userName, string? groups)
+    private Task<HttpResponseMessage> Send(string allowedGroup, string path, string? userName, string? groups) =>
+        Send(allowedGroup.Length == 0 ? [] : [allowedGroup], path, userName, groups);
+
+    private Task<HttpResponseMessage> Send(string[] allowedGroups, string path, string? userName, string? groups)
     {
         var client = _factory
             .WithWebHostBuilder(builder =>
             {
-                builder.UseSetting(BackendApi.Data.ConfigurationExtensions.AllowedGroupKey, allowedGroup);
-                builder.UseSetting(BackendApi.Data.ConfigurationExtensions.ImpersonateWindowsUserKey, "false");
+                for (var index = 0; index < allowedGroups.Length; index++)
+                {
+                    builder.UseSetting($"{AppConfig.AllowedGroupsKey}:{index}", allowedGroups[index]);
+                }
+
+                builder.UseSetting(AppConfig.ImpersonateWindowsUserKey, "false");
                 builder.ConfigureTestServices(services =>
                     services.AddSingleton<IDrillholeRepository>(new EmptyDrillholes()));
             })

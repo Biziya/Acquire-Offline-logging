@@ -10,13 +10,13 @@
     {
       "name": "backend-group-member",
       "runtimeExecutable": "dotnet",
-      "runtimeArgs": ["run", "--project", "backend/BackendApi", "--launch-profile", "http", "--", "--Auth:AllowedGroup=BUILTIN\\Users"],
+      "runtimeArgs": ["run", "--project", "backend/BackendApi", "--launch-profile", "http", "--", "--Auth:AllowedGroups:0=BUILTIN\\Users"],
       "port": 7047
     },
     {
       "name": "backend-not-member",
       "runtimeExecutable": "dotnet",
-      "runtimeArgs": ["run", "--project", "backend/BackendApi", "--launch-profile", "http", "--", "--Auth:AllowedGroup=BUILTIN\\Backup Operators"],
+      "runtimeArgs": ["run", "--project", "backend/BackendApi", "--launch-profile", "http", "--", "--Auth:AllowedGroups:0=BUILTIN\\Backup Operators"],
       "port": 7047
     }
   ]

@@ -52,11 +52,11 @@ function UploadDataIcon() {
 function ToggleIcon({ collapsed }: { collapsed: boolean }) {
   return (
     <svg
-      className={ICON}
+      className="size-7 shrink-0"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="2"
+      strokeWidth="2.5"
       aria-hidden="true"
     >
       <path d={collapsed ? "m9 6 6 6-6 6" : "m15 6-6 6 6 6"} />
@@ -101,17 +101,17 @@ function Sidebar() {
       data-collapsed={collapsed}
     >
       <div
-        className={`flex h-10 items-center py-1.5 ${
+        className={`flex h-12 items-center py-1 ${
           collapsed ? "justify-center px-1.5" : "justify-between px-2"
         }`}
       >
         {!collapsed && (
-          <span className="min-w-0 overflow-hidden text-[0.875rem] font-bold text-ellipsis whitespace-nowrap text-white">
+          <span className="min-w-0 overflow-hidden text-base font-bold text-ellipsis whitespace-nowrap text-white">
             {uiConfig.appName}
           </span>
         )}
         <button
-          className={`flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-ui border-0 bg-transparent text-rl-side-muted hover:bg-rl-side-hover hover:text-white ${SIDE_FOCUS}`}
+          className={`flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-ui border-0 bg-transparent text-rl-side-muted hover:bg-rl-side-hover hover:text-white ${SIDE_FOCUS}`}
           type="button"
           onClick={() => setCollapsed((current) => !current)}
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}

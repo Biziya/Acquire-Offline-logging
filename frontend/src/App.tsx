@@ -9,7 +9,7 @@ import AccessDenied from "./pages/AccessDenied/AccessDenied";
 import { useAccessCheck } from "./hooks/useAccessCheck";
 
 // The root and any unknown address open Raw Litho.
-// Only members of the allowed AD group see the app (services/websiteAccess.ts).
+// Only members of an allowed AD group see the app (services/websiteAccess.ts).
 function App() {
   const { access, retry } = useAccessCheck();
 

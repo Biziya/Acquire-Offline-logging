@@ -60,10 +60,11 @@ cd backend/BackendApi && dotnet test ../BackendApi.Tests
 
 ## Website access
 
-Only members of one Active Directory group can use the website. The group is
-set on the server in `Auth:AllowedGroup` (for example in
-`appsettings.Production.json` or as the `Auth__AllowedGroup` environment
-variable in IIS). Users outside the group get an Access denied page, and the
-API answers their requests with `403`. Leaving the setting blank turns the
-check off. Details are in
-[Website access by AD group](backend/BackendApi/README.md#website-access-by-ad-group-authallowedgroup).
+Only members of the allowed Active Directory groups can use the website; a
+member of any one of them is let in. The groups are set on the server in
+`Auth:AllowedGroups` (for example in `appsettings.Production.json`, or as the
+`Auth__AllowedGroups__0`, `Auth__AllowedGroups__1`, … environment variables in
+IIS). Users in none of the groups get an Access denied page, and the API
+answers their requests with `403`. An empty list turns the check off. Details
+are in [Website access by AD group](backend/BackendApi/README.md#website-access-by-ad-group-authallowedgroups),
+and the whole sign-in flow is in [Auth/README.md](backend/BackendApi/Auth/README.md).

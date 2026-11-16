@@ -57,26 +57,26 @@ builder.Services
 builder.Services.AddAuthorization();
 
 // Every endpoint not marked [AllowAnonymous] (status) needs a Windows user when
-// database calls run as that user, or when Auth:AllowedGroup limits the website
-// to one AD group: anonymous calls get 401 + WWW-Authenticate: Negotiate, and
-// a signed-in user outside the group gets 403. Read when the options are
-// built, so test settings apply.
+// database calls run as that user, or when Auth:AllowedGroups limits the
+// website to AD groups: anonymous calls get 401 + WWW-Authenticate: Negotiate,
+// and a signed-in user in none of the groups gets 403. Read when the options
+// are built, so test settings apply. See Auth/README.md.
 builder.Services
     .AddOptions<AuthorizationOptions>()
     .Configure<IConfiguration>((options, configuration) =>
     {
-        var allowedGroup = configuration.GetAllowedGroup();
+        var allowedGroups = configuration.GetAllowedGroups();
 
-        if (!configuration.ImpersonatesWindowsUser() && allowedGroup is null)
+        if (!configuration.ImpersonatesWindowsUser() && allowedGroups.Count == 0)
         {
             return;
         }
 
         var policy = new AuthorizationPolicyBuilder().RequireAuthenticatedUser();
 
-        if (allowedGroup is not null)
+        if (allowedGroups.Count > 0)
         {
-            policy.RequireAssertion(context => AllowedGroupAccess.IsAllowed(context.User, allowedGroup));
+            policy.RequireAssertion(context => AllowedGroupAccess.IsAllowed(context.User, allowedGroups));
         }
 
         options.FallbackPolicy = policy.Build();
@@ -120,23 +120,25 @@ catch (Exception exception) when (exception is InvalidOperationException or Argu
     app.Logger.LogError(exception, "The CoreDescrData connection string is missing or invalid.");
 }
 
-// Website access by AD group. Blank is fine for local development, but outside
+// Website access by AD group. Empty is fine for local development, but outside
 // it every Windows user could use the website.
-var allowedGroup = app.Configuration.GetAllowedGroup();
+var allowedGroups = app.Configuration.GetAllowedGroups();
 
-if (allowedGroup is not null)
+if (allowedGroups.Count > 0)
 {
-    app.Logger.LogInformation("Website access limited to AD group {AllowedGroup}", allowedGroup);
+    app.Logger.LogInformation(
+        "Website access limited to members of any of these AD groups: {AllowedGroups}",
+        string.Join(", ", allowedGroups));
 }
 else if (app.Environment.IsDevelopment())
 {
-    app.Logger.LogWarning("{Key} is not set: AD group access check is off.", BackendApi.Data.ConfigurationExtensions.AllowedGroupKey);
+    app.Logger.LogWarning("{Key} is empty: AD group access check is off.", BackendApi.Data.ConfigurationExtensions.AllowedGroupsKey);
 }
 else
 {
     app.Logger.LogError(
-        "{Key} is not set: AD group access check is OFF, so any user can use the website. Set it to the allowed group, e.g. BDOM\\AcQuire_Uploaders.",
-        BackendApi.Data.ConfigurationExtensions.AllowedGroupKey);
+        "{Key} is empty: AD group access check is OFF, so any user can use the website. Add the allowed groups, e.g. [\"BDOM\\\\AcQuire_Uploaders\"].",
+        BackendApi.Data.ConfigurationExtensions.AllowedGroupsKey);
 }
 
 // ============================================

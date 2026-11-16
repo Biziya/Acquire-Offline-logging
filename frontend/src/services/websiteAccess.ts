@@ -3,8 +3,9 @@ import { getVerifiedWindowsIdentity } from "./currentUser";
 import { readValue, SESSION_STORE, writeValue } from "./IndexDB/rawLithoDatabase";
 
 /*
- * Whether the signed-in Windows user may use the website: only members of the
- * backend's Auth:AllowedGroup AD group (e.g. BDOM\AcQuire_Uploaders).
+ * Whether the signed-in Windows user may use the website: only members of at
+ * least one of the backend's Auth:AllowedGroups AD groups (e.g.
+ * BDOM\AcQuire_Uploaders, BDOM\Bek-Test-Group).
  *
  * The backend decides and enforces it (every API call from a non-member is
  * 403); this only chooses what the website shows. The answer comes from

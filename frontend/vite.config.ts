@@ -9,7 +9,7 @@ export default defineConfig(({ mode }) => {
   /*
    * Windows Integrated Authentication (NTLM) authenticates a connection, not
    * a request: its handshake must reach the backend over one socket. With
-   * Auth:AllowedGroup (or Database:ImpersonateWindowsUser) every API needs the
+   * Auth:AllowedGroups (or Database:ImpersonateWindowsUser) every API needs the
    * Windows user, not only /api/status?includeUser=true, so this dev-only
    * agent keeps a single upstream connection alive for all of /api.
    */

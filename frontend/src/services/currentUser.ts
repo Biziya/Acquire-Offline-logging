@@ -37,8 +37,8 @@ export interface VerifiedWindowsIdentity {
   userName: string;
   fullUsername: string;
   /*
-   * Whether this user may use the website (member of the backend's
-   * Auth:AllowedGroup AD group). A backend that does not report it has no
+   * Whether this user may use the website (member of any of the backend's
+   * Auth:AllowedGroups AD groups). A backend that does not report it has no
    * group check, so a missing field means true.
    */
   isAuthorized: boolean;

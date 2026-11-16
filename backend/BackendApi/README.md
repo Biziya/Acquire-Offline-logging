@@ -55,7 +55,8 @@ in `Auth/`, and DBA scripts in `Sql/`. Database access uses
 | `CoreDescrData:Database` | not set | not set | Database for Upload Data and Data Viewer; unset means `DefaultConnection`'s |
 | `CoreDescrData:UseWindowsAuthentication` | `false` | `true` | Upload Data and Data Viewer connect with `Integrated Security=True` |
 | `Database:ImpersonateWindowsUser` | `false` | `false` | Run every database call as the browser user |
-| `Auth:AllowedGroup` | `""` | `""` | AD group allowed to use the website; blank turns the check off |
+| `Auth:AllowedGroups` | `[]` | `[]` | AD groups allowed to use the website (a member of any one is let in); empty turns the check off |
+| `Auth:AllowedGroup` | not set | not set | Older single-group key, still read and added to the list |
 | `UploadData:MaxFileSizeBytes` | not set | not set | Upload size limit, default 10 MB |
 
 `GetRequiredConnectionString()` in `Data/ConfigurationExtensions.cs` reads
@@ -106,24 +107,36 @@ Do not set `ASPNETCORE_ENVIRONMENT=Development` or
 `CoreDescrData__UseWindowsAuthentication=true` there. Recycle the app pool
 afterwards.
 
-### Website access by AD group (`Auth:AllowedGroup`)
+### Website access by AD group (`Auth:AllowedGroups`)
 
-Set the group on the server, for example `BDOM\AcQuire_Uploaders`, either in
-`appsettings.Production.json` as `"Auth": { "AllowedGroup": "BDOM\\AcQuire_Uploaders" }`
-or as the IIS environment variable `Auth__AllowedGroup=BDOM\AcQuire_Uploaders`.
+Set the groups on the server, each as `DOMAIN\Group`, either in
+`appsettings.Production.json`:
 
-With a group set, a request without a Windows login gets `401` with
-`WWW-Authenticate: Negotiate`, and a signed-in user outside the group gets
-`403`. Nested groups count. `GET /api/status` stays anonymous, and
+```json
+"Auth": {
+  "AllowedGroups": [ "BDOM\\AcQuire_Uploaders", "BDOM\\Bek-Test-Group" ]
+}
+```
+
+or as IIS environment variables, one per group:
+`Auth__AllowedGroups__0=BDOM\AcQuire_Uploaders`,
+`Auth__AllowedGroups__1=BDOM\Bek-Test-Group`. The older single key
+`Auth:AllowedGroup` still works and is added to the list.
+
+With at least one group set, a request without a Windows login gets `401` with
+`WWW-Authenticate: Negotiate`, and a signed-in user in none of the groups gets
+`403`. A member of any one group is let in. Nested groups count. `GET /api/status` stays anonymous, and
 `GET /api/status?includeUser=true` returns `200` with `"isAuthorized": true`
 or `false`.
 
 Membership comes from the Windows login token (`User.IsInRole`), so a user
-just added to or removed from the group must sign out of Windows and back in.
-If Windows cannot resolve the group, access is refused. The frontend
-(`frontend/src/services/websiteAccess.ts`) shows an Access denied page, but
-the backend enforces access. When the key is blank the API logs a warning in
-Development and an error elsewhere.
+just added to or removed from a group must sign out of Windows and back in.
+A group Windows cannot resolve grants nobody access; the other groups are
+still checked. The frontend (`frontend/src/services/websiteAccess.ts`) shows
+an Access denied page, but the backend enforces access. At startup the API
+logs the groups in effect; when the list is empty it logs a warning in
+Development and an error elsewhere. The full flow, with diagrams, is in
+[Auth/README.md](Auth/README.md).
 
 ## Windows authentication
 
@@ -133,7 +146,7 @@ The API uses Negotiate (Kerberos or NTLM).
   and `WWW-Authenticate: Negotiate`. The browser then signs in as the current
   Windows user and the response adds the name.
 - `POST /api/upload-data` always requires a Windows user.
-- The other routes are anonymous unless `Auth:AllowedGroup` or
+- The other routes are anonymous unless `Auth:AllowedGroups` or
   `Database:ImpersonateWindowsUser` is set. Then every route except
   `GET /api/status` requires a Windows user.
 

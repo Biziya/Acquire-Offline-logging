@@ -22,15 +22,32 @@ public static class ConfigurationExtensions
     public static bool ImpersonatesWindowsUser(this IConfiguration configuration) =>
         configuration.GetValue<bool>(ImpersonateWindowsUserKey);
 
-    // Only members of this Active Directory group (e.g. "BDOM\AcQuire_Uploaders")
-    // may use the website; blank turns the check off. See Auth/AllowedGroupAccess.
+    // Only members of at least one of these Active Directory groups (e.g.
+    // "BDOM\AcQuire_Uploaders") may use the website; an empty list turns the
+    // check off. See Auth/AllowedGroupAccess and Auth/README.md.
+    public const string AllowedGroupsKey = "Auth:AllowedGroups";
+
+    // Older single-group key, still read and merged into the list.
     public const string AllowedGroupKey = "Auth:AllowedGroup";
 
-    /// <summary>The AD group allowed into the website, or null when the check is off.</summary>
-    public static string? GetAllowedGroup(this IConfiguration configuration)
+    /// <summary>
+    /// The AD groups allowed into the website (Auth:AllowedGroups plus the
+    /// older Auth:AllowedGroup), trimmed and without blanks or duplicates.
+    /// Empty when the check is off.
+    /// </summary>
+    public static IReadOnlyList<string> GetAllowedGroups(this IConfiguration configuration)
     {
-        var group = configuration[AllowedGroupKey]?.Trim();
-        return string.IsNullOrEmpty(group) ? null : group;
+        var groups = configuration.GetSection(AllowedGroupsKey)
+            .GetChildren()
+            .Select(child => child.Value)
+            .Append(configuration[AllowedGroupKey]);
+
+        return groups
+            .Select(group => group?.Trim())
+            .Where(group => !string.IsNullOrEmpty(group))
+            .Select(group => group!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     /// <summary>
