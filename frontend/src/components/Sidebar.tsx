@@ -32,6 +32,24 @@ function RawLithoIcon() {
   );
 }
 
+function RawExtractionIcon() {
+  return (
+    <svg
+      className={ICON}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      aria-hidden="true"
+    >
+      <path d="M12 2v5" />
+      <path d="M8 7h8v4H8z" />
+      <path d="M9 11h6v11H9z" />
+      <path d="M9 15h6M9 19h6" />
+    </svg>
+  );
+}
+
 function UploadDataIcon() {
   return (
     <svg
@@ -134,6 +152,15 @@ function Sidebar() {
         >
           <RawLithoIcon />
           {!collapsed && <span className={LABEL}>Raw Litho</span>}
+        </NavLink>
+
+        <NavLink
+          to="/raw-extraction"
+          className={linkClassName}
+          aria-label={collapsed ? "Raw Extraction" : undefined}
+        >
+          <RawExtractionIcon />
+          {!collapsed && <span className={LABEL}>Raw Extraction</span>}
         </NavLink>
 
         <NavLink

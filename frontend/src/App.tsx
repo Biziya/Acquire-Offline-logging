@@ -3,6 +3,7 @@ import Sidebar from "./components/Sidebar";
 import KeyboardShortcuts from "./components/KeyboardShortcuts";
 import NewYearGreeting from "./components/NewYearGreeting/NewYearGreeting";
 import RawLitho from "./pages/RawLitho/RawLitho";
+import RawExtraction from "./pages/RawExtraction/RawExtraction";
 import UploadData from "./pages/UploadData/UploadData";
 import DatabaseViewer from "./pages/DatabaseViewer/DatabaseViewer";
 import AccessDenied from "./pages/AccessDenied/AccessDenied";
@@ -26,6 +27,7 @@ function App() {
         <NewYearGreeting />
         <Routes>
           <Route path="/raw-litho" element={<RawLitho />} />
+          <Route path="/raw-extraction" element={<RawExtraction />} />
           <Route path="/database-viewer" element={<DatabaseViewer />} />
           <Route path="/upload-data" element={<UploadData />} />
           <Route path="*" element={<Navigate to="/raw-litho" replace />} />

@@ -36,6 +36,7 @@ src/
 ├── other/              sample JSON export, kept for reference, not imported
 ├── pages/
 │   ├── RawLitho/       data entry (own README)
+│   ├── RawExtraction/  core runs of one drillhole, sample data for now (own README)
 │   ├── UploadData/     check and upload an exported JSON file (own README)
 │   ├── DatabaseViewer/ read-only stored records of one drillhole (own README)
 │   └── AccessDenied/   shown instead of the app when access is denied or unverified
@@ -48,6 +49,7 @@ src/
 ```
 
 Page READMEs: [Raw Litho](pages/RawLitho/README.md),
+[Raw Extraction](pages/RawExtraction/README.md),
 [Upload Data](pages/UploadData/README.md),
 [Database Viewer](pages/DatabaseViewer/README.md),
 [services](services/README.md).
@@ -57,6 +59,7 @@ Page READMEs: [Raw Litho](pages/RawLitho/README.md),
 | Route | Component |
 | --- | --- |
 | `/raw-litho` | `pages/RawLitho/RawLitho.tsx` |
+| `/raw-extraction` | `pages/RawExtraction/RawExtraction.tsx` |
 | `/upload-data` | `pages/UploadData/UploadData.tsx` |
 | `/database-viewer` | `pages/DatabaseViewer/DatabaseViewer.tsx` |
 | `/` and anything else | redirects to `/raw-litho` |

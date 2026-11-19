@@ -1,0 +1,11 @@
+# Raw Extraction page settings. Values only; behaviour stays in TypeScript.
+# Read once when the page module loads (config.ts); a bad value stops start-up
+# with the file and key in the error.
+#
+# Row height and minimum width come from RawLitho/config.yaml so the tables
+# look the same. Columns are in rawExtractionColumns.ts.
+
+title: "Raw Extraction"
+
+table:
+  overscan: 12           # rows rendered above and below the visible window

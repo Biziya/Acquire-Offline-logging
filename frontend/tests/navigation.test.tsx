@@ -10,6 +10,7 @@ stubDesktopViewport();
 
 // The pages themselves are tested elsewhere; here only which one opens.
 vi.mock("../src/pages/RawLitho/RawLitho", () => ({ default: () => <h1>Raw Litho page</h1> }));
+vi.mock("../src/pages/RawExtraction/RawExtraction", () => ({ default: () => <h1>Raw Extraction page</h1> }));
 vi.mock("../src/pages/DatabaseViewer/DatabaseViewer", () => ({ default: () => <h1>Database Viewer page</h1> }));
 vi.mock("../src/pages/UploadData/UploadData", () => ({ default: () => <h1>Upload Data page</h1> }));
 vi.mock("../src/components/StatusIndicator", () => ({ default: () => null }));
@@ -31,16 +32,16 @@ function renderAt(path: string) {
 }
 
 describe("Application navigation", () => {
-  it("is branded AcQuire WEB and lists the three pages without Home", () => {
+  it("is branded AcQuire WEB and lists the four pages without Home", () => {
     renderAt("/raw-litho");
 
     expect(uiConfig.appName).toBe("AcQuire WEB");
     expect(screen.getByText("AcQuire WEB")).toBeInTheDocument();
     const links = screen.getAllByRole("link").map((link) => link.textContent);
-    expect(links).toEqual(["Raw Litho", "Database Viewer", "Upload Data"]);
+    expect(links).toEqual(["Raw Litho", "Raw Extraction", "Database Viewer", "Upload Data"]);
     expect(screen.getByRole("link", { name: "Raw Litho" })).toHaveClass("bg-rl-side-hover");
     expect(screen.getByText("AcQuire WEB")).toHaveClass("font-bold");
-    for (const name of ["Raw Litho", "Database Viewer", "Upload Data"]) {
+    for (const name of ["Raw Litho", "Raw Extraction", "Database Viewer", "Upload Data"]) {
       const link = screen.getByRole("link", { name });
       expect(link.querySelector("span")).toHaveClass("font-semibold");
       expect(link.querySelector("svg")).toHaveClass("size-5");
@@ -57,5 +58,10 @@ describe("Application navigation", () => {
   it("keeps the other routes", () => {
     renderAt("/database-viewer");
     expect(screen.getByRole("heading", { name: "Database Viewer page" })).toBeInTheDocument();
+  });
+
+  it("opens Raw Extraction at its route", () => {
+    renderAt("/raw-extraction");
+    expect(screen.getByRole("heading", { name: "Raw Extraction page" })).toBeInTheDocument();
   });
 });

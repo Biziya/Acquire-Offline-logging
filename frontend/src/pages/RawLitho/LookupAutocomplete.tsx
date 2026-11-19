@@ -18,7 +18,8 @@ import { useAnchoredMenuStyle } from "../../components/useAnchoredMenuStyle";
 
 interface LookupAutocompleteProps {
   rowIndex: number;
-  lookup: LookupDefinition;
+  // Only what the cell uses, so other pages can pass their own lists.
+  lookup: Omit<LookupDefinition, "fieldKey"> & { fieldKey?: string };
   records: readonly LookupRecord[];
   value: string;
   onValueChange: (value: string) => void;

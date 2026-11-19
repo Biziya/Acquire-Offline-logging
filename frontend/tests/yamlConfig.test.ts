@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import rawLithoText from "../src/pages/RawLitho/config.yaml?raw";
 import uploadDataText from "../src/pages/UploadData/config.yaml?raw";
 import databaseViewerText from "../src/pages/DatabaseViewer/config.yaml?raw";
+import rawExtractionText from "../src/pages/RawExtraction/config.yaml?raw";
 import { rawLithoConfig, readRawLithoConfig } from "../src/pages/RawLitho/config";
 import { readUploadDataConfig } from "../src/pages/UploadData/config";
 import { readDatabaseViewerConfig } from "../src/pages/DatabaseViewer/config";
+import { readRawExtractionConfig } from "../src/pages/RawExtraction/config";
 import {
   INDEX_COLUMN_WIDTH,
   tableColumns,
@@ -25,6 +27,10 @@ describe("YAML page configuration", () => {
     });
     expect(readDatabaseViewerConfig(databaseViewerText)).toEqual({
       title: "Database Viewer",
+      overscan: 12,
+    });
+    expect(readRawExtractionConfig(rawExtractionText)).toEqual({
+      title: "Raw Extraction",
       overscan: 12,
     });
   });
