@@ -126,10 +126,16 @@ option list once per lookup and only listen for events while open.
 
 ### Save JSON
 
-Save JSON, at the bottom right, first checks every lookup code against its list
-and every row against the conditional rules. If either fails it stops with a
-warning (for a rule, one that names the row, such as "Row 4: CA is required for
-this Litho code."). Then it updates `modified_at`, writes the draft to
+Save JSON, at the bottom right, first checks, in this order:
+1. every row is a finished interval: required cells filled, both depths valid,
+   From strictly below To (`findFirstIncompleteRow()`);
+2. every lookup code is in its list (a list that could not be loaded is
+   skipped, as on import; Upload Data checks those codes again);
+3. no intervals overlap;
+4. every row meets the conditional rules.
+
+If a check fails, Save stops with a warning that names the row, such as
+"Row 4: CA is required for this Litho code.". Then it updates `modified_at`, writes the draft to
 IndexedDB, and downloads `<drillhole>.json`. If the write fails, the download
 still runs and the draft stays queued for retry.
 
@@ -229,7 +235,10 @@ uses the same function.
 | 3 | Redox is `O` `Y` `lY` `lGrB` `GnRd` `BrGn` | OX is required |
 | 4 | Redox is `Bl` `dGn` `Gr` `WGr` `GrGn` `GnGr` | OX must be empty |
 
-Codes match exactly (case-sensitive, surrounding spaces ignored). The cell that
+Codes match exactly (case-sensitive, surrounding spaces ignored). Typed,
+pasted and imported codes are stored as their list spells them
+(`canonicalizeLookupCodes()` on import), so an imported `01m` is checked as
+`01M`. The cell that
 must change turns red and its tooltip gives the message. The page never fills
 in or clears a value for you. A broken rule does not stop editing or autosave;
 it only blocks Save JSON. Upload Data treats it as a blocking error.
@@ -299,7 +308,9 @@ rectangle around the selection, with unselected cells left blank. Paste takes
 tab and newline separated text, such as a block from Excel. A single cell
 receives the block at its top-left corner, one value fills every selected
 cell, a selection of the same shape maps cell for cell, and any other shape is
-rejected.
+rejected. A quoted Excel cell (one holding a line break, tab or quote) is read
+as one value. A depth is a plain non-negative decimal; a decimal comma
+(`12,5`) is read as `12.5`, while hex, exponents and signs are refused.
 
 A paste is all or nothing. It is rejected, and no cell changes, if it runs past
 the last row or column (paste never adds rows), touches a disabled cell, puts

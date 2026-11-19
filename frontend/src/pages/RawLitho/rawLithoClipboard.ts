@@ -1,7 +1,7 @@
 import type { LookupData, RawLithoRow, RowField } from "../../types/domain";
 import { RAW_LITHO_LOOKUP_BY_FIELD } from "../../services/rawLithoLookupConfig";
 import { COMMENT_FIELD_KEYS, tableColumns } from "./constants";
-import { isValidDepth, normalizeLookupCode } from "./rawLithoValidation";
+import { normalizeLookupCode, toDepthText } from "./rawLithoValidation";
 import { normalizeFieldValue } from "./rawLithoHelpers";
 import * as shared from "../../components/dataTable/tableSelection";
 
@@ -126,14 +126,72 @@ export function buildClipboardText(rows: RawLithoRow[], selection: CellRef[]) {
   ).join("\n");
 }
 
-/* Rows of cells: newlines separate rows, tabs separate columns. */
+/*
+ * Rows of cells: newlines separate rows, tabs separate columns.
+ *
+ * Excel wraps a cell holding a line break, tab or quote in double quotes and
+ * doubles the quotes inside ("a ""b""" is a "b"). Such a cell is read as one
+ * value, so a multi-line comment does not split into extra rows. A quote that
+ * does not start a cell is plain text.
+ */
 export function parseClipboardText(text: string) {
-  const lines = text.replace(/\r\n?/g, "\n").split("\n");
+  const source = text.replace(/\r\n?/g, "\n");
+  const grid: string[][] = [];
+  let row: string[] = [];
+  let index = 0;
+
+  while (index <= source.length) {
+    let value = "";
+
+    if (source[index] === '"' && hasClosingQuote(source, index)) {
+      index += 1;
+      for (;;) {
+        const quote = source.indexOf('"', index);
+        value += source.slice(index, quote);
+        index = quote + 1;
+        if (source[index] !== '"') break;
+        value += '"';
+        index += 1;
+      }
+    } else {
+      let end = index;
+      while (end < source.length && source[end] !== "\t" && source[end] !== "\n") end += 1;
+      value = source.slice(index, end);
+      index = end;
+    }
+
+    row.push(value);
+    const separator = source[index];
+    index += 1;
+    if (separator !== "\t") {
+      grid.push(row);
+      row = [];
+    }
+  }
 
   // Excel ends a copied range with a line break.
-  if (lines.length > 1 && lines[lines.length - 1] === "") lines.pop();
+  const last = grid[grid.length - 1];
+  if (grid.length > 1 && last?.length === 1 && last[0] === "") grid.pop();
 
-  return lines.map((line) => line.split("\t"));
+  return grid;
+}
+
+/*
+ * Whether the quote at `start` opens a quoted cell: a closing quote follows
+ * that ends the cell (then a tab, a line break or the end of the text).
+ */
+function hasClosingQuote(source: string, start: number) {
+  let index = start + 1;
+  for (;;) {
+    const quote = source.indexOf('"', index);
+    if (quote === -1) return false;
+    if (source[quote + 1] === '"') {
+      index = quote + 2;
+      continue;
+    }
+    const next = source[quote + 1];
+    return next === undefined || next === "\t" || next === "\n";
+  }
 }
 
 export function isTabularClipboard(grid: string[][]) {
@@ -180,7 +238,8 @@ function toCellValue(columnKey: RowField, text: string, lookupData: LookupData) 
     (column) => column.key === columnKey && column.type === "number",
   );
 
-  return isNumber && value !== "" && !isValidDepth(value) ? null : value;
+  if (!isNumber || value === "") return value;
+  return toDepthText(value);
 }
 
 function buildEdit(

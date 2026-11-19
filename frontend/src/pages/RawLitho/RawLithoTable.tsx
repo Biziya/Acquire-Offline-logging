@@ -10,6 +10,7 @@ import type {
 import { useCallback, useDeferredValue, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import RawLithoRow from "./RawLithoRow";
+import RawLithoDraftStatusBanner from "./RawLithoDraftStatusBanner";
 import { useRawLithoShortcuts } from "./hooks/useRawLithoShortcuts";
 import { useRawLithoRowFocus } from "./hooks/useRawLithoRowFocus";
 import {
@@ -550,6 +551,7 @@ function RawLithoTable({
   return (
     <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col">
       {deleteDialog}
+      <RawLithoDraftStatusBanner />
       <SelectionBar
         cellCount={selectedCells.length}
         rowCount={selectedRowCount}

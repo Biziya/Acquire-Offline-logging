@@ -2,7 +2,7 @@ import type { ImportWriteOptions } from "../../services/IndexDB/rawLithoSaveQueu
 import { rawLithoSaveQueue } from "../../services/IndexDB/rawLithoSaveQueue";
 import type { ImportPlan, ImportResult, LookupData } from "../../types/domain";
 import { readRawLithoImport } from "./rawLithoHelpers";
-import { hasInvalidLookupValues } from "./rawLithoValidation";
+import { canonicalizeLookupCodes, hasInvalidLookupValues } from "./rawLithoValidation";
 import {
   buildRawLithoDraftKey,
   readRawLithoDraft,
@@ -17,7 +17,13 @@ export async function prepareRawLithoImport(
   file: File,
   lookupData: LookupData,
 ): Promise<ImportPlan> {
-  const importedDocument = await readRawLithoImport(file);
+  const readDocument = await readRawLithoImport(file);
+  // Codes are stored as their list spells them, so the conditional rules
+  // (which compare exactly) see "01M" for an imported "01m".
+  const importedDocument = {
+    ...readDocument,
+    rows: canonicalizeLookupCodes(readDocument.rows, lookupData),
+  };
   // readRawLithoImport already rejects a file without a drillhole.
   const draftKey = buildRawLithoDraftKey(importedDocument.drillhole) ?? "";
 

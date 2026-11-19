@@ -1,10 +1,32 @@
 using System.Text.Json.Nodes;
+using BackendApi.Controllers.UploadData;
+using BackendApi.Models.TableConstants;
+using BackendApi.Repositories.TableConstants;
 
 namespace BackendApi.Tests.UploadData;
 
 /// <summary>Documents in the app's export format, built fresh for each test.</summary>
 internal static class TestDocuments
 {
+    /// <summary>
+    /// QV_VS_LOOKUP_RO rows holding the codes <see cref="Row"/> uses, plus one
+    /// more code per list.
+    /// </summary>
+    public static TableConstantsResponse LookupLists() => TableConstantsRepository.Group(
+    [
+        new("LithoFacies", "0--", "Unknown"), new("LithoFacies", "SS", "Sandstone"),
+        new("Colour", "10G4/2", "Greenish grey"),
+        new("RedoxFacies", "0042_MN1", "Reduced"),
+        new("Min1Qty", "1", null),
+        new("Min2Qty", "2", null),
+        new("OM_Facies", "A", null),
+        new("Min3Qty", "N", null),
+        new("Min4Qty", "Y", null),
+        new("InternalStructure", "LAM", null)
+    ]);
+
+    public static UploadLookups Lookups { get; } = UploadLookups.From(LookupLists());
+
     public static JsonObject Valid() => new()
     {
         ["project"] = "ZOOVCH",
@@ -20,7 +42,7 @@ internal static class TestDocuments
     /// reference payload, field for field.
     /// </summary>
     public const string ValidStoredProcedureJson =
-        """{"project":"ZOOVCH","drillhole":"GTZO_0001_1","rows":[{"lithoFrom":5,"lithoTo":10,"lithoCode":"0--","colorCode":"10G4/2","redoxCode":"0042_MN1","ca":"","om":"","ox":"","sedim":"","granulo":"","hardness":"","lithologyComments":""}]}""";
+        """{"project":"ZOOVCH","drillhole":"GTZO_0001_1","rows":[{"lithoFrom":5,"lithoTo":10,"lithoCode":"0--","colorCode":"10G4/2","redoxCode":"0042_MN1","ca":"","om":"","omFacies":"","py":"","ox":"","sedim":"","granulo":"","hardness":"","lithologyComments":""}]}""";
 
     /// <summary>A valid document with intervals 0–5, 5–10, … as numeric strings.</summary>
     public static JsonObject WithRows(int count)

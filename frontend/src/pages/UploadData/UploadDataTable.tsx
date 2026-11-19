@@ -2,6 +2,7 @@ import type { Notify, RowField } from "../../types/domain";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { isRecord } from "../../types/validation";
+import { DEPTH_FIELDS } from "../../types/rawLithoSchema";
 import { canLeaveCell, isKeyAlreadyHandled, markKeyAsHandled } from "../RawLitho/tableNavigation";
 import { parseClipboardText } from "../RawLitho/rawLithoClipboard";
 import LookupAutocomplete from "../RawLitho/LookupAutocomplete";
@@ -101,6 +102,28 @@ function getCellPosition(target: EventTarget | null): CellPosition | null {
     : { position, column };
 }
 
+interface DepthDraft {
+  rowIndex: number;
+  field: RowField;
+  text: string;
+}
+
+/*
+ * A depth that is a JSON number is stored as a number on every keystroke, so
+ * "5." would show as "5" and lose its dot. While the cell has focus it shows
+ * the typed text instead, as long as that text still means the stored value
+ * (an undo or paste meanwhile shows the new value). Leaving the cell drops
+ * the typed text and shows the stored value.
+ */
+function shownDepthText(draft: DepthDraft | null, rowIndex: number, field: RowField, value: string) {
+  if (!draft || draft.rowIndex !== rowIndex || draft.field !== field) return value;
+  if (draft.text === value) return value;
+  const typed = draft.text.trim();
+  return typed !== "" && value.trim() !== "" && Number(typed) === Number(value)
+    ? draft.text
+    : value;
+}
+
 /*
  * The editable preview. Only the rows in view (plus `overscan`) are in the
  * DOM; every value is read from the working document on render, so an edit
@@ -128,6 +151,7 @@ function UploadDataTable({
   const bodyRef = useRef<HTMLTableSectionElement>(null);
   const pendingFocus = useRef<CellPosition | null>(null);
   const [notice, setNotice] = useState("");
+  const [depthDraft, setDepthDraft] = useState<DepthDraft | null>(null);
   const [pendingDelete, setPendingDelete] = useState<
     | { kind: "rows"; rowIndexes: number[] }
     | { kind: "cells"; cells: CellRef<RowField>[] }
@@ -597,6 +621,7 @@ function UploadDataTable({
                     const lookup = RAW_LITHO_LOOKUP_BY_FIELD[column.key];
                     const isCompact = COMPACT_COLUMN_KEYS.has(column.key);
                     const value = cellText(row, column.key);
+                    const isDepth = DEPTH_FIELDS.has(column.key);
                     const dataAttributes = {
                       "data-cell": `${item.index}:${columnIndex}`,
                       "data-row-index": rowIndex,
@@ -629,27 +654,29 @@ function UploadDataTable({
                             }
                             isCompact={isCompact}
                             inputData={dataAttributes}
+                            allowUnlistedCodes
                           />
                         ) : (
                           <input
                             {...dataAttributes}
                             className={`${CELL_INPUT} ${isCompact ? "px-0.5" : "px-1"}`}
                             type="text"
-                            inputMode={
-                              column.key === "lithoFrom" || column.key === "lithoTo"
-                                ? "decimal"
-                                : undefined
+                            inputMode={isDepth ? "decimal" : undefined}
+                            value={
+                              isDepth
+                                ? shownDepthText(depthDraft, rowIndex, column.key, value)
+                                : value
                             }
-                            value={value}
                             readOnly={isReadOnly || !isEditable}
                             autoComplete="off"
                             aria-label={`${column.label}, record ${rowIndex + 1}`}
                             aria-invalid={severity === "error" || undefined}
-                            onChange={(event) =>
-                              onEdit([
-                                { rowIndex, field: column.key, text: event.target.value },
-                              ])
-                            }
+                            onChange={(event) => {
+                              const text = event.target.value;
+                              if (isDepth) setDepthDraft({ rowIndex, field: column.key, text });
+                              onEdit([{ rowIndex, field: column.key, text }]);
+                            }}
+                            onBlur={isDepth ? () => setDepthDraft(null) : undefined}
                           />
                         )}
                       </td>

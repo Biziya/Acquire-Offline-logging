@@ -95,6 +95,21 @@ public sealed class DataViewerIntervalsTests
     }
 
     [Fact]
+    public void ReadsOmFaciesAndPyStoredByTheUploadProcedure()
+    {
+        var (intervals, hidden) = DataViewerIntervals.Build(
+        [
+            Record("OMFacies", "A"),
+            Record("PY", "2")
+        ]);
+
+        var values = Assert.Single(intervals).Values;
+        Assert.Equal("A", values["omFacies"]);
+        Assert.Equal("2", values["py"]);
+        Assert.Equal(0, hidden);
+    }
+
+    [Fact]
     public void CountsUnknownAndRepeatedNamesInsteadOfDroppingThemSilently()
     {
         var (intervals, hidden) = DataViewerIntervals.Build(

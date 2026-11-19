@@ -7,7 +7,8 @@ Route: `/upload-data`
 The page loads a Raw Litho JSON export, shows every record in an editable
 table, validates the data and uploads it to `POST /api/upload-data`. The file
 and all edits are saved in IndexedDB, so they survive leaving the page and a
-browser refresh. Cancel or choosing another file clears them. A successful
+browser refresh. Cancel or choosing another file (after a confirmation when
+there are edits) clears them. A successful
 upload clears nothing, so the data stays on screen for checking or a corrected
 re-upload.
 
@@ -50,10 +51,17 @@ Choose file and a drop onto the zone both call `handleFileSelect` in
 - Dropping several files shows "Drop one file at a time". A file that is not
   `.json` or `application/json` shows "Choose a .json file". In both cases the
   loaded dataset and its edits stay.
-- Malformed JSON, or a JSON root that is not an object, shows "This file isn't
-  valid JSON. Check the file and try again."
-- A valid file replaces the current dataset. Nothing is uploaded until the
-  upload is confirmed.
+- A file over 10 MB (the server's limit) is refused before it is read: "This
+  file is N MB. The limit is 10.0 MB."
+- Malformed JSON shows "This file isn't valid JSON. Check the file and try
+  again."; a JSON root that is not an object shows "This file isn't a Raw Litho
+  export: its JSON root must be an object." The loaded dataset and its edits
+  stay in every one of these cases.
+- A file that parsed replaces the current dataset. When the current dataset
+  has edits, "Replace the edited records?" asks first (Replace or Keep
+  editing). Nothing is uploaded until the upload is confirmed.
+- During an upload no file can be chosen: "Choose another file" is disabled
+  and a drop shows "Wait for the upload to finish".
 - A window-level listener stops the browser from opening a file dropped beside
   the zone.
 - Picking the same file twice works, because the input is cleared after every
@@ -148,10 +156,16 @@ both pages:
 - a value that is not in the list shows a "Select a valid value" badge.
 
 Granulo and Hardness use local lists (digits 0 to 9). The other lookups come
-from `GET /api/table-constants`, fetched directly for this page rather than
-read from Raw Litho's offline lookup cache. If a list cannot load (for example
-the server is offline), its cells are disabled, as in Raw Litho, and the
-validation reports "Lookup codes not checked."
+from `GET /api/table-constants`. Each list from the server is also kept on
+this PC, in the same lookup cache Raw Litho uses
+(`services/IndexDB/rawLithoLookupCacheDb.ts`). When the server cannot be
+reached, the copy on this PC is used, so the cells work offline.
+
+If there is no list at all (server offline and nothing saved yet), the cells
+still stay editable (`allowUnlistedCodes`): they act as plain text cells, the
+typed code is saved when you leave the cell, and the validation reports
+"Lookup codes not checked." Every cell can be edited except one holding a JSON
+object or list.
 
 ## Validation
 
@@ -161,14 +175,14 @@ document again.
 
 | Severity | Checks |
 | --- | --- |
-| error (blocks upload) | missing project or drillhole; `rows` missing or empty; a row that is not an object; an id that is not a whole number; empty or non-numeric depth; a non-text value in a text field; an invalid timestamp; Litho From not less than Litho To; duplicate interval; unknown lookup code (when the list loaded); a broken conditional rule (Raw Litho README, *Conditional rules*) |
+| error (blocks upload) | missing project or drillhole; `rows` missing or empty; a row that is not an object; an id that is not a whole number; missing, empty or non-numeric depth (the server rejects a record without Litho From and Litho To); a non-text value in a text field; an invalid timestamp; Litho From not less than Litho To; duplicate interval; unknown lookup code (when the list loaded); a broken conditional rule (Raw Litho README, *Conditional rules*) |
 | warning | required field empty; campaign or timestamp missing; lookup codes still loading or not checked |
 
 ## Saving the draft
 
 When the page opens it reads the saved draft, and saves or deletes nothing
-until that read finishes. The draft is restored only if no file was picked in
-the meantime. A loaded file is saved at once, edits after
+until that read finishes. The draft is restored only if no file was loaded
+(and Cancel was not pressed) in the meantime. A loaded file is saved at once, edits after
 `draft.saveDebounceMs`, and a pending save is flushed on unmount and on
 `pagehide`. Cancel deletes the draft; an upload, successful or not, keeps it.
 
@@ -192,8 +206,10 @@ Upload             → verify the Windows user, then POST /api/upload-data
                      edited or restored: the working document as JSON, same file name
 ```
 
-The dialog lists Records, Project, Drillhole and Version (Edited or Original
-file). The upload is `multipart/form-data` with `file` and `expectedUser`, and
+An upload replaces the rows the same user uploaded before for that drillhole
+(the stored procedure deletes them first), so the dialog says "These records
+replace the rows you uploaded before for this drillhole." It lists Records,
+Project, Drillhole and Version (Edited or Original file). The upload is `multipart/form-data` with `file` and `expectedUser`, and
 the page gives up after 180 s. An `AbortController` makes sure a second click
 cannot send twice.
 
@@ -215,9 +231,9 @@ After a failure the data and draft stay, so the upload can be retried.
 
 Cancel and the x button on the loaded file both discard the file and every
 edit, so they ask first with "Discard this upload?" (Discard or Keep editing).
-During an upload the dialog is "Stop the upload?" (Stop upload or Keep
-uploading), and confirming aborts the request. With nothing loaded, Cancel
-just resets the page.
+Both are disabled during an upload, so an upload can't be stopped half way
+without the user knowing whether it reached the database. With nothing
+loaded, Cancel just resets the page.
 
 ## Configuration
 
@@ -233,6 +249,8 @@ parsed once when the module loads, and a bad value fails start-up (and
    and nothing is uploaded. Two files, a `.txt` file or a drop beside the zone
    leave the loaded data alone.
 2. Load malformed JSON. The toast appears and Upload to database stays disabled.
+   With a file loaded and edited, malformed JSON leaves it as it was, and a
+   valid file asks "Replace the edited records?" first.
 3. Edit a cell in a 100,000-record file, scroll away and back. The edit stays.
 4. With the server offline, reload. Lookup cells other than Granulo and
    Hardness are disabled.

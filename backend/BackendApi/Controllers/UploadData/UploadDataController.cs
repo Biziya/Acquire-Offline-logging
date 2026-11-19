@@ -2,9 +2,11 @@ using System.Text;
 using System.Text.Json;
 using BackendApi.Data;
 using BackendApi.Models.UploadData;
+using BackendApi.Repositories.TableConstants;
 using BackendApi.Repositories.UploadData;
 using Microsoft.AspNetCore.Authentication.Negotiate;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.SqlClient;
 
 namespace BackendApi.Controllers.UploadData;
 
@@ -16,6 +18,10 @@ public sealed class UploadDataController : ControllerBase
     private const string MaxFileSizeKey = "UploadData:MaxFileSizeBytes";
     private const long DefaultMaxFileSizeBytes = 10 * 1024 * 1024;
 
+    // THROW in insertAcQuireOfflineBek: another upload of the same hole holds
+    // the procedure's lock.
+    private const int UploadInProgressErrorNumber = 51008;
+
     // Rejects invalid UTF-8 instead of replacing it, so the text sent to the
     // database is exactly what was uploaded.
     private static readonly Encoding StrictUtf8 = new UTF8Encoding(
@@ -23,15 +29,18 @@ public sealed class UploadDataController : ControllerBase
         throwOnInvalidBytes: true);
 
     private readonly IUploadDataRepository _repository;
+    private readonly ITableConstantsRepository _lookups;
     private readonly ILogger<UploadDataController> _logger;
     private readonly long _maxFileSizeBytes;
 
     public UploadDataController(
         IUploadDataRepository repository,
+        ITableConstantsRepository lookups,
         IConfiguration configuration,
         ILogger<UploadDataController> logger)
     {
         _repository = repository;
+        _lookups = lookups;
         _logger = logger;
         _maxFileSizeBytes = configuration.GetValue(MaxFileSizeKey, DefaultMaxFileSizeBytes);
     }
@@ -113,12 +122,43 @@ public sealed class UploadDataController : ControllerBase
                 $"File name must be {UploadDataRepository.FileNameSize} characters or fewer.");
         }
 
+        // The codes each lookup field may hold, read fresh so a code added to
+        // QV_VS_LOOKUP_RO is accepted at once.
+        UploadLookups lookups;
+
+        try
+        {
+            lookups = UploadLookups.From(await _lookups.GetAllAsync(cancellationToken));
+        }
+        catch (Exception exception) when (DatabaseAccessErrors.Find(exception) is { } denied)
+        {
+            _logger.LogError(
+                exception,
+                "Upload of {FileName} by {WindowsUser}: SQL Server denied reading the lookup lists: " +
+                "error {SqlErrorNumber}: {SqlMessage}",
+                fileName,
+                userName,
+                denied.Number,
+                denied.Message);
+
+            return Failure(
+                StatusCodes.Status403Forbidden,
+                DatabaseAccessDenied.Message(this, "read the lookup lists"));
+        }
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogError(exception, "Upload of {FileName}: loading the lookup lists failed.", fileName);
+            return Failure(StatusCodes.Status500InternalServerError, "Database upload failed.");
+        }
+
         UploadDataValidator.Result result;
 
         try
         {
             using var reader = new StreamReader(file.OpenReadStream(), StrictUtf8);
-            result = UploadDataValidator.Validate(await reader.ReadToEndAsync(cancellationToken));
+            result = UploadDataValidator.Validate(
+                await reader.ReadToEndAsync(cancellationToken),
+                lookups);
         }
         catch (Exception exception) when (exception is JsonException or DecoderFallbackException)
         {
@@ -160,6 +200,37 @@ public sealed class UploadDataController : ControllerBase
             return Failure(
                 StatusCodes.Status403Forbidden,
                 $"{exception.UserName} is not authorized to upload data. Contact the database administrator.");
+        }
+        catch (UploadRejectedException exception)
+        {
+            // The procedure refused the content (THROW 51003–51009) and rolled
+            // back. Its message describes the problem and is safe to show.
+            _logger.LogWarning(
+                exception,
+                "Upload of {FileName} for drillhole {Drillhole} rejected by the procedure: {Reason}",
+                fileName,
+                result.Drillhole,
+                exception.Message);
+
+            return BadRequest(new UploadDataResponse
+            {
+                Success = false,
+                Message = "Invalid lithology data.",
+                Errors = [exception.Message]
+            });
+        }
+        catch (SqlException exception) when (
+            exception.Errors.Cast<SqlError>().Any(error => error.Number == UploadInProgressErrorNumber))
+        {
+            _logger.LogWarning(
+                exception,
+                "Upload of {FileName} for drillhole {Drillhole} refused: another upload of it holds the lock.",
+                fileName,
+                result.Drillhole);
+
+            return Failure(
+                StatusCodes.Status409Conflict,
+                "Another upload of this drillhole is still running.");
         }
         catch (Exception exception) when (DatabaseAccessErrors.Find(exception) is { } denied)
         {

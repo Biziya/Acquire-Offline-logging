@@ -9,18 +9,41 @@ import type {
 import { RAW_LITHO_ALL_LOOKUPS } from "../../services/rawLithoLookupConfig";
 import { REQUIRED_COLUMN_KEY_LIST } from "./constants";
 
+/*
+ * A depth is a plain, non-negative decimal: "12", "12.5", ".5", "12.".
+ * `Number()` alone would also take hex ("0x1A"), exponents ("1e3"), signs and
+ * Infinity, which the server rejects or a depth never is.
+ */
+const DEPTH_PATTERN = /^(\d+\.?\d*|\.\d+)$/;
+
 export function isValidDepth(value: unknown) {
-  if (typeof value === "number") return Number.isFinite(value);
+  if (typeof value === "number") return Number.isFinite(value) && value >= 0;
   if (typeof value !== "string") return false;
 
-  return value.trim() !== "" && Number.isFinite(Number(value));
+  return DEPTH_PATTERN.test(value.trim());
 }
 
+/*
+ * Pasted depth text as a depth, or null. Accepts a decimal comma ("12,5"), as
+ * Excel writes it on PCs with a European number format.
+ */
+export function toDepthText(text: string) {
+  const value = text.trim();
+  if (isValidDepth(value)) return value;
+
+  const withPoint = value.replace(",", ".");
+  return /^\d*,\d*$/.test(value) && isValidDepth(withPoint) ? withPoint : null;
+}
+
+/*
+ * A finished interval: both depths valid and From strictly below To. A
+ * zero-length interval (12–12) is not one.
+ */
 export function isValidDepthRange(row: RawLithoRow | undefined) {
   if (!isValidDepth(row?.lithoFrom)) return false;
   if (!isValidDepth(row?.lithoTo)) return false;
 
-  return Number(row?.lithoFrom) <= Number(row?.lithoTo);
+  return Number(row?.lithoFrom) < Number(row?.lithoTo);
 }
 
 /*
@@ -56,6 +79,39 @@ function isUnknownLookupValue(
   return !records.some(
     (record) => normalizeLookupCode(record?.[lookup.codeProperty]) === value,
   );
+}
+
+/*
+ * The rows with every lookup code written as its list spells it ("01m" →
+ * "01M"), as choosing it from the list or pasting it would. The conditional
+ * rules compare codes exactly, so an imported "01m" would otherwise skip them.
+ * Codes not in their list are left as they are.
+ */
+export function canonicalizeLookupCodes(
+  rows: RawLithoRow[],
+  lookupData: LookupData,
+): RawLithoRow[] {
+  return rows.map((row) => {
+    let changed: RawLithoRow | null = null;
+
+    for (const lookup of RAW_LITHO_ALL_LOOKUPS) {
+      const value = row[lookup.fieldKey];
+      const code = normalizeLookupCode(value);
+      if (!code) continue;
+
+      const records = lookup.options ?? lookupData[lookup.fieldKey] ?? [];
+      const match = records.find(
+        (record) => normalizeLookupCode(record?.[lookup.codeProperty]) === code,
+      )?.[lookup.codeProperty];
+
+      if (typeof match === "string" && match !== value) {
+        changed ??= { ...row };
+        changed[lookup.fieldKey] = match.trim();
+      }
+    }
+
+    return changed ?? row;
+  });
 }
 
 export function hasInvalidLookupValues(
@@ -256,6 +312,35 @@ export function findOverlappingIntervalRowIds(rows: RawLithoRow[]) {
   });
 
   return overlappingRowIds;
+}
+
+/*
+ * The first row (table order) that is not a finished interval, for the Save
+ * warning: a required cell is empty, a depth is not a number, or From is not
+ * below To. Save exports the JSON that is uploaded, so none of these may go.
+ */
+export function findFirstIncompleteRow(
+  rows: readonly RawLithoRow[],
+  labelOf: (fieldKey: RowField) => string,
+) {
+  for (const [rowIndex, row] of rows.entries()) {
+    const [missing] = getMissingRequiredFields(row);
+    if (missing !== undefined) {
+      return { rowIndex, message: `${labelOf(missing)} is empty.` };
+    }
+
+    for (const fieldKey of ["lithoFrom", "lithoTo"] as const) {
+      if (!isValidDepth(row[fieldKey])) {
+        return { rowIndex, message: `${labelOf(fieldKey)} is not a valid depth.` };
+      }
+    }
+
+    if (!isValidDepthRange(row)) {
+      return { rowIndex, message: "From must be less than To." };
+    }
+  }
+
+  return null;
 }
 
 /* The first row (table order) that overlaps another, for a blocking warning. */

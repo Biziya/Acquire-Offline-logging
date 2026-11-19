@@ -20,6 +20,11 @@ import {
 import { isRowOrderSorted, sortRawLithoDocumentRows } from "../rawLithoSorting";
 import { createBlankDocument } from "../rawLithoDocumentOperations";
 import { TOAST_NOTIFICATIONS } from "../constants";
+import {
+  publishRawLithoDraftStatus,
+  resetRawLithoDraftStatus,
+} from "../rawLithoDraftStatus";
+import { useDrillholeTabLock } from "./useDrillholeTabLock";
 
 interface Options {
   selectedHoleId: string;
@@ -46,6 +51,10 @@ export function useRawLithoDraftPersistence(options: Options) {
   const reportedSaveError = useRef(false);
   const reportedLoadError = useRef<string | null>(null);
   const draftKey = buildRawLithoDraftKey(options.selectedHoleId);
+  // Only the tab holding the drillhole's lock may edit or write it.
+  const lockState = useDrillholeTabLock(draftKey);
+  const isEditor = lockState === "held";
+  const isOpenElsewhere = Boolean(draftKey) && lockState === "elsewhere";
 
   const flushPendingSaves = useCallback(async () => {
     clearTimeout(timer.current);
@@ -112,6 +121,8 @@ export function useRawLithoDraftPersistence(options: Options) {
       latest.current.onLoaded(createBlankDocument(), false);
       return;
     }
+    // Wait for the tab lock; deciding it re-runs this load.
+    if (lockState === "pending") return;
     async function load(key: string) {
       try {
         // An unsaved edit is newer than storage, including after a failed save.
@@ -119,6 +130,7 @@ export function useRawLithoDraftPersistence(options: Options) {
           rawLithoSaveQueue.peek(key) ?? (await readRawLithoDraft(key));
         if (!active) return;
         if (
+          isEditor &&
           saved != null &&
           (!isRecord(saved) ||
             !Array.isArray(saved.rows) ||
@@ -138,7 +150,8 @@ export function useRawLithoDraftPersistence(options: Options) {
         if (lithoDocument.drillhole !== key)
           throw new Error("Stored draft does not match selected drillhole.");
         latest.current.onLoaded(lithoDocument, saved == null);
-        readyKey.current = key;
+        // A read-only tab shows the draft but never edits or rewrites it.
+        readyKey.current = isEditor ? key : null;
         reportedLoadError.current = null;
         setLoadedKey(key);
         if (
@@ -160,7 +173,7 @@ export function useRawLithoDraftPersistence(options: Options) {
     return () => {
       active = false;
     };
-  }, [draftKey, loadAttempt, stageDocument]);
+  }, [draftKey, isEditor, lockState, loadAttempt, stageDocument]);
 
   useEffect(() => {
     if (isRestoringSession || (draftKey && loadedKey !== draftKey)) return;
@@ -200,9 +213,31 @@ export function useRawLithoDraftPersistence(options: Options) {
       flush();
     };
   }, [flushPendingSaves]);
+  // Closing or reloading the tab with unsaved edits asks first. Failed
+  // snapshots stay queued, so `hasPending` also covers failing saves.
+  const saveErrorRef = useRef(saveError);
+  saveErrorRef.current = saveError;
+  useEffect(() => {
+    const warn = (event: BeforeUnloadEvent) => {
+      if (!rawLithoSaveQueue.hasPending() && !saveErrorRef.current) return;
+      void flushPendingSaves();
+      event.preventDefault();
+      // Older Chromium shows the prompt only when returnValue is set.
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [flushPendingSaves]);
+
+  useEffect(() => {
+    publishRawLithoDraftStatus({ saveError, openElsewhere: isOpenElsewhere });
+  }, [saveError, isOpenElsewhere]);
+  useEffect(() => resetRawLithoDraftStatus, []);
+
   return {
     draftKey,
-    isPageEnabled: Boolean(draftKey && loadedKey === draftKey),
+    isPageEnabled: Boolean(draftKey && loadedKey === draftKey && isEditor),
+    isOpenElsewhere,
     isRestoringSession,
     loadError,
     saveError,

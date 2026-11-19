@@ -1,6 +1,7 @@
 import type { RowField } from "../../types/domain";
 import { isRecord } from "../../types/validation";
 import { DEPTH_FIELDS } from "../../types/rawLithoSchema";
+import { isValidDepth } from "../RawLitho/rawLithoValidation";
 
 /*
  * The working copy of an imported JSON document.
@@ -38,17 +39,20 @@ export function cellText(row: unknown, field: RowField): string {
 
 /*
  * A depth that was a JSON number stays a number when the new text is a
- * number, so an edit does not change the value's type. Anything else is
- * stored as typed text (and validation reports it if it is not acceptable).
+ * depth, so an edit does not change the value's type. So does one that was
+ * missing or not yet a depth (emptied, or "-" half typed): clearing a cell
+ * and typing "12" stores 12, not "12". A depth that was valid text stays
+ * text. Anything else is stored as typed (validation reports it).
+ * "5." is stored as 5; the table keeps showing the typed "5." until the cell
+ * loses focus (UploadDataTable's shownDepthText).
  */
 function storedValue(previous: unknown, field: RowField, text: string) {
   if (
     DEPTH_FIELDS.has(field) &&
-    typeof previous === "number" &&
-    text.trim() !== "" &&
-    Number.isFinite(Number(text))
+    isValidDepth(text) &&
+    (typeof previous === "number" || !isValidDepth(previous))
   ) {
-    return Number(text);
+    return Number(text.trim());
   }
   return text;
 }

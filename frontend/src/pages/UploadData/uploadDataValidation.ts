@@ -19,8 +19,8 @@ import { getDocumentRows, type UploadDocument } from "./uploadDataDocument";
  * business rules are invented here; every check comes from one of two places:
  *
  *   error    — the backend contract (POST /api/upload-data rejects it: missing
- *              project / drillhole / rows, a null row, an empty or non-numeric
- *              depth, a non-text value in a text field, a non-integer id or
+ *              project / drillhole / rows, a null row, a missing, empty or
+ *              non-numeric depth, a non-text value in a text field, a non-integer id or
  *              timestamp it cannot parse), or a Raw Litho rule the Raw Litho
  *              page also refuses (inverted range, duplicate interval, unknown
  *              lookup code, a broken conditional rule — Raw Litho's Save
@@ -164,7 +164,11 @@ function validateRow(
 
   DEPTH_FIELDS.forEach((field) => {
     const value = row[field];
-    if (value === null || value === undefined) return;
+    // The server rejects a record without both depths.
+    if (value === null || value === undefined) {
+      issues.push({ severity: "error", field, message: `${label(field)} is required.` });
+      return;
+    }
     if (value === "" || (typeof value === "string" && !value.trim())) {
       issues.push({ severity: "error", field, message: `${label(field)} is empty.` });
     } else if (!isValidDepth(value)) {
@@ -210,11 +214,9 @@ function validateRow(
   });
 
   REQUIRED_COLUMN_KEY_LIST.forEach((field) => {
-    const value = row[field];
-    // A depth holding empty text is already reported as an error above.
-    const isEmptyDepthText =
-      DEPTH_FIELDS.has(field) && typeof value === "string";
-    if (!hasValue(value) && !isEmptyDepthText) {
+    // Depths are checked above, where a missing or empty one is an error.
+    if (DEPTH_FIELDS.has(field)) return;
+    if (!hasValue(row[field])) {
       issues.push({ severity: "warning", field, message: `${label(field)} is required.` });
     }
   });

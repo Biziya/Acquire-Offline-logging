@@ -80,8 +80,10 @@ height match Raw Litho. Frame, header, cells, zebra rows and hover come from
 - Values are shown as stored. A value that is not stored is an empty cell.
 - Litho From and Litho To show at least two decimals and are never rounded
   (`5` shows as `5.00`).
-- OM Facies, PY and the other Raw Litho-only fields stay empty, because the
-  upload procedure does not store them.
+- OM Facies and PY are stored (as `NAME` `OMFacies` and `PY`) by uploads made
+  after the procedure was updated; older uploads leave them empty. The other
+  Raw Litho-only fields stay empty, because the upload procedure does not store
+  them.
 - Stored values with no Raw Litho column (another `NAME`, or a repeat) are not
   shown. The page says how many there are.
 - The status line shows the number of intervals and stored values, plus who

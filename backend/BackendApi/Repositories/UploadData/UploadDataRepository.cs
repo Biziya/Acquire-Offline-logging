@@ -7,9 +7,10 @@ namespace BackendApi.Repositories.UploadData;
 
 public sealed class UploadDataRepository : IUploadDataRepository
 {
-    // Same logic and parameters as dbo.InsertUpdateCoreDescr_WellCAD
-    // ('Raw core import_JSON'), but it stores @usr instead of SUSER_NAME().
-    // Created by Sql/insertAcQuireOfflineBek.sql.
+    // Same parameters as dbo.InsertUpdateCoreDescr_WellCAD ('Raw core
+    // import_JSON'), but it stores @usr instead of SUSER_NAME() and REPLACES
+    // the uploader's earlier rows for the drillhole. Created by
+    // Sql/insertAcQuireOfflineBek.sql.
     private const string StoredProcedureName = "dbo.insertAcQuireOfflineBek";
     private const string ActionName = "Raw core import_JSON";
 
@@ -126,6 +127,13 @@ public sealed class UploadDataRepository : IUploadDataRepository
                 && sqlException.Errors.Cast<SqlError>().Any(error => error.Number == NotAuthorizedErrorNumber))
             {
                 throw new UploadNotAuthorizedException(request.UserName, exception);
+            }
+
+            if (exception is SqlException rejected
+                && rejected.Errors.Cast<SqlError>().FirstOrDefault(
+                    error => UploadRejectedException.IsRejection(error.Number)) is { } reason)
+            {
+                throw new UploadRejectedException(reason.Message, exception);
             }
 
             throw;

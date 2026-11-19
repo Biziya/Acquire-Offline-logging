@@ -28,18 +28,68 @@ function createMissingStores(database: IDBDatabase) {
   missingStores.forEach((storeName) => database.createObjectStore(storeName));
 }
 
+/*
+ * Another tab opened a newer schema (the app was updated there). This tab's
+ * code no longer matches the database, so it stops using it and asks the
+ * logger to reload.
+ */
+let databaseOutdated = false;
+const outdatedListeners = new Set<() => void>();
+
+function markDatabaseOutdated() {
+  if (databaseOutdated) return;
+  databaseOutdated = true;
+  outdatedListeners.forEach((listener) => listener());
+}
+
+export function isRawLithoDatabaseOutdated() {
+  return databaseOutdated;
+}
+
+export function subscribeRawLithoDatabaseOutdated(listener: () => void) {
+  outdatedListeners.add(listener);
+  return () => {
+    outdatedListeners.delete(listener);
+  };
+}
+
+/* Tests only: forget an earlier version change. */
+export function resetRawLithoDatabaseOutdated() {
+  databaseOutdated = false;
+}
+
 function openDatabase() {
   return new Promise<IDBDatabase>((resolve, reject) => {
+    if (databaseOutdated) {
+      reject(new Error("The Raw Litho database changed. Reload the page."));
+      return;
+    }
     const request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION);
+    let settled = false;
 
     request.onupgradeneeded = () => createMissingStores(request.result);
-    request.onerror = () => reject(request.error);
-    request.onblocked = () =>
+    request.onerror = () => {
+      settled = true;
+      // This tab's code is older than the stored schema.
+      if (request.error?.name === "VersionError") markDatabaseOutdated();
+      reject(request.error);
+    };
+    request.onblocked = () => {
+      settled = true;
       reject(new Error("The Raw Litho database upgrade is blocked."));
+    };
     request.onsuccess = () => {
       const database = request.result;
-
-      database.onversionchange = () => database.close();
+      // Already reported as blocked: nobody else will ever close this one.
+      if (settled) {
+        database.close();
+        return;
+      }
+      settled = true;
+      database.onversionchange = () => {
+        database.close();
+        markDatabaseOutdated();
+      };
       resolve(database);
     };
   });

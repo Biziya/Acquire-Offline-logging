@@ -1,5 +1,5 @@
-import type { DatasetInfo } from "../../types/domain";
-import { errorMessage, isAbortError, isRecord } from "../../types/validation";
+import type { DatasetInfo, LookupRecord, RowField } from "../../types/domain";
+import { errorMessage, isAbortError, isLookupRecords, isRecord } from "../../types/validation";
 import {
   useDeferredValue,
   useEffect,
@@ -14,6 +14,10 @@ import UploadDataTable from "./UploadDataTable";
 import { importUploadData } from "../../services/Api/uploadData";
 import { getVerifiedWindowsIdentity } from "../../services/currentUser";
 import { getRawLithoLookup } from "../../services/Api/rawLithoApi";
+import {
+  readLookupCache,
+  saveLookupCache,
+} from "../../services/IndexDB/rawLithoLookupCacheDb";
 import { RAW_LITHO_LOOKUPS } from "../../services/rawLithoLookupConfig";
 import {
   applyCellEdits,
@@ -65,6 +69,9 @@ interface FileInfo {
 }
 
 const CONTROL = `${FIELD_CONTROL} px-2.5`;
+
+// The server's upload limit (UploadDataController DefaultMaxFileSizeBytes).
+const MAX_FILE_BYTES = 10 * 1024 * 1024;
 
 
 function displayValue(value: unknown, empty = "—") {
@@ -157,7 +164,15 @@ function UploadData() {
     () => new Set(),
   );
   const requestControllerRef = useRef<AbortController | null>(null);
+  // Bumped per picked file, so only the latest one is loaded.
   const fileSelectionIdRef = useRef(0);
+  // Set once a file is loaded or the page is cleared: the saved draft is then stale.
+  const restoreBlockedRef = useRef(false);
+  // A parsed file waiting for "Replace the edited records?".
+  const [pendingReplace, setPendingReplace] = useState<{
+    file: File;
+    document: UploadDocument;
+  } | null>(null);
 
   /*
    * The working document is kept in IndexedDB (its own database, separate from
@@ -177,7 +192,7 @@ function UploadData() {
     [isEdited, selectedFile, workingDocument],
   );
   const draft = useUploadDataDraft(draftSource, (saved) => {
-    if (fileSelectionIdRef.current !== 0) return false;
+    if (restoreBlockedRef.current) return false;
 
     originalFileRef.current = null;
     setSelectedFile({ name: saved.fileName, size: saved.fileSize });
@@ -188,28 +203,42 @@ function UploadData() {
   });
 
   /*
-   * Lookup codes for validation and the cell suggestion lists. Fetched straight
-   * from the API, never cached by this page. A lookup that fails stays
-   * "unavailable" and its codes are reported as not checked — never guessed.
+   * Lookup codes for validation and the cell suggestion lists. The server's
+   * list comes first and is kept on this PC (the same cache Raw Litho uses).
+   * When the server is unreachable, the copy on this PC is used. With neither,
+   * the lookup stays "unavailable": its cells take typed codes, and the codes
+   * are reported as not checked — never guessed.
    */
   useEffect(() => {
     let isActive = true;
+
+    function setLookup(fieldKey: RowField, records: LookupRecord[] | null) {
+      setLookups((current) => ({
+        records: records ? { ...current.records, [fieldKey]: records } : current.records,
+        state: { ...current.state, [fieldKey]: records ? "ready" : "unavailable" },
+      }));
+    }
 
     RAW_LITHO_LOOKUPS.forEach((lookup) => {
       getRawLithoLookup(lookup.fieldKey).then(
         (records) => {
           if (!isActive) return;
-          setLookups((current) => ({
-            records: { ...current.records, [lookup.fieldKey]: records },
-            state: { ...current.state, [lookup.fieldKey]: "ready" },
-          }));
+          setLookup(lookup.fieldKey, records);
+          saveLookupCache(lookup.cacheKey, records).catch((error) =>
+            console.error(`Unable to update the ${lookup.label} cache.`, error),
+          );
         },
-        () => {
-          if (!isActive) return;
-          setLookups((current) => ({
-            ...current,
-            state: { ...current.state, [lookup.fieldKey]: "unavailable" },
-          }));
+        async () => {
+          let cached: LookupRecord[] | null = null;
+          try {
+            const value = await readLookupCache(lookup.cacheKey);
+            if (value?.records?.length && isLookupRecords(value.records, lookup.codeProperty)) {
+              cached = value.records;
+            }
+          } catch (error) {
+            console.error(`Unable to read the ${lookup.label} lookup cache.`, error);
+          }
+          if (isActive) setLookup(lookup.fieldKey, cached);
         },
       );
     });
@@ -288,47 +317,84 @@ function UploadData() {
     setDatasetVersion((version) => version + 1);
   }
 
-  // The one entry point for a new file: Browse Files and drag-and-drop.
+  // Replaces whatever is loaded with a file that has already parsed.
+  function loadFile(file: File, document: UploadDocument) {
+    resetDataset();
+    restoreBlockedRef.current = true;
+    originalFileRef.current = file;
+    setSelectedFile({ name: file.name, size: file.size });
+    setWorkingDocument(document);
+  }
+
+  /*
+   * The one entry point for a new file: Browse Files and drag-and-drop. The
+   * file is checked and parsed first; the loaded dataset is only replaced once
+   * the new one parsed, and edits that were not uploaded are only discarded
+   * after "Replace the edited records?". During an upload nothing is replaced.
+   */
   const handleFileSelect = async (file: File) => {
+    if (current.current.isImporting) {
+      showToast({ type: "warning", message: "Wait for the upload to finish" });
+      return;
+    }
+
     const isJsonFile =
       file.type === "application/json" ||
       file.name.toLowerCase().endsWith(".json");
 
-    // Refused before anything is reset, so the loaded dataset (and its edits)
-    // survives a wrong file.
     if (!isJsonFile) {
       showToast({ type: "warning", message: "Choose a .json file" });
       return;
     }
 
+    // The server refuses a larger file, and reading one would stall the page.
+    if (file.size > MAX_FILE_BYTES) {
+      showToast({
+        type: "error",
+        message: `This file is ${formatFileSize(file.size)}. The limit is ${formatFileSize(MAX_FILE_BYTES)}.`,
+      });
+      return;
+    }
+
     const selectionId = ++fileSelectionIdRef.current;
-    requestControllerRef.current?.abort();
-    requestControllerRef.current = null;
-    setIsImporting(false);
-    resetDataset();
-
+    let dataset: unknown;
     try {
-      const dataset: unknown = JSON.parse(await file.text());
-
-      if (selectionId !== fileSelectionIdRef.current) {
-        return;
-      }
-
-      if (!isRecord(dataset)) {
-        throw new Error("The JSON root must be an object");
-      }
-
-      originalFileRef.current = file;
-      setSelectedFile({ name: file.name, size: file.size });
-      setWorkingDocument(dataset);
+      dataset = JSON.parse(await file.text());
     } catch (error) {
-      if (selectionId !== fileSelectionIdRef.current) {
-        return;
-      }
-
+      if (selectionId !== fileSelectionIdRef.current) return;
       console.error("Unable to read the selected JSON dataset.", error);
       showToast({ type: "error", message: "This file isn't valid JSON. Check the file and try again." });
+      return;
     }
+
+    if (selectionId !== fileSelectionIdRef.current) return;
+
+    if (!isRecord(dataset)) {
+      showToast({
+        type: "error",
+        message: "This file isn't a Raw Litho export: its JSON root must be an object.",
+      });
+      return;
+    }
+
+    // An upload may have started while the file was being read.
+    if (current.current.isImporting) {
+      showToast({ type: "warning", message: "Wait for the upload to finish" });
+      return;
+    }
+
+    if (current.current.isEdited) {
+      setPendingReplace({ file, document: dataset });
+      return;
+    }
+
+    loadFile(file, dataset);
+  };
+
+  const confirmReplace = () => {
+    const pending = pendingReplace;
+    setPendingReplace(null);
+    if (pending && !current.current.isImporting) loadFile(pending.file, pending.document);
   };
 
   // A real edit records the trusted current user as the last editor; with
@@ -507,18 +573,20 @@ function UploadData() {
     }
   };
 
+  // Never during an upload: Cancel and the remove button are disabled then.
   const handleCancel = () => {
-    fileSelectionIdRef.current += 1;
-    requestControllerRef.current?.abort();
-    requestControllerRef.current = null;
-    resetDataset();
-    setIsImporting(false);
     setIsDiscardOpen(false);
+    if (current.current.isImporting) return;
+    fileSelectionIdRef.current += 1;
+    restoreBlockedRef.current = true;
+    setPendingReplace(null);
+    resetDataset();
   };
 
   // Cancel and the remove-file button both discard the file and every edit,
   // so they ask first. With nothing loaded there is nothing to lose.
   const requestCancel = () => {
+    if (isImporting) return;
     if (!selectedFile && !workingDocument) {
       handleCancel();
       return;
@@ -549,7 +617,7 @@ function UploadData() {
             selectedFileName={selectedFile?.name || ""}
             recordCount={rows.length}
             onFileRemove={requestCancel}
-            isRemoveDisabled={isImporting}
+            isLocked={isImporting}
           />
           <DatasetSummary summary={summary} />
 
@@ -660,7 +728,7 @@ function UploadData() {
         {isConfirmOpen && workingDocument && (
           <ConfirmDialog
             title="Upload to database?"
-            message="These records will be added to the database."
+            message="These records replace the rows you uploaded before for this drillhole."
             facts={[
               ["Records", formatCount(rows.length)],
               ["Project", displayValue(workingDocument.project)],
@@ -678,17 +746,25 @@ function UploadData() {
 
         {isDiscardOpen && (
           <ConfirmDialog
-            title={isImporting ? "Stop the upload?" : "Discard this upload?"}
-            message={
-              isImporting
-                ? "The upload is cancelled and the file is cleared."
-                : "The file and your edits are removed from this PC. Nothing is sent to the database."
-            }
-            confirmLabel={isImporting ? "Stop upload" : "Discard"}
-            cancelLabel={isImporting ? "Keep uploading" : "Keep editing"}
+            title="Discard this upload?"
+            message="The file and your edits are removed from this PC. Nothing is sent to the database."
+            confirmLabel="Discard"
+            cancelLabel="Keep editing"
             tone="danger"
             onConfirm={handleCancel}
             onCancel={() => setIsDiscardOpen(false)}
+          />
+        )}
+
+        {pendingReplace && (
+          <ConfirmDialog
+            title="Replace the edited records?"
+            message={`Your edits to ${selectedFile?.name ?? "the loaded file"} have not been uploaded. Opening ${pendingReplace.file.name} discards them.`}
+            confirmLabel="Replace"
+            cancelLabel="Keep editing"
+            tone="danger"
+            onConfirm={confirmReplace}
+            onCancel={() => setPendingReplace(null)}
           />
         )}
 
@@ -696,6 +772,8 @@ function UploadData() {
           <button
             className={`${SECONDARY_BUTTON} max-[680px]:w-full`}
             type="button"
+            title={isImporting ? "Wait for the upload to finish" : undefined}
+            disabled={isImporting}
             onClick={requestCancel}
           >
             Cancel

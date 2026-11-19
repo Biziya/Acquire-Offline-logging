@@ -11,28 +11,54 @@ namespace BackendApi.Controllers.UploadData;
 /// "Raw core import_JSON" branch stores, with their original names and values.
 /// The uploaded text itself is never changed.
 /// </summary>
+/// <remarks>
+/// Rules, all reported together (up to <see cref="MaxReportedErrors"/>):
+/// project ≤ 10 characters and drillhole ≤ 20 (the procedure's varchar sizes);
+/// each row's lithoFrom/lithoTo present, numeric, not negative, at most two
+/// decimals (the procedure rounds to two) and From &lt; To; across the file no
+/// two intervals overlap or repeat (touching, e.g. 0–5 and 5–10, is fine);
+/// text attributes are text, codes ≤ 20 characters, lithologyComments ≤ 254;
+/// lookup codes are in their QV_VS_LOOKUP_RO list, or empty.
+/// </remarks>
 public static class UploadDataValidator
 {
     // Longer lists are cut here with a "…and N more" line.
-    private const int MaxReportedErrors = 20;
+    public const int MaxReportedErrors = 50;
+
+    // Sizes the procedure stores text in: varchar(10) for the project,
+    // varchar(20) for each code and varchar(254) for the comments.
+    public const int ProjectSize = 10;
+    public const int CodeSize = 20;
+    public const int CommentsSize = 254;
+
+    // The procedure stores depths rounded to this many decimals.
+    private const int DepthDecimals = 2;
 
     // Plain decimals such as "5", "12.75" or "-0.5": no exponent, no
-    // thousands separator, so SQL Server can convert the same value.
+    // thousands separator, so SQL Server can convert the same value. A sign
+    // is parsed so "-0.5" is reported as negative rather than "not a number".
     private const NumberStyles DepthStyle =
         NumberStyles.AllowLeadingWhite |
         NumberStyles.AllowTrailingWhite |
         NumberStyles.AllowLeadingSign |
         NumberStyles.AllowDecimalPoint;
 
+    private const string CommentsField = "lithologyComments";
+
     // Row attributes the procedure stores, in the order they are written.
     // Each may be missing, null or "" (empty is valid), but not a non-text
     // value. Everything else in a row (id, extractionType, corePass, recovery
-    // fields, coreEnd, omFacies, py, lithologicalDescription, …) is dropped.
+    // fields, coreEnd, lithologicalDescription, …) is dropped.
     private static readonly string[] StoredTextFields =
     [
-        "lithoCode", "colorCode", "redoxCode", "ca", "om", "ox",
-        "sedim", "granulo", "hardness", "lithologyComments"
+        "lithoCode", "colorCode", "redoxCode", "ca", "om", "omFacies", "py", "ox",
+        "sedim", "granulo", "hardness", CommentsField
     ];
+
+    // Every text attribute checked: the stored ones plus any lookup field
+    // that is not stored (none today), which must still be valid.
+    private static readonly string[] CheckedTextFields =
+        [.. StoredTextFields, .. UploadLookups.Fields.Except(StoredTextFields)];
 
     // The payload goes to SQL Server, not into HTML: keep non-ASCII text and
     // characters such as '+' readable instead of \u-escaping them.
@@ -53,12 +79,15 @@ public static class UploadDataValidator
 
     private sealed record Depths(decimal From, decimal To);
 
+    private sealed record Interval(int Row, decimal From, decimal To);
+
     /// <summary>
-    /// Validates the document structure and every row, then builds the
-    /// stored procedure payload.
+    /// Validates the document structure, every row and the intervals across
+    /// rows, then builds the stored procedure payload.
     /// </summary>
+    /// <param name="lookups">The codes each lookup field may hold.</param>
     /// <exception cref="JsonException">The text is not valid JSON.</exception>
-    public static Result Validate(string json)
+    public static Result Validate(string json, UploadLookups lookups)
     {
         using var document = JsonDocument.Parse(json);
         var root = document.RootElement;
@@ -71,6 +100,11 @@ public static class UploadDataValidator
         var errors = new List<string>();
         var project = ReadRequiredText(root, "project", errors);
         var drillhole = ReadRequiredText(root, "drillhole", errors);
+
+        if (project.Length > ProjectSize)
+        {
+            errors.Add($"project must be {ProjectSize} characters or fewer.");
+        }
 
         if (drillhole.Length > UploadDataRepository.HoleSize)
         {
@@ -91,17 +125,25 @@ public static class UploadDataValidator
         }
         else
         {
+            var intervals = new List<Interval>();
             var rowNumber = 0;
 
             foreach (var row in rows.EnumerateArray())
             {
-                var rowDepths = ValidateRow(row, ++rowNumber, errors);
+                var (interval, rowIsValid) = ValidateRow(row, ++rowNumber, lookups, errors);
 
-                if (rowDepths is not null)
+                if (interval is not null)
                 {
-                    depths.Add(rowDepths);
+                    intervals.Add(interval);
+
+                    if (rowIsValid)
+                    {
+                        depths.Add(new Depths(interval.From, interval.To));
+                    }
                 }
             }
+
+            CheckIntervals(intervals, errors);
         }
 
         if (errors.Count > 0)
@@ -117,35 +159,124 @@ public static class UploadDataValidator
             errors);
     }
 
-    // Returns the row's depths when the whole row is valid, otherwise null.
-    private static Depths? ValidateRow(JsonElement row, int rowNumber, List<string> errors)
+    // Returns the row's interval when its depths are valid (so it can be
+    // compared with other rows), and whether the whole row is valid.
+    private static (Interval? Interval, bool IsValid) ValidateRow(
+        JsonElement row,
+        int rowNumber,
+        UploadLookups lookups,
+        List<string> errors)
     {
         if (row.ValueKind != JsonValueKind.Object)
         {
             errors.Add($"Row {rowNumber}: must be an object.");
-            return null;
+            return (null, false);
         }
 
         var errorCount = errors.Count;
         var from = ReadDepth(row, "lithoFrom", rowNumber, errors);
         var to = ReadDepth(row, "lithoTo", rowNumber, errors);
+        Interval? interval = null;
 
         if (from >= to)
         {
             errors.Add($"Row {rowNumber}: lithoFrom must be less than lithoTo.");
         }
-
-        foreach (var field in StoredTextFields)
+        else if (from is not null && to is not null)
         {
-            if (row.TryGetProperty(field, out var value) &&
-                value.ValueKind is not (JsonValueKind.String or JsonValueKind.Null))
+            interval = new Interval(rowNumber, from.Value, to.Value);
+        }
+
+        foreach (var field in CheckedTextFields)
+        {
+            CheckTextField(row, field, rowNumber, lookups, errors);
+        }
+
+        return (interval, errors.Count == errorCount);
+    }
+
+    private static void CheckTextField(
+        JsonElement row,
+        string field,
+        int rowNumber,
+        UploadLookups lookups,
+        List<string> errors)
+    {
+        if (!row.TryGetProperty(field, out var value) ||
+            value.ValueKind == JsonValueKind.Null)
+        {
+            return;
+        }
+
+        if (value.ValueKind != JsonValueKind.String)
+        {
+            errors.Add($"Row {rowNumber}: {field} must be a text value.");
+            return;
+        }
+
+        var text = value.GetString()!;
+        var maxLength = field == CommentsField ? CommentsSize : CodeSize;
+
+        if (text.Length > maxLength)
+        {
+            errors.Add($"Row {rowNumber}: {field} must be {maxLength} characters or fewer.");
+            return;
+        }
+
+        // Empty means "not logged"; anything else must be a known code.
+        if (UploadLookups.Fields.Contains(field) &&
+            !string.IsNullOrWhiteSpace(text) &&
+            !lookups.IsKnown(field, text))
+        {
+            errors.Add($"Row {rowNumber}: {field} \"{text}\" is not a known code.");
+        }
+    }
+
+    // Each interval must be the only one covering its depths. Sorted by From,
+    // an interval overlaps when it starts before the furthest To seen so far;
+    // an exact repeat of an earlier From/To pair is reported as a duplicate.
+    // Touching intervals (one's To equals the next one's From) are fine.
+    private static void CheckIntervals(List<Interval> intervals, List<string> errors)
+    {
+        var found = new List<(int Row, string Message)>();
+        var firstRowOf = new Dictionary<(decimal, decimal), int>();
+        Interval? furthest = null;
+
+        foreach (var interval in intervals
+                     .OrderBy(i => i.From)
+                     .ThenBy(i => i.To)
+                     .ThenBy(i => i.Row))
+        {
+            if (firstRowOf.TryGetValue((interval.From, interval.To), out var firstRow))
             {
-                errors.Add($"Row {rowNumber}: {field} must be a text value.");
+                found.Add((interval.Row,
+                    $"Row {interval.Row}: interval {Describe(interval)} duplicates row {firstRow}."));
+                continue;
+            }
+
+            firstRowOf[(interval.From, interval.To)] = interval.Row;
+
+            if (furthest is not null && interval.From < furthest.To)
+            {
+                var (earlier, later) = interval.Row < furthest.Row
+                    ? (interval, furthest)
+                    : (furthest, interval);
+
+                found.Add((later.Row,
+                    $"Row {later.Row}: interval {Describe(later)} overlaps row {earlier.Row} ({Describe(earlier)})."));
+            }
+
+            if (furthest is null || interval.To > furthest.To)
+            {
+                furthest = interval;
             }
         }
 
-        return errors.Count == errorCount ? new Depths(from!.Value, to!.Value) : null;
+        errors.AddRange(found.OrderBy(f => f.Row).Select(f => f.Message));
     }
+
+    private static string Describe(Interval interval) =>
+        string.Create(CultureInfo.InvariantCulture, $"{interval.From}–{interval.To}");
 
     // { "project", "drillhole", "rows": [ { lithoFrom, lithoTo, <stored text fields> } ] }
     // Depths become JSON numbers; text values are copied exactly, and a field
@@ -194,6 +325,8 @@ public static class UploadDataValidator
     }
 
     // A depth may be a JSON number or a numeric string, as the app exports it.
+    // It must not be negative and must have at most two decimals that matter
+    // ("12.50" is fine, "12.505" is not), since the procedure rounds to two.
     private static decimal? ReadDepth(
         JsonElement row,
         string field,
@@ -224,6 +357,18 @@ public static class UploadDataValidator
         if (!isValid)
         {
             errors.Add($"Row {rowNumber}: {field} must be a number.");
+            return null;
+        }
+
+        if (depth < 0)
+        {
+            errors.Add($"Row {rowNumber}: {field} must not be negative.");
+            return null;
+        }
+
+        if (decimal.Round(depth, DepthDecimals) != depth)
+        {
+            errors.Add($"Row {rowNumber}: {field} must have at most {DepthDecimals} decimal places.");
             return null;
         }
 

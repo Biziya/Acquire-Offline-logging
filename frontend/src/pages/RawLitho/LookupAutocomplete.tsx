@@ -29,6 +29,12 @@ interface LookupAutocompleteProps {
   isRequired?: boolean;
   // Extra data-* attributes for the input (Upload Data finds cells by them).
   inputData?: Record<`data-${string}`, string | number>;
+  /*
+   * Upload Data: when no list could be loaded (server down, nothing saved on
+   * this PC), the cell stays editable and saves what is typed instead of
+   * locking. Validation reports such codes as not checked.
+   */
+  allowUnlistedCodes?: boolean;
 }
 
 const MATCH_LIMIT = 5;
@@ -100,6 +106,7 @@ function LookupAutocomplete({
   isCompact = false,
   isRequired = false,
   inputData,
+  allowUnlistedCodes = false,
 }: LookupAutocompleteProps) {
   const generatedId = useId();
   const instanceId = `lookup-${generatedId}`;
@@ -153,8 +160,10 @@ function LookupAutocomplete({
   const highlightedIndex = optionIndex ?? defaultIndex;
   const highlightedSuggestion = suggestions[highlightedIndex] ?? null;
 
-  const isDisabled = !isEnabled || (!isLoading && options.length === 0);
-  const showSuggestions = isOpen && isEnabled;
+  // No list to pick from, but typing is allowed: a plain text cell.
+  const isFreeEntry = allowUnlistedCodes && !isLoading && options.length === 0;
+  const isDisabled = !isEnabled || (!isLoading && options.length === 0 && !isFreeEntry);
+  const showSuggestions = isOpen && isEnabled && !isFreeEntry;
 
   useEffect(() => {
     setQuery(toInputValue(value));
@@ -237,6 +246,14 @@ function LookupAutocomplete({
       return;
     }
 
+    if (isFreeEntry) {
+      commitValue(query.trim());
+      setQuery(query.trim());
+      setShowInvalidSelection(false);
+      setIsOpen(false);
+      return;
+    }
+
     // Retain unmatched text for validation, but never commit on blur.
     const invalid = Boolean(query.trim() && !exactOption);
     setShowInvalidSelection(invalid);
@@ -254,6 +271,10 @@ function LookupAutocomplete({
       clearCellValue();
       return;
     }
+
+    // Without a list, Enter, Tab and F2 are table keys; leaving the cell
+    // saves the typed code (finishEditing).
+    if (isFreeEntry && (event.key === "Enter" || event.key === "Tab" || event.key === "F2")) return;
 
     if (event.key === "Escape") {
       setOptionIndex(null);
@@ -314,7 +335,7 @@ function LookupAutocomplete({
   // A failed lookup shows no "Unavailable" label in every row; the reason is
   // kept for screen readers through aria-describedby.
   else if (error && options.length === 0) placeholder = "";
-  else if (options.length === 0) placeholder = "No values";
+  else if (options.length === 0) placeholder = isFreeEntry ? "" : "No values";
 
   function handleFocus() {
     acceptedOnTab.current = false;
@@ -429,7 +450,7 @@ function LookupAutocomplete({
         onKeyDown={handleKeyDown}
       />
 
-      {!isDisabled && (
+      {!isDisabled && !isFreeEntry && (
         <span
           className={`pointer-events-none absolute top-1/2 flex -translate-y-1/2 transition-transform duration-120 ${
             isCompact ? "right-px w-[7px]" : "right-[3px] w-[9px]"

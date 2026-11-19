@@ -1,12 +1,17 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import UploadData from "../src/pages/UploadData/UploadData";
 import { stubDesktopViewport } from "./viewport";
 import { deferred } from "./deferred";
 import { importUploadData } from "../src/services/Api/uploadData";
 import { getCurrentWindowsUser, getVerifiedWindowsIdentity } from "../src/services/currentUser";
 import { applyCellEdits } from "../src/pages/UploadData/uploadDataDocument";
+import { getRawLithoLookup } from "../src/services/Api/rawLithoApi";
+import {
+  readLookupCache,
+  saveLookupCache,
+} from "../src/services/IndexDB/rawLithoLookupCacheDb";
 import {
   validateUploadDocument,
   type UploadLookups,
@@ -324,6 +329,40 @@ describe("Upload Data selection, delete and Undo", () => {
   });
 });
 
+describe("Upload Data code lists", () => {
+  // An empty list counts as nothing saved, so later tests start offline again.
+  afterEach(() => saveLookupCache("lithoCodes", []));
+
+  it("uses the Litho Code list saved on this PC when the server is unreachable", async () => {
+    await saveLookupCache("lithoCodes", [{ lithoCode: "SS" }, { lithoCode: "SH" }]);
+    const user = userEvent.setup();
+    render(<UploadData />);
+    await loadFile(jsonFile(uploadDocument()));
+
+    const cell = screen.getByRole("combobox", { name: /Litho Code, row 1/ });
+    await waitFor(() => expect(cell.parentElement?.querySelector("[data-open]")).not.toBeNull());
+    await user.click(cell);
+    expect(screen.getByRole("option", { name: "SH" })).toBeInTheDocument();
+  });
+
+  it("keeps the server's list on this PC for later", async () => {
+    vi.mocked(getRawLithoLookup).mockImplementation(async (field) =>
+      field === "lithoCode" ? [{ lithoCode: "SS" }, { lithoCode: "CL" }] : [],
+    );
+    try {
+      render(<UploadData />);
+      await waitFor(async () =>
+        expect((await readLookupCache("lithoCodes"))?.records).toEqual([
+          { lithoCode: "SS" },
+          { lithoCode: "CL" },
+        ]),
+      );
+    } finally {
+      vi.mocked(getRawLithoLookup).mockImplementation(() => Promise.reject(new Error("offline")));
+    }
+  });
+});
+
 describe("Upload Data drag and drop", () => {
   beforeEach(() => vi.mocked(importUploadData).mockClear());
 
@@ -389,10 +428,11 @@ describe("Upload Data drag and drop", () => {
     expect(await within(zone()).findByText("second.json")).toBeInTheDocument();
     expect(within(zone()).getByText("3 records")).toBeInTheDocument();
 
-    // An unreadable replacement shows the error, not a success state.
+    // An unreadable replacement shows the error and keeps the loaded file.
     fireEvent.drop(zone(), drag([new File(["{"], "broken.json", { type: "application/json" })]));
     expect(await screen.findByRole("alert")).toHaveTextContent("This file isn't valid JSON");
-    expect(within(zone()).queryByText("File loaded")).toBeNull();
+    expect(within(zone()).getByText("second.json")).toBeInTheDocument();
+    expect(within(zone()).queryByText("broken.json")).toBeNull();
 
     fireEvent.drop(zone(), drag([jsonFile(uploadDocument())]));
     await within(zone()).findByText("File loaded");
@@ -591,7 +631,7 @@ describe("Upload Data draft persistence", () => {
     const dialog = screen.getByRole("alertdialog", { name: "Upload to database?" });
     expect(dialog).toHaveAttribute("aria-modal", "true");
     expect(dialog).toHaveAccessibleDescription(
-      "These records will be added to the database.",
+      "These records replace the rows you uploaded before for this drillhole.",
     );
     // Cancel is focused first, so Enter cancels instead of uploading.
     const cancel = within(dialog).getByRole("button", { name: "Cancel" });

@@ -238,5 +238,9 @@ export function useRawLithoWorkspace({
     flushPendingSaves,
     retryDraftLoad: persistence.retryLoad,
     loadError: persistence.loadError,
+    /* The last draft write failed; edits exist only in this tab's memory. */
+    saveError: persistence.saveError,
+    /* Another tab is editing this drillhole; this one is read-only. */
+    isOpenElsewhere: persistence.isOpenElsewhere,
   };
 }

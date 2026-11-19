@@ -455,13 +455,14 @@ describe("Tab navigation", () => {
   });
 
   it("keeps the backward destination on its logical row after a depth edit reorders rows", async () => {
-    const user = await table(pageRows(2));
+    // Depths are never negative, so start the first row below 0.
+    const user = await table([validRow("r0", 5, 10), validRow("r1", 10, 20)]);
     const from = cell("Litho From (m), row 2");
     await user.click(from);
-    fireEvent.change(from, { target: { value: "-5" } });
+    fireEvent.change(from, { target: { value: "0" } });
     await user.tab({ shift: true });
     await waitFor(() => {
-      expect(cell("Litho From (m), row 1")).toHaveValue(-5);
+      expect(cell("Litho From (m), row 1")).toHaveValue(0);
       expect(cell("Hardness, row 2")).toHaveFocus();
       expect(document.activeElement?.closest("tr")).toHaveAttribute("data-row-id", "r0");
     });

@@ -3,7 +3,9 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json.Nodes;
+using BackendApi.Models.TableConstants;
 using BackendApi.Models.UploadData;
+using BackendApi.Repositories.TableConstants;
 using BackendApi.Repositories.UploadData;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -100,6 +102,87 @@ public sealed class UploadDataApiTests : IClassFixture<ApiFactory>
         Assert.Equal(
             ["drillhole is required and must be text.", "Row 1: lithoFrom must be less than lithoTo."],
             body.Errors);
+        Assert.Empty(repository.Calls);
+    }
+
+    [Fact]
+    public async Task ReturnsEveryRowErrorIncludingLookupsAndOverlaps()
+    {
+        var repository = new FakeUploadDataRepository();
+        var document = TestDocuments.Valid();
+        var rows = document["rows"]!.AsArray();
+        rows[0]!["lithoCode"] = "ZZZ";
+        rows.Add(TestDocuments.Row("8", "12"));
+
+        var response = await CreateClient(repository).PostAsync(Route, FileContent(document.ToJsonString()));
+
+        var body = await AssertFailure(response, HttpStatusCode.BadRequest, "Invalid lithology data.");
+        Assert.Equal(
+            ["Row 1: lithoCode \"ZZZ\" is not a known code.", "Row 2: interval 8–12 overlaps row 1 (5–10)."],
+            body.Errors);
+        Assert.Empty(repository.Calls);
+    }
+
+    [Fact]
+    public async Task ReturnsTheProceduresRejectionAsARowError()
+    {
+        const string reason = "Row 3: lithoFrom 10 and lithoTo 10 duplicate another row.";
+        var repository = new FakeUploadDataRepository
+        {
+            Failure = new UploadRejectedException(reason, SqlExceptionFactory.Create(51003, reason))
+        };
+
+        var response = await CreateClient(repository).PostAsync(Route, FileContent(TestDocuments.Valid().ToJsonString()));
+
+        var body = await AssertFailure(response, HttpStatusCode.BadRequest, "Invalid lithology data.");
+        Assert.Equal([reason], body.Errors);
+    }
+
+    [Fact]
+    public async Task ReportsAnUploadHoldingTheHoleLockAs409()
+    {
+        var repository = new FakeUploadDataRepository
+        {
+            Failure = SqlExceptionFactory.Create(51008, "Drillhole GTZO_0001_1 is being uploaded by another session.")
+        };
+
+        var response = await CreateClient(repository).PostAsync(Route, FileContent(TestDocuments.Valid().ToJsonString()));
+
+        await AssertFailure(response, HttpStatusCode.Conflict, "Another upload of this drillhole is still running.");
+        Assert.DoesNotContain("another session", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task FailsWithoutUploadingWhenTheLookupListsCannotBeRead()
+    {
+        var repository = new FakeUploadDataRepository
+        {
+            LookupFailure = new InvalidOperationException("Login failed for user 'userAcquire'.")
+        };
+
+        var response = await CreateClient(repository).PostAsync(Route, FileContent(TestDocuments.Valid().ToJsonString()));
+
+        await AssertFailure(response, HttpStatusCode.InternalServerError, "Database upload failed.");
+        Assert.DoesNotContain("userAcquire", await response.Content.ReadAsStringAsync());
+        Assert.Empty(repository.Calls);
+    }
+
+    [Fact]
+    public async Task ReportsALookupPermissionDenialAs403()
+    {
+        var repository = new FakeUploadDataRepository
+        {
+            LookupFailure = SqlExceptionFactory.Create(
+                229, "The SELECT permission was denied on the object 'QV_VS_LOOKUP_RO'.")
+        };
+
+        var response = await CreateClient(repository).PostAsync(Route, FileContent(TestDocuments.Valid().ToJsonString()));
+
+        await AssertFailure(
+            response,
+            HttpStatusCode.Forbidden,
+            @"BDOM\jsmith has no database permission to read the lookup lists. Contact the database administrator.");
+        Assert.DoesNotContain("QV_VS_LOOKUP_RO", await response.Content.ReadAsStringAsync());
         Assert.Empty(repository.Calls);
     }
 
@@ -319,7 +402,11 @@ public sealed class UploadDataApiTests : IClassFixture<ApiFactory>
                 if (repository is not null)
                 {
                     builder.ConfigureTestServices(services =>
-                        services.AddSingleton<IUploadDataRepository>(repository));
+                    {
+                        services.AddSingleton<IUploadDataRepository>(repository);
+                        services.AddSingleton<ITableConstantsRepository>(
+                            new FakeTableConstantsRepository(repository.LookupFailure));
+                    });
                 }
             })
             .CreateClient();
@@ -354,10 +441,21 @@ public sealed class UploadDataApiTests : IClassFixture<ApiFactory>
 
         public Exception? Failure { get; init; }
 
+        // Thrown by the lookup lists read before validation.
+        public Exception? LookupFailure { get; init; }
+
         public Task UploadAsync(UploadDataRequest request, CancellationToken cancellationToken = default)
         {
             Calls.Add(request);
             return Failure is null ? Task.CompletedTask : Task.FromException(Failure);
         }
+    }
+
+    private sealed class FakeTableConstantsRepository(Exception? failure) : ITableConstantsRepository
+    {
+        public Task<TableConstantsResponse> GetAllAsync(CancellationToken cancellationToken = default) =>
+            failure is null
+                ? Task.FromResult(TestDocuments.LookupLists())
+                : Task.FromException<TableConstantsResponse>(failure);
     }
 }

@@ -12,8 +12,8 @@ public static class DataViewerIntervals
 {
     private const string CommentsName = "LithologyComments";
 
-    // Stored NAME → Raw Litho field. omFacies and py are not here: the
-    // procedure parses them but does not store them.
+    // Stored NAME → Raw Litho field. OMFacies and PY are stored by
+    // Sql/insertAcQuireOfflineBek.sql; older uploads have none.
     private static readonly Dictionary<string, string> FieldByName = new(StringComparer.OrdinalIgnoreCase)
     {
         ["LithoFacies"] = "lithoCode",
@@ -21,6 +21,8 @@ public static class DataViewerIntervals
         ["RedoxFacies"] = "redoxCode",
         ["CA"] = "ca",
         ["OM"] = "om",
+        ["OMFacies"] = "omFacies",
+        ["PY"] = "py",
         ["OX"] = "ox",
         ["InternalStructure"] = "sedim",
         ["Granulo"] = "granulo",

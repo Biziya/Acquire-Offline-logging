@@ -11,16 +11,18 @@ const rows = [
   { id: 2, lithoFrom: 10, lithoTo: 20, lithoCode: "", lithologyComments: "" },
 ];
 
-function renderTable(onEdit = vi.fn(), isReadOnly = false) {
+const READY = {
+  records: { lithoCode: [{ lithoCode: "SS" }, { lithoCode: "SH" }, { lithoCode: "CL" }] },
+  state: { lithoCode: "ready" as const },
+};
+
+function renderTable(onEdit = vi.fn(), isReadOnly = false, lookups = READY) {
   render(
     <UploadDataTable
       rows={rows}
       visibleRows={[0, 1]}
       validation={null}
-      lookups={{
-        records: { lithoCode: [{ lithoCode: "SS" }, { lithoCode: "SH" }, { lithoCode: "CL" }] },
-        state: { lithoCode: "ready" },
-      }}
+      lookups={lookups}
       isReadOnly={isReadOnly}
       onEdit={onEdit}
     />,
@@ -30,6 +32,26 @@ function renderTable(onEdit = vi.fn(), isReadOnly = false) {
 
 // Lookup cells are the same cell Raw Litho uses.
 describe("Upload Data lookup cells", () => {
+  it("stays editable without any list and saves the typed code on Tab", async () => {
+    const user = userEvent.setup();
+    const onEdit = renderTable(vi.fn(), false, {
+      records: {},
+      state: { lithoCode: "unavailable" as const },
+    } as never);
+
+    const cell = screen.getByRole("combobox", { name: /Litho Code, row 2/ });
+    expect(cell).toBeEnabled();
+    expect(cell.parentElement?.querySelector("[data-open]")).toBeNull();
+
+    await user.click(cell);
+    expect(screen.queryByRole("listbox")).toBeNull();
+    await user.keyboard("XX");
+    expect(onEdit).not.toHaveBeenCalled();
+    await user.tab();
+    expect(onEdit).toHaveBeenCalledWith([{ rowIndex: 1, field: "lithoCode", text: "XX" }]);
+    expect(cell).not.toHaveAttribute("aria-invalid", "true");
+  });
+
   it("shows the dropdown arrow and opens the list on focus", async () => {
     const user = userEvent.setup();
     const onEdit = renderTable();

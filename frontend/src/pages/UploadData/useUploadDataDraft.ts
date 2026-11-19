@@ -9,6 +9,9 @@ import { uploadDataConfig } from "./config";
 
 export type DraftSource = Omit<UploadDataDraft, "savedAt">;
 
+/* Delay before writing a draft again after a failed write. */
+export const DRAFT_RETRY_MS = 2000;
+
 function isSameSource(first: DraftSource | null, second: DraftSource) {
   return (
     first !== null &&
@@ -44,6 +47,12 @@ export function useUploadDataDraft(
   const persistedRef = useRef<DraftSource | null>(null);
   const hasDraftRef = useRef(false);
   const timerRef = useRef<number | null>(null);
+  // Writes started but not yet settled, for the leave-page warning.
+  const writingRef = useRef(0);
+  const failedRef = useRef(false);
+  // Bumped when the draft is cleared, so a late failure is not retried.
+  const generationRef = useRef(0);
+  const mountedRef = useRef(true);
 
   useEffect(() => {
     onRestoreRef.current = onRestore;
@@ -59,16 +68,35 @@ export function useUploadDataDraft(
     if (!pending) return;
     pendingRef.current = null;
     persistedRef.current = pending;
+    const generation = generationRef.current;
+    writingRef.current += 1;
 
-    writeUploadDataDraft({ ...pending, savedAt: new Date().toISOString() }).then(
-      () => setSaveFailed(false),
-      (error) => {
-        console.error("Unable to save the Upload Data draft.", error);
-        // Retried with the next change; the working copy in memory is intact.
-        if (persistedRef.current === pending) persistedRef.current = null;
-        setSaveFailed(true);
-      },
-    );
+    writeUploadDataDraft({ ...pending, savedAt: new Date().toISOString() })
+      .then(
+        () => {
+          failedRef.current = false;
+          setSaveFailed(false);
+        },
+        (error) => {
+          console.error("Unable to save the Upload Data draft.", error);
+          if (persistedRef.current === pending) persistedRef.current = null;
+          failedRef.current = true;
+          setSaveFailed(true);
+          // Retry on a timer; a newer edit already queued replaces this one.
+          if (
+            !mountedRef.current ||
+            generation !== generationRef.current ||
+            pendingRef.current !== null
+          )
+            return;
+          pendingRef.current = pending;
+          if (timerRef.current === null)
+            timerRef.current = window.setTimeout(writePending, DRAFT_RETRY_MS);
+        },
+      )
+      .finally(() => {
+        writingRef.current -= 1;
+      });
   }, []);
 
   useEffect(() => {
@@ -102,6 +130,8 @@ export function useUploadDataDraft(
       timerRef.current = null;
       pendingRef.current = null;
       persistedRef.current = null;
+      generationRef.current += 1;
+      failedRef.current = false;
 
       if (hasDraftRef.current) {
         hasDraftRef.current = false;
@@ -128,11 +158,28 @@ export function useUploadDataDraft(
 
   // Leaving the page (route change) or the browser hiding it saves what is pending.
   useEffect(() => {
+    mountedRef.current = true;
     window.addEventListener("pagehide", writePending);
     return () => {
       window.removeEventListener("pagehide", writePending);
       writePending();
+      // No timed retries once the page is gone.
+      mountedRef.current = false;
     };
+  }, [writePending]);
+
+  // Closing or reloading the tab while a save is waiting, running or failing asks first.
+  useEffect(() => {
+    const warn = (event: BeforeUnloadEvent) => {
+      if (!pendingRef.current && writingRef.current === 0 && !failedRef.current)
+        return;
+      writePending();
+      event.preventDefault();
+      // Older Chromium shows the prompt only when returnValue is set.
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
   }, [writePending]);
 
   return { isRestoring, saveFailed };

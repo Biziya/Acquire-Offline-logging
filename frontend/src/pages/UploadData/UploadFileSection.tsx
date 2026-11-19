@@ -17,8 +17,11 @@ interface UploadFileSectionProps {
   recordCount: number;
   /* Clears the loaded file and everything built from it. */
   onFileRemove: () => void;
-  /* True while an upload is running: the file cannot be removed then. */
-  isRemoveDisabled: boolean;
+  /*
+   * True while an upload is running: the file cannot be removed or replaced
+   * then (no picker, no drop), so the upload is never dropped silently.
+   */
+  isLocked: boolean;
 }
 
 
@@ -37,7 +40,7 @@ function UploadFileSection({
   selectedFileName,
   recordCount,
   onFileRemove,
-  isRemoveDisabled,
+  isLocked,
 }: UploadFileSectionProps) {
   // A file only reaches `selectedFileName` once it has parsed successfully.
   const isLoaded = Boolean(selectedFileName);
@@ -60,6 +63,7 @@ function UploadFileSection({
   }, []);
 
   const openFilePicker = () => {
+    if (isLocked) return;
     fileInputRef.current?.click();
   };
 
@@ -78,8 +82,8 @@ function UploadFileSection({
     if (!hasFiles(event)) return;
 
     event.preventDefault();
-    event.dataTransfer.dropEffect = "copy";
-    setIsDragging(true);
+    event.dataTransfer.dropEffect = isLocked ? "none" : "copy";
+    setIsDragging(!isLocked);
   };
 
   const handleDragLeave = (event: React.DragEvent<HTMLDivElement>) => {
@@ -96,6 +100,13 @@ function UploadFileSection({
   const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     setIsDragging(false);
+
+    if (isLocked) {
+      if (event.dataTransfer.files.length > 0) {
+        onFileReject("Wait for the upload to finish");
+      }
+      return;
+    }
 
     const files = Array.from(event.dataTransfer.files);
     const [file] = files;
@@ -142,7 +153,8 @@ function UploadFileSection({
           hidden
         />
         {isLoaded && !isDragging ? (
-          // Loaded: confirm the file. Dropping another file still replaces it.
+          // Loaded: confirm the file. Dropping another file still replaces it
+          // (after a confirmation when it has edits), except during an upload.
           <>
             <svg className="size-6 text-rl-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
             <strong className="font-semibold text-rl-success" role="status">
@@ -156,8 +168,8 @@ function UploadFileSection({
                 className={REMOVE_BUTTON}
                 type="button"
                 aria-label="Remove selected file"
-                title={isRemoveDisabled ? "Wait for the upload to finish" : "Remove selected file"}
-                disabled={isRemoveDisabled}
+                title={isLocked ? "Wait for the upload to finish" : "Remove selected file"}
+                disabled={isLocked}
                 onClick={onFileRemove}
               >
                 <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17" /></svg>
@@ -170,6 +182,8 @@ function UploadFileSection({
             <button
               className={SECONDARY_BUTTON}
               type="button"
+              title={isLocked ? "Wait for the upload to finish" : undefined}
+              disabled={isLocked}
               onClick={openFilePicker}
             >
               Choose another file

@@ -5,7 +5,7 @@ import PageTitle from "../../components/PageTitle";
 import RawLithoFilters from "./RawLithoFilters";
 import RawLithoTable from "./RawLithoTable";
 import Toast from "../../components/Toast";
-import { TOAST_NOTIFICATIONS } from "./constants";
+import { TOAST_NOTIFICATIONS, tableColumns } from "./constants";
 import { useDrillholes } from "./hooks/useDrillholes";
 import { useWorkingDrillholes } from "./hooks/useWorkingDrillholes";
 import { orderDrillholes, pickRecentWorkingHoleIds } from "./drillholeOrdering";
@@ -24,9 +24,16 @@ import {
 } from "./rawLithoHelpers";
 import {
   findFirstConditionalRuleIssue,
+  findFirstIncompleteRow,
   findFirstOverlappingRowIndex,
   hasInvalidLookupValues,
 } from "./rawLithoValidation";
+import type { RowField } from "../../types/domain";
+
+function columnLabel(fieldKey: RowField) {
+  const label = tableColumns.find((column) => column.key === fieldKey)?.label ?? fieldKey;
+  return label.replace(/\s*\(m\)$/, "");
+}
 import { rawLithoConfig } from "./config";
 import { HELPER_TEXT, PRIMARY_BUTTON, SECONDARY_BUTTON } from "../../components/uiStyles";
 
@@ -103,7 +110,19 @@ function RawLitho() {
   const handleSave = useCallback(async () => {
     if (!isPageEnabled || isSaving) return;
 
-    if (hasInvalidLookupValues(rows, lookupData)) {
+    // Every row must be a finished interval before it can be exported.
+    const incomplete = findFirstIncompleteRow(rows, columnLabel);
+    if (incomplete) {
+      showToast({
+        type: "warning",
+        message: `Row ${incomplete.rowIndex + 1}: ${incomplete.message} Fix it, then save.`,
+      });
+      return;
+    }
+
+    // A list that could not be loaded (offline, nothing saved on this PC) is
+    // skipped, as on import; Upload Data checks those codes again.
+    if (hasInvalidLookupValues(rows, lookupData, { skipUnavailable: true })) {
       showToast(TOAST_NOTIFICATIONS.invalidLookupValue);
       return;
     }
