@@ -15,3 +15,6 @@ toast:
     warning: 3000
     success: 3000
     info: 3000         # neutral status (e.g. "Using offline data")
+  # A toast with a button (Undo after a delete) stays at least this long, so
+  # there is time to reach the button.
+  actionDuration: 8000

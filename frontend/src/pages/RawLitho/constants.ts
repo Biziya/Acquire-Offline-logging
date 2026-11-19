@@ -78,10 +78,6 @@ export const TOAST_NOTIFICATIONS = {
     message: "Row added",
     type: "success",
   },
-  rowRemoved: {
-    message: "Row removed",
-    type: "success",
-  },
   saveSuccess: {
     message: "Saved. The JSON file is in your downloads.",
     type: "success",
@@ -91,20 +87,24 @@ export const TOAST_NOTIFICATIONS = {
     type: "error",
   },
   rowsRemoved: {
-    message: "Selected rows deleted",
+    message: "Rows deleted",
     type: "success",
   },
   cellsCleared: {
-    message: "Selected cells cleared",
+    message: "Cells cleared",
     type: "success",
-  },
-  actionFailed: {
-    message: "Couldn't remove the row. Try again.",
-    type: "error",
   },
   deleteFailed: {
     message: "Couldn't delete. Try again.",
     type: "error",
+  },
+  undoDone: {
+    message: "Restored",
+    type: "success",
+  },
+  undoUnavailable: {
+    message: "Can't undo: the table has changed since.",
+    type: "warning",
   },
   importSuccess: {
     message: "File imported",

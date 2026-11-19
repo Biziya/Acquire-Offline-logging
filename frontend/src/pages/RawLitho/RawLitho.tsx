@@ -12,7 +12,6 @@ import { orderDrillholes, pickRecentWorkingHoleIds } from "./drillholeOrdering";
 import { useRawLithoImport } from "./hooks/useRawLithoImport";
 import { useRawLithoLookups } from "./hooks/useRawLithoLookups";
 import { useRawLithoWorkspace } from "./hooks/useRawLithoWorkspace";
-import { useRemoveRowConfirmation } from "./hooks/useRemoveRowConfirmation";
 import { useToast } from "../../hooks/useToast";
 import { useCurrentUser } from "../../hooks/useCurrentUser";
 import {
@@ -83,11 +82,6 @@ function RawLitho() {
       ),
     [drillholes, recentHoleIds, workingDrafts],
   );
-
-  const removal = useRemoveRowConfirmation({
-    onRemoveLastRow: workspace.removeLastRow,
-    showToast,
-  });
 
   const selectedDrillhole = useMemo(() => {
     if (!selectedHoleId) return null;
@@ -182,6 +176,7 @@ function RawLitho() {
           key={toast.id}
           message={toast.message}
           type={toast.type}
+          action={toast.action}
           onClose={() => hideToast(toast.id)}
         />
       )}
@@ -197,18 +192,6 @@ function RawLitho() {
           initialFocus="confirm"
           onConfirm={importer.confirmImport}
           onCancel={importer.cancelImport}
-        />
-      )}
-
-      {removal.isConfirmOpen && (
-        <ConfirmDialog
-          title="Remove last row?"
-          message="This row will be deleted."
-          confirmLabel="Remove"
-          busyLabel="Removing…"
-          isBusy={removal.isRemoving}
-          onConfirm={removal.confirmRemoveLastRow}
-          onCancel={removal.cancelRemoveLastRow}
         />
       )}
 
@@ -252,7 +235,7 @@ function RawLitho() {
       )}
 
       <RawLithoTable
-        // A new drillhole starts with no ticked rows or selected cells.
+        // A new drillhole starts with no selected cells or rows.
         key={selectedHoleId}
         rows={rows}
         currentPage={currentPage}
@@ -265,12 +248,12 @@ function RawLitho() {
         onPasteCells={workspace.pasteCells}
         showToast={showToast}
         onAddRow={workspace.tryAddRow}
-        onRemoveLastRow={removal.requestRemoveLastRow}
         onRemoveRows={workspace.removeRows}
         onClearCells={workspace.clearCells}
+        onUndo={workspace.undoLast}
         isEnabled={isPageEnabled}
         isBlocked={
-          Boolean(importer.pendingImport) || removal.isConfirmOpen || isSaving
+          Boolean(importer.pendingImport) || isSaving
         }
         footerEnd={
           <button

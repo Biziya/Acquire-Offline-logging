@@ -6,6 +6,7 @@ interface ToastProps {
   message: string;
   type: ToastNotification["type"];
   onClose: () => void;
+  action?: ToastNotification["action"];
 }
 
 /*
@@ -31,7 +32,8 @@ const ASSERTIVE_TYPES = new Set(["error", "warning"]);
 /*
  * White card, navy text, and a coloured accent bar plus icon carrying the
  * status. Colour is never the only signal: each type also has its own icon.
- * Pinned top-centre. Only an error toast takes clicks (its close button), so
+ * Pinned top-centre. Only an error toast (close button) or a toast with an
+ * action (Undo) takes clicks, so
  * the others never block the table beneath them. The centring uses
  * `transform` (not `translate`) because the enter / exit keyframes animate
  * `transform` and keep the -50% offset.
@@ -53,8 +55,10 @@ const TOAST_ACCENTS = {
   info: "[--toast-accent:var(--color-rl-cell-ring)]",
 };
 
-function Toast({ message, type, onClose }: ToastProps) {
-  const duration = uiConfig.toastDuration[type];
+function Toast({ message, type, onClose, action }: ToastProps) {
+  const duration = action
+    ? Math.max(uiConfig.toastDuration[type], uiConfig.toastActionDuration)
+    : uiConfig.toastDuration[type];
   const staysOpen = type === "error";
   const [isFadingOut, setIsFadingOut] = useState(false);
   const onCloseRef = useRef(onClose);
@@ -82,7 +86,7 @@ function Toast({ message, type, onClose }: ToastProps) {
 
   return (
     <div
-      className={`${TOAST_CLASS} ${staysOpen ? "pointer-events-auto" : "pointer-events-none pr-3.5"} ${
+      className={`${TOAST_CLASS} ${staysOpen || action ? "pointer-events-auto" : "pointer-events-none pr-3.5"} ${
         TOAST_ACCENTS[type]
       } ${isFadingOut ? "animate-toast-out" : "animate-toast-in"}`}
       role={isAssertive ? "alert" : "status"}
@@ -102,6 +106,18 @@ function Toast({ message, type, onClose }: ToastProps) {
         <path d={TOAST_ICON_PATHS[type]} />
       </svg>
       <span>{message}</span>
+      {action && (
+        <button
+          type="button"
+          className="flex-none cursor-pointer rounded-ui border-0 bg-transparent px-2 py-1 text-[0.8125rem] font-bold text-rl-navy underline underline-offset-2 hover:bg-rl-navy-soft focus-visible:outline-2 focus-visible:outline-rl-cell-ring"
+          onClick={() => {
+            action.onClick();
+            onCloseRef.current();
+          }}
+        >
+          {action.label}
+        </button>
+      )}
       {staysOpen && (
         <button
           type="button"

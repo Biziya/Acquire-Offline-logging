@@ -4,7 +4,6 @@ import type {
   LookupData,
   LookupStatuses,
   RowChange,
-  RowId,
 } from "../../types/domain";
 import { memo, useRef } from "react";
 import LookupAutocomplete from "./LookupAutocomplete";
@@ -31,14 +30,21 @@ interface RawLithoRowProps {
   isEnabled: boolean;
   hasOverlappingInterval?: boolean;
   selectedColumns?: ReadonlySet<RowField>;
-  /* Row checkbox in the No. column (Delete selected rows). */
-  isChecked?: boolean;
-  onToggleChecked?: (rowId: RowId) => void;
-  /* Double-click on the row number selects every cell of the row. */
-  onSelectRow?: (rowId: RowId) => void;
+  /*
+   * Every cell of the row is selected (row number clicked, or a drag over the
+   * numbers). The number cell then shows as a selected row header.
+   */
+  isRowSelected?: boolean;
 }
 
 const OVERLAP_MESSAGE = "This interval overlaps another row";
+
+/* The row number cell: a hover tint, and a navy edge plus the selection colour when the whole row is selected. */
+const ROW_HEADER_STATES = {
+  normal: "text-rl-text-muted hover:bg-rl-navy-soft hover:text-rl-navy",
+  selected:
+    "raw-litho-row--selected bg-rl-select font-bold text-rl-navy shadow-[inset_3px_0_0_var(--color-rl-navy)]",
+};
 
 /*
  * One look per cell state, strongest first: the Ctrl + click selection stays
@@ -94,9 +100,7 @@ function RawLithoRow({
   isEnabled,
   hasOverlappingInterval = false,
   selectedColumns,
-  isChecked = false,
-  onToggleChecked,
-  onSelectRow,
+  isRowSelected = false,
 }: RawLithoRowProps) {
   const valueBeforeEdit = useRef<Partial<Record<RowField, string>>>({});
   // Conditional rules on this row's current values (rawLithoValidation.ts);
@@ -123,34 +127,28 @@ function RawLithoRow({
       style={{ height: rawLithoConfig.rowHeight }}
       data-row-id={row.id}
     >
+      {/*
+        Row header, like Excel's: the table's mousedown listener reads
+        `data-row-number` for click, Shift + click, Ctrl + click and drag over
+        the numbers, so the row needs no callback of its own. Kept out of Tab
+        and arrow navigation (tabIndex -1): it is not a cell.
+      */}
       <td
-        className={`${BODY_CELL} select-none ${isChecked ? "bg-rl-select" : ""}`}
+        className={`${BODY_CELL} select-none p-0 ${ROW_HEADER_STATES[isRowSelected ? "selected" : "normal"]}`}
         data-row-number
-        title={onSelectRow ? "Double-click to select the whole row" : undefined}
-        onDoubleClick={(event) => {
-          // Double-clicking the checkbox itself only toggles it.
-          if (event.target instanceof HTMLInputElement) return;
-          onSelectRow?.(row.id);
-          // Keep focus in the table so Delete reaches its handler next.
-          event.currentTarget.querySelector<HTMLInputElement>("[data-row-select]")?.focus();
-        }}
       >
-        <span className="inline-flex items-center justify-center gap-1">
-          {onToggleChecked && (
-            <input
-              type="checkbox"
-              className="size-3 cursor-pointer accent-rl-navy"
-              // Kept out of Tab / arrow navigation (tabIndex -1): it is not a cell.
-              tabIndex={-1}
-              data-row-select
-              checked={isChecked}
-              disabled={!isEnabled}
-              aria-label={`Select row ${rowIndex + 1}`}
-              onChange={() => onToggleChecked(row.id)}
-            />
-          )}
-          <span className="tabular-nums">{rowIndex + 1}</span>
-        </span>
+        <button
+          type="button"
+          tabIndex={-1}
+          data-row-select
+          className="block size-full cursor-pointer border-0 bg-transparent p-0 text-center font-[inherit] text-inherit tabular-nums disabled:cursor-default"
+          disabled={!isEnabled}
+          aria-label={`Select row ${rowIndex + 1}`}
+          aria-pressed={isRowSelected}
+          title="Click to select this row. Shift + click selects a range, Ctrl + click adds a row."
+        >
+          {rowIndex + 1}
+        </button>
       </td>
 
       {tableColumns.map((column) => {

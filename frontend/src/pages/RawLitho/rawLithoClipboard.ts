@@ -71,9 +71,76 @@ export function getCellRange(
   );
 }
 
-/* Every visible cell of one row (double-click on the row number). */
+/* Every visible cell of one row (a click on the row number). */
 export function getRowCells(rowId: string): CellRef[] {
   return COLUMN_KEYS.map((columnKey) => ({ rowId, columnKey }));
+}
+
+/*
+ * Every cell of every row between two rows, inclusive, in table order
+ * (Shift + click or a drag on the row numbers). Empty when a row is unknown.
+ */
+export function getRowRange(
+  rows: readonly RawLithoRow[],
+  anchorRowId: string,
+  targetRowId: string,
+): CellRef[] {
+  const rowIds = rows.map((row) => String(row.id));
+  const indexes = [rowIds.indexOf(anchorRowId), rowIds.indexOf(targetRowId)];
+  if (indexes.some((index) => index === -1)) return [];
+
+  return rowIds
+    .slice(Math.min(...indexes), Math.max(...indexes) + 1)
+    .flatMap(getRowCells);
+}
+
+/* Rows (table order) whose every visible cell is in `selection`. */
+export function getFullySelectedRowIds(
+  rows: readonly RawLithoRow[],
+  selection: readonly CellRef[],
+): string[] {
+  const columnsByRow = new Map<string, Set<RowField>>();
+  selection.forEach(({ rowId, columnKey }) => {
+    const columns = columnsByRow.get(rowId) ?? new Set<RowField>();
+    columns.add(columnKey);
+    columnsByRow.set(rowId, columns);
+  });
+
+  return rows
+    .map((row) => String(row.id))
+    .filter((rowId) => columnsByRow.get(rowId)?.size === COLUMN_KEYS.length);
+}
+
+/* Merges a cell list with more cells, keeping each cell once. */
+export function mergeCells(base: readonly CellRef[], added: readonly CellRef[]) {
+  const seen = new Set(base.map((cell) => `${cell.rowId}\u0000${cell.columnKey}`));
+  const merged = [...base];
+  added.forEach((cell) => {
+    const key = `${cell.rowId}\u0000${cell.columnKey}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    merged.push(cell);
+  });
+  return merged;
+}
+
+/* 1-based row numbers as short ranges: [4, 5, 6, 9] → "4–6, 9". */
+export function formatRowNumbers(numbers: readonly number[]) {
+  const sorted = [...new Set(numbers)].sort((first, second) => first - second);
+  const parts: string[] = [];
+
+  for (let index = 0; index < sorted.length; ) {
+    const start = sorted[index] as number;
+    let end = start;
+    while (sorted[index + 1] === end + 1) {
+      end += 1;
+      index += 1;
+    }
+    parts.push(start === end ? String(start) : `${start}–${end}`);
+    index += 1;
+  }
+
+  return parts.join(", ");
 }
 
 /* The table cell containing `element`, or null outside the data columns. */

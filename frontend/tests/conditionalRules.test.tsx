@@ -141,7 +141,6 @@ function Harness() {
         onPasteCells={workspace.pasteCells}
         showToast={showToast}
         onAddRow={workspace.tryAddRow}
-        onRemoveLastRow={() => {}}
         isEnabled={workspace.isPageEnabled}
         isBlocked={false}
       />

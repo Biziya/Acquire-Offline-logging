@@ -16,7 +16,6 @@ import {
   createBlankDocument,
   editRow,
   clearDocumentCells,
-  removeDocumentLastRow,
   removeDocumentRows,
 } from "../rawLithoDocumentOperations";
 import { getPageForRowIndex } from "../rawLithoSorting";
@@ -174,21 +173,26 @@ export function useRawLithoWorkspace({
     return operation.result;
   };
 
-  const removeLastRow = async () => {
-    if (!canEdit(draftKey)) return false;
-    const next = removeDocumentLastRow(documentRef.current);
-    if (next === documentRef.current) return false;
+  /*
+   * The document before the last delete / clear, and the one it produced.
+   * Undo restores `before` only while `after` is still the current document:
+   * any later edit (or another drillhole) makes the undo stale.
+   */
+  const lastUndo = useRef<{ before: RawLithoDocument; after: RawLithoDocument } | null>(null);
+
+  const commitUndoable = (next: RawLithoDocument) => {
+    const before = documentRef.current;
     commitDocument(next);
-    setCurrentPage((page) => Math.min(page, totalPagesFor(next)));
-    return flushPendingSaves();
+    lastUndo.current =
+      documentRef.current === before ? null : { before, after: documentRef.current };
   };
 
-  /* Row checkboxes: deletes those rows, then waits for the draft write. */
+  /* Deletes the selected rows (row numbers or F5), then waits for the draft write. */
   const removeRows = async (ids: readonly RowId[]) => {
     if (!canEdit(draftKey)) return false;
     const next = removeDocumentRows(documentRef.current, ids);
     if (next === documentRef.current) return false;
-    commitDocument(next);
+    commitUndoable(next);
     setCurrentPage((page) => Math.min(page, totalPagesFor(next)));
     return flushPendingSaves();
   };
@@ -198,8 +202,23 @@ export function useRawLithoWorkspace({
     if (!canEdit(draftKey)) return false;
     const next = clearDocumentCells(documentRef.current, cells);
     if (next === documentRef.current) return true;
-    commitDocument(next);
+    commitUndoable(next);
     return flushPendingSaves();
+  };
+
+  /* Puts back the rows or values of the last delete / clear. */
+  const undoLast = async () => {
+    const undo = lastUndo.current;
+    lastUndo.current = null;
+    if (!undo || documentRef.current !== undo.after || !canEdit(draftKey)) {
+      showToast(TOAST_NOTIFICATIONS.undoUnavailable);
+      return false;
+    }
+    commitDocument(undo.before);
+    setCurrentPage((page) => Math.min(page, totalPagesFor(undo.before)));
+    const saved = await flushPendingSaves();
+    showToast(saved ? TOAST_NOTIFICATIONS.undoDone : TOAST_NOTIFICATIONS.draftSaveFailed);
+    return saved;
   };
 
   const totalPages = totalPagesFor(rawLithoDocument);
@@ -236,8 +255,8 @@ export function useRawLithoWorkspace({
     commitDepthEdit: stableCommitDepthEdit,
     pasteCells,
     tryAddRow,
-    removeLastRow,
     removeRows,
+    undoLast,
     clearCells,
     changeTablePage,
     setRawLithoDocument: commitDocument,

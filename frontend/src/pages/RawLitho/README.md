@@ -36,7 +36,6 @@ RawLitho/
     useWorkingDrillholes.ts       which drillholes have saved data
     useRawLithoShortcuts.ts       F4, F5, PageUp, PageDown
     useRawLithoRowFocus.ts        keeps the caret on the right row
-    useRemoveRowConfirmation.ts   Remove last row confirmation
 ```
 
 ## Logging a drillhole
@@ -74,19 +73,26 @@ A new row takes Litho From from the previous row's Litho To and copies
 it on top of `createSchemaRow()` from `src/types/rawLithoSchema.ts`. Litho To
 starts empty, so holding a key down cannot create a run of blank rows.
 
-Remove last row (button or `F5`) always asks first with a "Remove last row?"
-dialog. Focus starts on Cancel, so Enter cannot delete a row by reflex. Cancel
-or Escape changes nothing. Remove deletes the row, waits for the IndexedDB
-write, then shows "Row removed". The table always keeps one row, so with a
-single row the button is disabled and F5 does nothing.
+### Selecting and deleting
 
-Any rows can be deleted with the checkboxes in the `No.` column (the header
-checkbox ticks every row). "Delete selected (n)", or `Delete` while a row
-checkbox has focus, opens a "Delete n rows?" dialog listing the row numbers;
-nothing changes until Delete is pressed. Deleting every row leaves one blank
-row. Double-clicking a row number selects all its cells and ticks it, so
-`Delete` then offers to delete that row. Ticks reset when the drillhole
-changes. See `removeDocumentRows()` in `rawLithoDocumentOperations.ts`.
+Selection works as in Excel. Drag across cells to select a block (a drag
+inside one cell still selects its text). `Shift`+click or `Shift`+drag extends
+the block from the first cell, and `Ctrl`+click or `Ctrl`+drag adds cells. The
+`No.` column is the row header: click a number to select the row, `Shift`+click
+for every row in between, `Ctrl`+click to add or remove a row, or drag down the
+numbers. Clicking the `No.` header selects every row. A drag near the top or
+bottom edge scrolls the table. `Esc` clears the selection.
+
+The bar above the table names the selection ("3 rows selected (4–6)" or "12
+cells selected in 3 rows") and offers **Clear values** and, for whole rows,
+**Delete rows**. `Delete` does the same: whole rows ask to be deleted, several
+cells ask to be cleared, a single cell is cleared at once. `F5` selects the last
+row and asks to delete it. Every delete or clear opens a dialog first (rows and
+depth span, focus on Cancel). After it, the toast offers **Undo** for 8 s; Undo
+works while nothing else has changed since. Deleting every row leaves one blank
+row. See `RawLithoSelectionBar.tsx`, `removeDocumentRows()` and
+`clearDocumentCells()` in `rawLithoDocumentOperations.ts`, and `undoLast()` in
+`useRawLithoWorkspace.ts`.
 
 ### Row order
 
@@ -147,7 +153,7 @@ proportions, so the table fits the page; below `table.minWidth` (760 px) it
 scrolls inside its frame. Six fields are hidden with `visible: false` and kept
 for later use: `extractionType`, `corePass`, `recoveryStart`, `recoveryEnd`,
 `coreEnd` and `lithologicalDescription`. They still exist in state, JSON and
-IndexedDB, so do not delete them. Visible columns, after the `No.` row number (with its row checkbox):
+IndexedDB, so do not delete them. Visible columns, after the `No.` row number (the row header that selects rows):
 
 | Column | Field | Input | Required | List source |
 | --- | --- | --- | --- | --- |
@@ -252,14 +258,15 @@ The Shortcuts popup (the "Help and shortcuts" button,
 | `Delete` | clear the cell |
 | `Esc` | close a list, clear the cell selection |
 | `Ctrl`+click | select several cells |
-| `Shift`+click | select the block from the last clicked or focused cell (`Ctrl`+`Shift` adds to it) |
-| `Delete` with several cells selected | clear them, after a "Clear n cells?" dialog |
-| double-click a row number | select the whole row and tick it |
+| drag across cells | select the block |
+| `Shift`+click or drag | extend the block from the first cell (`Ctrl`+`Shift` adds to it) |
+| click a row number | select the row; `Shift`+click selects rows in between, `Ctrl`+click adds or removes one, drag selects several |
+| `Delete` with several cells selected | clear them, after a "Clear n cells?" dialog (can undo) |
+| `Delete` with whole rows selected | delete them, after a "Delete n rows?" dialog (can undo) |
 | `Ctrl`+`C` / `Ctrl`+`V` | copy or paste cells |
 | `F4` | add row |
 | `Tab` / `↓` from the last cell | add row |
-| `F5` | remove last row (asks first) |
-| row checkboxes, then Delete selected | delete those rows (asks first) |
+| `F5` | delete the last row (asks first, can undo) |
 | `↑` / `↓`, `Esc` in drillhole search | move through or close the list |
 
 Navigation skips disabled cells, carries on to the next or previous row, and
@@ -335,15 +342,13 @@ before, and the backend ignores both on upload.
 All messages live in `TOAST_NOTIFICATIONS` in `constants.ts` and are shown with
 `showToast(TOAST_NOTIFICATIONS.<key>)` from `src/hooks/useToast.ts`. Only one
 toast shows at a time. How long it stays depends on its type
-(`src/config/ui.yaml`: error 5000 ms, the others 3000 ms).
+(`src/config/ui.yaml`: error 5000 ms, the others 3000 ms; a toast with Undo at least 8000 ms).
 
 | Key | Message | Type |
 | --- | --- | --- |
 | `rowAdded` | Row added | success |
-| `rowRemoved` | Row removed | success |
 | `saveSuccess` | Saved. The JSON file is in your downloads. | success |
 | `saveFailed` | Couldn't save. Your edits are still here, so try Save JSON again. | error |
-| `actionFailed` | Couldn't remove the row. Try again. | error |
 | `importSuccess` | File imported | success |
 | `importFailed` | Couldn't import the file | error |
 | `importCancelled` | Import cancelled | info |
@@ -353,9 +358,11 @@ toast shows at a time. How long it stays depends on its type
 | `draftLoadFailed` | Couldn't load the saved rows for this drillhole. Reload the page to try again. | error |
 | `missingRequiredFields` | Fill in the required (*) cells of the last row first | warning |
 | `overlappingInterval` | This From / To interval overlaps another row. Intervals may only touch at their ends. | warning |
-| `rowsRemoved` | Selected rows deleted | success |
-| `cellsCleared` | Selected cells cleared | success |
+| `rowsRemoved` | 3 rows deleted (count filled in), with Undo | success |
+| `cellsCleared` | 12 cells cleared (count filled in), with Undo | success |
 | `deleteFailed` | Couldn't delete. Try again. | error |
+| `undoDone` | Restored | success |
+| `undoUnavailable` | Can't undo: the table has changed since. | warning |
 | `invalidDepthRange` | From must be less than To. The previous depth was kept. | warning |
 | `invalidLookupValue` | Some codes aren't in their list. Fix them, then save. | warning |
 | `cellsCopied` | Cells copied | info |

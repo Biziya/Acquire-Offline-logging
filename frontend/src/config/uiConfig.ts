@@ -18,6 +18,11 @@ export function readUiConfig(text: string) {
       success: durationOf("success"),
       info: durationOf("info"),
     } satisfies Record<ToastNotification["type"], number>,
+    toastActionDuration: reader.integer(
+      toast.actionDuration,
+      "toast.actionDuration",
+      500,
+    ),
   };
 }
 

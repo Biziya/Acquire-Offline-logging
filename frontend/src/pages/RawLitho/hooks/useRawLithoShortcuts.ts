@@ -72,7 +72,8 @@ function handleShortcut(event: KeyboardEvent, options: ShortcutsOptions) {
  * Raw Litho keyboard shortcuts.
  *
  *   F4        Add Row      (same validation path as the button)
- *   F5        Remove Last Row, and never a browser refresh
+ *   F5        Delete the last row (selects it and asks first), and never a
+ *             browser refresh
  *   PageUp    previous table page
  *   PageDown  next table page
  *

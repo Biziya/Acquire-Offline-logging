@@ -1,13 +1,11 @@
 import { useState } from "react";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { RawLithoDocument } from "../src/types/domain";
 import LookupAutocomplete from "../src/pages/RawLitho/LookupAutocomplete";
 import RawLithoTable from "../src/pages/RawLitho/RawLithoTable";
-import ConfirmDialog from "../src/components/ConfirmDialog";
 import { useRawLithoWorkspace } from "../src/pages/RawLitho/hooks/useRawLithoWorkspace";
-import { useRemoveRowConfirmation } from "../src/pages/RawLitho/hooks/useRemoveRowConfirmation";
 import {
   TOAST_NOTIFICATIONS,
 } from "../src/pages/RawLitho/constants";
@@ -228,10 +226,6 @@ function TableHarness() {
     drillholes: [{ holeId: "KEYBOARD", campaign: "C", projectCode: "P" }],
     showToast: toast,
   });
-  const removal = useRemoveRowConfirmation({
-    onRemoveLastRow: workspace.removeLastRow,
-    showToast: () => {},
-  });
   return (
     <>
       <button onClick={() => workspace.selectDrillhole("KEYBOARD")}>
@@ -253,22 +247,11 @@ function TableHarness() {
         onPasteCells={workspace.pasteCells}
         showToast={toast}
         onAddRow={workspace.tryAddRow}
-        onRemoveLastRow={removal.requestRemoveLastRow}
         onRemoveRows={workspace.removeRows}
         onClearCells={workspace.clearCells}
+        onUndo={workspace.undoLast}
         isEnabled={workspace.isPageEnabled}
-        isBlocked={removal.isConfirmOpen}
       />
-      {removal.isConfirmOpen && (
-        <ConfirmDialog
-          title="Remove last row?"
-          message="This row will be deleted."
-          confirmLabel="Remove"
-          onConfirm={removal.confirmRemoveLastRow}
-          onCancel={removal.cancelRemoveLastRow}
-          isBusy={removal.isRemoving}
-        />
-      )}
     </>
   );
 }
@@ -316,12 +299,13 @@ describe("table shortcuts", () => {
       screen.queryByLabelText("Litho From (m), row 3"),
     ).not.toBeInTheDocument();
     await user.keyboard("{F5}");
-    expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+    expect(screen.getByRole("alertdialog", { name: "Delete 1 row?" })).toBeInTheDocument();
+    expect(cellOf("Litho From (m), row 2")).toHaveClass("raw-litho-cell--selected");
     expect(screen.getByLabelText("Litho From (m), row 2")).toBeInTheDocument();
     await user.click(screen.getByText("Cancel"));
     expect(screen.getByLabelText("Litho From (m), row 2")).toBeInTheDocument();
     await user.keyboard("{F5}");
-    await user.click(screen.getByRole("button", { name: /^Remove$/ }));
+    await user.click(screen.getByRole("button", { name: "Delete 1 row" }));
     await waitFor(() =>
       expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument(),
     );
@@ -849,60 +833,148 @@ describe("Tab accepts the closest lookup match", () => {
   });
 });
 
-describe("row checkboxes, range selection and bulk delete", () => {
-  const numberCell = (row: number) =>
-    screen.getByLabelText(`Select row ${row}`).closest("td")!;
+describe("Excel-style selection, selection bar and delete with Undo", () => {
+  const rowHeader = (row: number) => screen.getByLabelText(`Select row ${row}`);
+  const isSelected = (label: string) =>
+    cellOf(label)?.classList.contains("raw-litho-cell--selected") ?? false;
+  const lastToast = () => toast.mock.calls.at(-1)?.[0];
 
-  it("deletes only the ticked rows after confirmation", async () => {
-    const user = await table(pageRows(3));
-    await user.click(screen.getByLabelText("Select row 1"));
-    await user.click(screen.getByLabelText("Select row 3"));
-    await user.click(screen.getByRole("button", { name: /Delete selected \(2\)/ }));
+  // jsdom has no layout: the drag resolves the cell under the pointer
+  // through elementFromPoint, so point it at a chosen element.
+  function dragTo(element: Element) {
+    document.elementFromPoint = vi.fn(() => element);
+    fireEvent.mouseMove(document, { buttons: 1, clientX: 5, clientY: 5 });
+  }
 
-    expect(screen.getByRole("alertdialog", { name: "Delete 2 rows?" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(cell("Litho From (m), row 3")).toHaveValue(20);
+  it("selects a row from its number, rows in between with Shift, and toggles with Ctrl", async () => {
+    await table(pageRows(4));
+    fireEvent.mouseDown(rowHeader(2));
+    fireEvent.mouseUp(document);
+    expect(isSelected("Litho From (m), row 2")).toBe(true);
+    expect(isSelected("Lithology Comments, row 2")).toBe(true);
+    expect(rowHeader(2)).toHaveAttribute("aria-pressed", "true");
+    expect(isSelected("Litho From (m), row 1")).toBe(false);
+    expect(screen.getByText("1 row selected (2)")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /Delete selected \(2\)/ }));
-    await user.click(screen.getByRole("button", { name: "Delete" }));
-    await waitFor(() => expect(screen.queryByLabelText("Litho From (m), row 2")).toBeNull());
-    expect(cell("Litho From (m), row 1")).toHaveValue(10);
-    expect(toast).toHaveBeenCalledWith(TOAST_NOTIFICATIONS.rowsRemoved);
-    await waitFor(async () => expect((await storedRows())?.map((row) => row.id)).toEqual(["r1"]));
+    fireEvent.mouseDown(rowHeader(4), { shiftKey: true });
+    fireEvent.mouseUp(document);
+    expect(screen.getByText("3 rows selected (2–4)")).toBeInTheDocument();
+
+    fireEvent.mouseDown(rowHeader(3), { ctrlKey: true });
+    fireEvent.mouseUp(document);
+    expect(rowHeader(3)).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByText("2 rows selected (2, 4)")).toBeInTheDocument();
   });
 
-  it("selects the whole row on a double-click of its number", async () => {
-    const user = await table(pageRows(2));
-    await user.dblClick(within(numberCell(2)).getByText("2"));
-    expect(screen.getByLabelText("Select row 2")).toBeChecked();
-    // Focus stays in the table, so the next Delete reaches it.
-    expect(screen.getByLabelText("Select row 2")).toHaveFocus();
-    expect(cellOf("Litho From (m), row 2")).toHaveClass("raw-litho-cell--selected");
-    expect(cellOf("Lithology Comments, row 2")).toHaveClass("raw-litho-cell--selected");
-    expect(cellOf("Litho From (m), row 1")).not.toHaveClass("raw-litho-cell--selected");
-
-    fireEvent.keyDown(cell("Litho From (m), row 2"), { key: "Delete" });
-    expect(screen.getByRole("alertdialog", { name: "Delete 1 row?" })).toBeInTheDocument();
+  it("selects every row passed while dragging down the numbers", async () => {
+    await table(pageRows(4));
+    fireEvent.mouseDown(rowHeader(1));
+    dragTo(rowHeader(3));
+    fireEvent.mouseUp(document);
+    expect(screen.getByText("3 rows selected (1–3)")).toBeInTheDocument();
+    expect(isSelected("Litho From (m), row 4")).toBe(false);
   });
 
-  it("Shift + click selects a block; Delete clears it after confirmation", async () => {
-    const user = await table(pageRows(3));
+  it("drags across cells to select the block, and Ctrl + drag adds another", async () => {
+    await table(pageRows(3));
     fireEvent.mouseDown(cell("Litho To (m), row 1"));
     cell("Litho To (m), row 1").focus();
-    fireEvent.mouseDown(cell("Litho Code, row 2"), { shiftKey: true });
+    // Moving inside the start cell keeps ordinary text selection.
+    dragTo(cell("Litho To (m), row 1"));
+    expect(document.querySelector(".raw-litho-cell--selected")).toBeNull();
+    dragTo(cell("Litho Code, row 2"));
+    fireEvent.mouseUp(document);
 
     for (const label of ["Litho To (m), row 1", "Litho Code, row 1", "Litho To (m), row 2", "Litho Code, row 2"]) {
-      expect(cellOf(label), label).toHaveClass("raw-litho-cell--selected");
+      expect(isSelected(label), label).toBe(true);
     }
-    expect(cellOf("Litho From (m), row 1")).not.toHaveClass("raw-litho-cell--selected");
-    expect(cellOf("Litho To (m), row 3")).not.toHaveClass("raw-litho-cell--selected");
+    expect(isSelected("Litho From (m), row 1")).toBe(false);
+    expect(screen.getByText("4 cells selected in 2 rows")).toBeInTheDocument();
+    // Focus returns to where the drag started.
+    expect(cell("Litho To (m), row 1")).toHaveFocus();
 
-    fireEvent.keyDown(cell("Litho Code, row 2"), { key: "Delete" });
+    fireEvent.mouseDown(cell("Litho From (m), row 3"), { ctrlKey: true });
+    dragTo(cell("Litho To (m), row 3"));
+    fireEvent.mouseUp(document);
+    expect(screen.getByText("6 cells selected in 3 rows")).toBeInTheDocument();
+  });
+
+  it("Shift + click extends the block from the anchor cell", async () => {
+    await table(pageRows(3));
+    fireEvent.mouseDown(cell("Litho To (m), row 1"));
+    fireEvent.mouseUp(document);
+    fireEvent.mouseDown(cell("Litho Code, row 3"), { shiftKey: true });
+    fireEvent.mouseUp(document);
+    expect(screen.getByText("6 cells selected in 3 rows")).toBeInTheDocument();
+  });
+
+  it("deletes selected rows from the bar after confirming, and Undo puts them back", async () => {
+    const user = await table(pageRows(3));
+    fireEvent.mouseDown(rowHeader(1));
+    fireEvent.mouseDown(rowHeader(3), { ctrlKey: true });
+    fireEvent.mouseUp(document);
+    await user.click(screen.getByRole("button", { name: "Delete 2 rows" }));
+
+    const dialog = screen.getByRole("alertdialog", { name: "Delete 2 rows?" });
+    expect(within(dialog).getByText("1, 3")).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(cell("Litho From (m), row 3")).toHaveValue(20);
+    // Cancel keeps the selection.
+    expect(screen.getByText("2 rows selected (1, 3)")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Delete 2 rows" }));
+    await user.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Delete 2 rows" }));
+    await waitFor(() => expect(screen.queryByLabelText("Litho From (m), row 2")).toBeNull());
+    expect(lastToast()).toMatchObject({ message: "2 rows deleted", type: "success" });
+    await waitFor(async () => expect((await storedRows())?.map((row) => row.id)).toEqual(["r1"]));
+
+    await act(async () => lastToast()?.action?.onClick());
+    await waitFor(() => expect(cell("Litho From (m), row 3")).toHaveValue(20));
+    await waitFor(async () => expect((await storedRows())?.map((row) => row.id)).toEqual(["r0", "r1", "r2"]));
+    expect(lastToast()).toEqual(TOAST_NOTIFICATIONS.undoDone);
+  });
+
+  it("refuses Undo once the table changed after the delete", async () => {
+    const user = await table(pageRows(3));
+    fireEvent.mouseDown(rowHeader(3));
+    fireEvent.mouseUp(document);
+    fireEvent.keyDown(cell("Litho From (m), row 3"), { key: "Delete" });
+    await user.click(screen.getByRole("button", { name: "Delete 1 row" }));
+    await waitFor(() => expect(screen.queryByLabelText("Litho From (m), row 3")).toBeNull());
+    const undo = lastToast()?.action;
+
+    await user.clear(cell("Lithology Comments, row 1"));
+    await user.type(cell("Lithology Comments, row 1"), "x");
+    await act(async () => undo?.onClick());
+    expect(lastToast()).toEqual(TOAST_NOTIFICATIONS.undoUnavailable);
+    expect(screen.queryByLabelText("Litho From (m), row 3")).toBeNull();
+  });
+
+  it("Delete on a dragged block asks to clear it; Cancel keeps the values", async () => {
+    const user = await table(pageRows(3));
+    fireEvent.mouseDown(cell("Litho To (m), row 1"));
+    dragTo(cell("Litho Code, row 2"));
+    fireEvent.mouseUp(document);
+
+    fireEvent.keyDown(cell("Litho To (m), row 1"), { key: "Delete" });
     expect(screen.getByRole("alertdialog", { name: "Clear 4 cells?" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Clear" }));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(cell("Litho Code, row 2")).toHaveValue("Unknown");
 
+    await user.click(screen.getByRole("button", { name: "Clear values" }));
+    await user.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Clear values" }));
     await waitFor(() => expect(cell("Litho Code, row 2")).toHaveValue(""));
     expect(cell("Litho Code, row 3")).toHaveValue("Unknown");
-    expect(toast).toHaveBeenCalledWith(TOAST_NOTIFICATIONS.cellsCleared);
+    expect(lastToast()).toMatchObject({ message: "4 cells cleared" });
+    expect(lastToast()?.action?.label).toBe("Undo");
+  });
+
+  it("the No. header selects every row; the bar's close button clears the selection", async () => {
+    const user = await table(pageRows(3));
+    await user.click(screen.getByRole("button", { name: "Select all rows" }));
+    expect(screen.getByText("3 rows selected (1–3)")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Clear selection (Esc)" }));
+    expect(document.querySelector(".raw-litho-cell--selected")).toBeNull();
+    expect(screen.getByText(/Click a row number to select rows/)).toBeInTheDocument();
   });
 });

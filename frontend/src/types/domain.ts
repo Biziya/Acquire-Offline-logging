@@ -76,6 +76,8 @@ export type LookupStatuses = Partial<Record<RowField, LookupStatus>>;
 export interface ToastNotification {
   message: string;
   type: "success" | "warning" | "error" | "info";
+  /* One button in the toast (Undo). The toast then stays longer and takes clicks. */
+  action?: { label: string; onClick: () => void };
 }
 
 export interface ToastState extends ToastNotification {
