@@ -50,10 +50,11 @@ describe("keyboard shortcuts popup", () => {
     expect(shiftTab).toHaveTextContent("Shift+Tab");
     expect(within(shiftTab as HTMLElement).getByText("+")).toBeInTheDocument();
     for (const label of ["Ctrl + Click", "Ctrl + C", "Ctrl + V", "↑ / ↓", "← / →",
-      "PgUp / PgDn", "Esc then Tab", "F2", "Delete", "F4", "F5", "Tab / ↓"]) {
+      "PgUp / PgDn", "Esc then Tab", "F2", "Delete", "F4", "F5", "Tab / ↓",
+      "Shift + Click", "☐", "Double-click", "From / To"]) {
       expect(popup.querySelector(`[aria-label="${label}"]`), label).toBeInTheDocument();
     }
-    expect(within(popup).getAllByRole("definition")).toHaveLength(17);
+    expect(within(popup).getAllByRole("definition")).toHaveLength(24);
     // One line per shortcut: keys never wrap, long descriptions are cut off.
     for (const term of within(popup).getAllByRole("term")) expect(term).toHaveClass("whitespace-nowrap");
     for (const definition of within(popup).getAllByRole("definition")) {

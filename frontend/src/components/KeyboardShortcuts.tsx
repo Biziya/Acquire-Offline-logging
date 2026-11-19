@@ -31,10 +31,13 @@ const GROUPS: { title: string; scope?: Scope; items: Shortcut[] }[] = [
   {
     title: "Edit and select",
     items: [
+      { keys: ["Tab"], description: "Accept the closest list match" },
       { keys: ["F2"], description: "Move through the list", scope: "Raw Litho" },
       { keys: ["Delete"], description: "Clear cell", scope: "Raw Litho" },
       { keys: ["Esc"], description: "Close list, clear selection" },
       { keys: ["Ctrl", "Click"], description: "Select several cells", separator: "+" },
+      { keys: ["Shift", "Click"], description: "Select a block of cells", separator: "+", scope: "Raw Litho" },
+      { keys: ["Delete"], description: "Clear selected cells (asks first)", scope: "Raw Litho" },
       { keys: ["Ctrl", "C"], description: "Copy cells", separator: "+" },
       { keys: ["Ctrl", "V"], description: "Paste cells", separator: "+" },
     ],
@@ -46,6 +49,10 @@ const GROUPS: { title: string; scope?: Scope; items: Shortcut[] }[] = [
       { keys: ["F4"], description: "Add row" },
       { keys: ["Tab", "↓"], description: "Add row from last cell", separator: "/" },
       { keys: ["F5"], description: "Remove last row" },
+      { keys: ["☐"], description: "Tick rows to delete (asks first)" },
+      { keys: ["Double-click"], description: "On No.: select the whole row" },
+      { keys: ["Delete"], description: "Delete selected rows (asks first)" },
+      { keys: ["From", "To"], description: "Intervals may touch, never overlap", separator: "/" },
     ],
   },
   {

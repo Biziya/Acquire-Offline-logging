@@ -45,6 +45,37 @@ export function isSameCell(first: CellRef, second: CellRef) {
   );
 }
 
+/*
+ * Every cell of the rectangle between two cells (Shift + click), inclusive.
+ * Rows span the full `rows` order, so a range may cross table pages; columns
+ * span the visible table columns. Empty when either corner is unknown.
+ */
+export function getCellRange(
+  rows: readonly RawLithoRow[],
+  anchor: CellRef,
+  target: CellRef,
+): CellRef[] {
+  const rowIds = rows.map((row) => String(row.id));
+  const rowIndexes = [rowIds.indexOf(anchor.rowId), rowIds.indexOf(target.rowId)];
+  const columnIndexes = [
+    COLUMN_KEYS.indexOf(anchor.columnKey),
+    COLUMN_KEYS.indexOf(target.columnKey),
+  ];
+  if ([...rowIndexes, ...columnIndexes].some((index) => index === -1)) return [];
+
+  const [firstRow, lastRow] = [Math.min(...rowIndexes), Math.max(...rowIndexes)];
+  const [firstColumn, lastColumn] = [Math.min(...columnIndexes), Math.max(...columnIndexes)];
+
+  return rowIds.slice(firstRow, lastRow + 1).flatMap((rowId) =>
+    COLUMN_KEYS.slice(firstColumn, lastColumn + 1).map((columnKey) => ({ rowId, columnKey })),
+  );
+}
+
+/* Every visible cell of one row (double-click on the row number). */
+export function getRowCells(rowId: string): CellRef[] {
+  return COLUMN_KEYS.map((columnKey) => ({ rowId, columnKey }));
+}
+
 /* The table cell containing `element`, or null outside the data columns. */
 export function getCellRef(element: EventTarget | null): CellRef | null {
   const rowId = getRowIdFromElement(element);

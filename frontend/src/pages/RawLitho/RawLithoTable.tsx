@@ -24,7 +24,9 @@ import {
 } from "./tableNavigation";
 import {
   buildClipboardText,
+  getCellRange,
   getCellRef,
+  getRowCells,
   isSameCell,
   isTabularClipboard,
   parseClipboardText,
@@ -32,7 +34,9 @@ import {
   type CellEdit,
   type CellRef,
 } from "./rawLithoClipboard";
-import { findDuplicateIntervalRowIds } from "./rawLithoValidation";
+import { findOverlappingIntervalRowIds } from "./rawLithoValidation";
+import ConfirmDialog from "../../components/ConfirmDialog";
+import type { RowId } from "../../types/domain";
 import {
   INDEX_COLUMN_WIDTH,
   RAW_LITHO_ROWS_PER_PAGE,
@@ -72,6 +76,13 @@ interface RawLithoTableProps {
   showToast: Notify;
   onAddRow: () => AddRowResult;
   onRemoveLastRow: () => void;
+  /*
+   * Deleting ticked rows / clearing selected cells. Both are confirmed in a
+   * dialog first; they resolve true once the change is saved as a draft.
+   * Without them the row checkboxes and the bulk Delete are not offered.
+   */
+  onRemoveRows?: (rowIds: RowId[]) => Promise<boolean>;
+  onClearCells?: (cells: CellRef[]) => Promise<boolean>;
   isEnabled: boolean;
   isBlocked?: boolean;
   /* Rendered at the right end of the bar under the table (Save). */
@@ -97,23 +108,165 @@ function RawLithoTable({
   showToast,
   onAddRow,
   onRemoveLastRow,
+  onRemoveRows,
+  onClearCells,
   isEnabled,
-  isBlocked = false,
+  isBlocked: isBlockedOutside = false,
   footerEnd,
 }: RawLithoTableProps) {
   const tableWrapperRef = useRef<HTMLDivElement>(null);
   const tableBodyRef = useRef<HTMLTableSectionElement>(null);
+  const selectAllRef = useRef<HTMLInputElement>(null);
   const tabNavigationActive = useRef(true);
-  // Ctrl + click selection, by row id and column key so it survives sorting.
+  // Ctrl / Shift + click selection, by row id and column key so it survives sorting.
   const [selectedCells, setSelectedCells] = useState<CellRef[]>([]);
+  // Where Shift + click ranges start: the last cell clicked or focused.
+  const anchorCell = useRef<CellRef | null>(null);
+  // Ticked row checkboxes, by row id.
+  const [checkedRowIds, setCheckedRowIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const [pendingDelete, setPendingDelete] = useState<
+    | { kind: "rows"; rowIds: RowId[] }
+    | { kind: "cells"; cells: CellRef[] }
+    | null
+  >(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const isBlocked = isBlockedOutside || pendingDelete !== null;
+  const canSelectRows = Boolean(onRemoveRows);
+
+  // Ticked rows that no longer exist (deleted, new drillhole) drop out.
+  const rowIdSet = useMemo(() => new Set(rows.map((row) => String(row.id))), [rows]);
+  const checkedIds = useMemo(
+    () => rows.filter((row) => checkedRowIds.has(String(row.id))).map((row) => row.id),
+    [checkedRowIds, rows],
+  );
+  const allChecked = rows.length > 0 && checkedIds.length === rows.length;
+
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = checkedIds.length > 0 && !allChecked;
+    }
+  }, [allChecked, checkedIds.length]);
+
+  useEffect(() => {
+    setSelectedCells((current) => {
+      const kept = current.filter((cell) => rowIdSet.has(cell.rowId));
+      return kept.length === current.length ? current : kept;
+    });
+  }, [rowIdSet]);
+
+  const toggleRowChecked = useCallback((rowId: RowId) => {
+    setCheckedRowIds((current) => {
+      const next = new Set(current);
+      const key = String(rowId);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
+
+  const selectWholeRow = useCallback((rowId: RowId) => {
+    const cells = getRowCells(String(rowId));
+    setSelectedCells(cells);
+    anchorCell.current = cells[0] ?? null;
+    setCheckedRowIds((current) => new Set(current).add(String(rowId)));
+  }, []);
+
+  function toggleAllRows() {
+    setCheckedRowIds(
+      allChecked ? new Set() : new Set(rows.map((row) => String(row.id))),
+    );
+  }
+
+  function requestDeleteRows() {
+    if (!onRemoveRows || !isEnabled || isBlocked || checkedIds.length === 0) return;
+    setPendingDelete({ kind: "rows", rowIds: checkedIds });
+  }
+
+  /*
+   * Delete with several cells selected asks to clear them. When the selection
+   * is exactly whole ticked rows (double-click on a row number), it asks to
+   * delete those rows instead.
+   */
+  function requestDeleteSelection() {
+    if (!isEnabled || isBlocked) return false;
+
+    const selectedRowIds = [...new Set(selectedCells.map((cell) => cell.rowId))];
+    const isWholeCheckedRows =
+      selectedRowIds.length > 0 &&
+      selectedRowIds.every(
+        (rowId) =>
+          checkedRowIds.has(rowId) &&
+          getRowCells(rowId).every((cell) =>
+            selectedCells.some((item) => isSameCell(item, cell)),
+          ),
+      );
+
+    if (isWholeCheckedRows && onRemoveRows) {
+      setPendingDelete({ kind: "rows", rowIds: checkedIds });
+      return true;
+    }
+    if (selectedCells.length > 1 && onClearCells) {
+      setPendingDelete({ kind: "cells", cells: selectedCells });
+      return true;
+    }
+    return false;
+  }
+
+  /* Delete key: a cell selection first, then ticked rows from a row checkbox. */
+  function requestBulkDelete(target: EventTarget) {
+    if (requestDeleteSelection()) return true;
+
+    const onRowCheckbox =
+      target instanceof Element && target.matches("[data-row-select]");
+    if (!onRowCheckbox || checkedIds.length === 0 || !onRemoveRows) return false;
+    if (!isEnabled || isBlocked) return false;
+
+    requestDeleteRows();
+    return true;
+  }
+
+  async function confirmDelete() {
+    if (!pendingDelete || isDeleting) return;
+    setIsDeleting(true);
+
+    let succeeded: boolean;
+    try {
+      succeeded =
+        pendingDelete.kind === "rows"
+          ? ((await onRemoveRows?.(pendingDelete.rowIds)) ?? false)
+          : ((await onClearCells?.(pendingDelete.cells)) ?? false);
+    } catch {
+      succeeded = false;
+    }
+
+    setIsDeleting(false);
+    if (succeeded) {
+      if (pendingDelete.kind === "rows") setCheckedRowIds(new Set());
+      setSelectedCells([]);
+    }
+    setPendingDelete(null);
+    showToast(
+      !succeeded
+        ? TOAST_NOTIFICATIONS.deleteFailed
+        : pendingDelete.kind === "rows"
+          ? TOAST_NOTIFICATIONS.rowsRemoved
+          : TOAST_NOTIFICATIONS.cellsCleared,
+    );
+  }
+
+  function cancelDelete() {
+    if (!isDeleting) setPendingDelete(null);
+  }
 
   const pageStartIndex = (currentPage - 1) * RAW_LITHO_ROWS_PER_PAGE;
   const visibleRows = useMemo(
     () => rows.slice(pageStartIndex, pageStartIndex + RAW_LITHO_ROWS_PER_PAGE),
     [pageStartIndex, rows],
   );
-  const duplicateRowIds = useMemo(
-    () => findDuplicateIntervalRowIds(rows),
+  const overlappingRowIds = useMemo(
+    () => findOverlappingIntervalRowIds(rows),
     [rows],
   );
   const selectedColumnsByRow = useMemo(() => {
@@ -144,10 +297,16 @@ function RawLithoTable({
     }
   }, [currentPage]);
 
+  // Read by the document listener below, which is registered once.
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
+
   /*
    * Ctrl + click toggles a cell in the selection and focuses it, so Ctrl + C /
-   * Ctrl + V reach the table. A plain click anywhere outside the selection
-   * clears it. Listening on the document covers clicks outside the table too.
+   * Ctrl + V reach the table. Shift + click selects the rectangle from the
+   * last clicked or focused cell (Ctrl + Shift adds it to the selection). A
+   * plain click anywhere outside the selection clears it. Listening on the
+   * document covers clicks outside the table too.
    */
   useEffect(() => {
     function handleMouseDown(event: MouseEvent) {
@@ -159,7 +318,24 @@ function RawLithoTable({
           ? getCellRef(event.target)
           : null;
 
+      if (event.shiftKey && cell) {
+        event.preventDefault();
+        const anchor = anchorCell.current ?? cell;
+        const range = getCellRange(rowsRef.current, anchor, cell);
+        const additive = event.ctrlKey || event.metaKey;
+        setSelectedCells((current) =>
+          additive
+            ? [...current, ...range.filter((item) => !current.some((existing) => isSameCell(existing, item)))]
+            : range,
+        );
+        focusCellInRow(tbody, cell.rowId, cell.columnKey);
+        // Focusing the clicked cell must not move the range's start.
+        anchorCell.current = anchor;
+        return;
+      }
+
       if (!event.ctrlKey && !event.metaKey) {
+        if (cell) anchorCell.current = cell;
         setSelectedCells((current) =>
           current.length === 0 ||
           (cell && current.some((item) => isSameCell(item, cell)))
@@ -172,6 +348,7 @@ function RawLithoTable({
       if (!cell) return;
 
       event.preventDefault();
+      anchorCell.current = cell;
       setSelectedCells((current) =>
         current.some((item) => isSameCell(item, cell))
           ? current.filter((item) => !isSameCell(item, cell))
@@ -367,14 +544,67 @@ function RawLithoTable({
     onPasteCells(plan.edits);
   }
 
+  const deleteDialog = pendingDelete && (() => {
+    if (pendingDelete.kind === "rows") {
+      const count = pendingDelete.rowIds.length;
+      const ids = new Set(pendingDelete.rowIds.map(String));
+      const numbers = rows.flatMap((row, index) => (ids.has(String(row.id)) ? [index + 1] : []));
+      return (
+        <ConfirmDialog
+          title={count === 1 ? "Delete 1 row?" : `Delete ${count} rows?`}
+          message="The ticked rows and all their values will be deleted."
+          facts={[["Rows", numbers.join(", ")]]}
+          confirmLabel="Delete"
+          busyLabel="Deleting…"
+          isBusy={isDeleting}
+          onConfirm={confirmDelete}
+          onCancel={cancelDelete}
+        />
+      );
+    }
+    const count = pendingDelete.cells.length;
+    const rowCount = new Set(pendingDelete.cells.map((cell) => cell.rowId)).size;
+    return (
+      <ConfirmDialog
+        title={`Clear ${count} cells?`}
+        message="The values in the selected cells will be removed. The rows stay."
+        facts={[["Cells", String(count)], ["Rows", String(rowCount)]]}
+        confirmLabel="Clear"
+        busyLabel="Clearing…"
+        isBusy={isDeleting}
+        onConfirm={confirmDelete}
+        onCancel={cancelDelete}
+      />
+    );
+  })();
+
   return (
     <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col">
+      {deleteDialog}
       <div ref={tableWrapperRef} className={`${TABLE_FRAME} scroll-smooth`}>
         <table className={TABLE} style={{ minWidth: rawLithoConfig.minWidth }}>
           <thead>
             <tr>
-              <th className={HEADER_CELL} style={{ width: INDEX_COLUMN_WIDTH }}>
-                Ins
+              <th
+                className={HEADER_CELL}
+                style={{ width: INDEX_COLUMN_WIDTH }}
+                title="Row number. Tick rows to delete them; double-click a number to select the whole row."
+              >
+                <span className="inline-flex items-center justify-center gap-1">
+                  {canSelectRows && (
+                    <input
+                      ref={selectAllRef}
+                      type="checkbox"
+                      className="size-3 cursor-pointer accent-rl-navy"
+                      tabIndex={-1}
+                      checked={allChecked}
+                      disabled={!isEnabled}
+                      aria-label="Select all rows"
+                      onChange={toggleAllRows}
+                    />
+                  )}
+                  No.
+                </span>
               </th>
 
               {tableColumns.map((column) => {
@@ -404,6 +634,16 @@ function RawLithoTable({
           <tbody
             ref={tableBodyRef}
             onKeyDownCapture={(event) => {
+              // Bulk Delete runs before the cell's own single-cell clear.
+              if (event.key === "Delete" && !event.altKey && !event.ctrlKey &&
+                  !event.metaKey && !event.shiftKey) {
+                if (requestBulkDelete(event.target)) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  markKeyAsHandled(event);
+                  return;
+                }
+              }
               if (event.key === "Escape") tabNavigationActive.current = false;
               if (event.key === "Tab" && !tabNavigationActive.current) {
                 // Explicitly leaving editing: skip cell handlers and allow the
@@ -418,6 +658,7 @@ function RawLithoTable({
                   !event.currentTarget.contains(event.relatedTarget)) {
                 tabNavigationActive.current = true;
               }
+              anchorCell.current = getCellRef(event.target) ?? anchorCell.current;
               handleTableFocus(event);
             }}
             onCopy={handleCopy}
@@ -433,8 +674,11 @@ function RawLithoTable({
                 onRowChange={onRowChange}
                 onDepthCommit={onDepthCommit}
                 isEnabled={isEnabled}
-                hasDuplicateInterval={duplicateRowIds.has(row.id)}
+                hasOverlappingInterval={overlappingRowIds.has(row.id)}
                 selectedColumns={selectedColumnsByRow.get(String(row.id))}
+                isChecked={checkedRowIds.has(String(row.id))}
+                onToggleChecked={canSelectRows ? toggleRowChecked : undefined}
+                onSelectRow={selectWholeRow}
               />
             ))}
           </tbody>
@@ -451,7 +695,7 @@ function RawLithoTable({
         <div className="flex gap-4">
           {/*
             Stays clickable while the page is enabled: `requestAddRow` is what
-            reports the missing fields or the duplicate interval, so disabling the
+            reports the missing fields or the overlapping interval, so disabling the
             button would hide the reason the row was rejected.
           */}
           <button
@@ -473,6 +717,18 @@ function RawLithoTable({
           >
             Remove last row<KeyHint>F5</KeyHint>
           </button>
+
+          {canSelectRows && (
+            <button
+              className={DANGER_BUTTON}
+              type="button"
+              onClick={requestDeleteRows}
+              disabled={!isEnabled || checkedIds.length === 0}
+              title="Delete the ticked rows"
+            >
+              Delete selected{checkedIds.length > 0 ? ` (${checkedIds.length})` : ""}
+            </button>
+          )}
         </div>
 
         <nav

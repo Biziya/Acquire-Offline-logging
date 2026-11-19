@@ -80,6 +80,14 @@ or Escape changes nothing. Remove deletes the row, waits for the IndexedDB
 write, then shows "Row removed". The table always keeps one row, so with a
 single row the button is disabled and F5 does nothing.
 
+Any rows can be deleted with the checkboxes in the `No.` column (the header
+checkbox ticks every row). "Delete selected (n)", or `Delete` while a row
+checkbox has focus, opens a "Delete n rows?" dialog listing the row numbers;
+nothing changes until Delete is pressed. Deleting every row leaves one blank
+row. Double-clicking a row number selects all its cells and ticks it, so
+`Delete` then offers to delete that row. Ticks reset when the drillhole
+changes. See `removeDocumentRows()` in `rawLithoDocumentOperations.ts`.
+
 ### Row order
 
 Rows are always shown and stored in Litho From order, whatever order you typed
@@ -139,7 +147,7 @@ proportions, so the table fits the page; below `table.minWidth` (760 px) it
 scrolls inside its frame. Six fields are hidden with `visible: false` and kept
 for later use: `extractionType`, `corePass`, `recoveryStart`, `recoveryEnd`,
 `coreEnd` and `lithologicalDescription`. They still exist in state, JSON and
-IndexedDB, so do not delete them. Visible columns, after the `Ins` row number:
+IndexedDB, so do not delete them. Visible columns, after the `No.` row number (with its row checkbox):
 
 | Column | Field | Input | Required | List source |
 | --- | --- | --- | --- | --- |
@@ -178,16 +186,18 @@ and stops at the first problem:
 | --- | --- | --- |
 | 1 | a required field is empty | the first empty required field |
 | 2 | a depth is not a number, or From is greater than To | Litho To |
-| 3 | the same From and To pair already exists | Litho To |
+| 3 | its From / To interval overlaps another row | Litho To |
 
 Committing a depth that makes From greater than To puts the previous depth back.
 
-### Duplicate intervals
+### Overlapping intervals
 
-Two rows may not share the same Litho From and Litho To. The comparison is
-numeric, so `120` and `120.0` match. Half-typed intervals are never duplicates,
-and overlapping intervals are allowed. Both rows of a pair get orange depth
-cells (`findDuplicateIntervalRowIds()`) until one of them changes.
+Two intervals may touch (0-10 and 10-20) but never intersect (0-10 and 5-12),
+and two rows may not share the same From and To. The comparison is numeric, so
+`120` and `120.0` match. Half-typed or inverted intervals are never checked.
+Every overlapping row gets orange depth cells with an "overlaps another row"
+tooltip (`findOverlappingIntervalRowIds()` in `rawLithoValidation.ts`). Add row
+and paste refuse to create an overlap, and Save JSON refuses while one exists.
 
 ### Conditional rules
 
@@ -237,14 +247,19 @@ The Shortcuts popup (the "Help and shortcuts" button,
 | `↑` / `↓` | row above or below |
 | `PgUp` / `PgDn` | previous or next page |
 | `Esc` then `Tab` | leave the table |
+| `Tab` in a dropdown cell | take the highlighted (closest) match, then move on; unmatched text is kept and flagged |
 | `F2` | move through a dropdown list (Up and Down browse, Enter confirms, Esc cancels) |
 | `Delete` | clear the cell |
 | `Esc` | close a list, clear the cell selection |
 | `Ctrl`+click | select several cells |
+| `Shift`+click | select the block from the last clicked or focused cell (`Ctrl`+`Shift` adds to it) |
+| `Delete` with several cells selected | clear them, after a "Clear n cells?" dialog |
+| double-click a row number | select the whole row and tick it |
 | `Ctrl`+`C` / `Ctrl`+`V` | copy or paste cells |
 | `F4` | add row |
 | `Tab` / `↓` from the last cell | add row |
 | `F5` | remove last row (asks first) |
+| row checkboxes, then Delete selected | delete those rows (asks first) |
 | `↑` / `↓`, `Esc` in drillhole search | move through or close the list |
 
 Navigation skips disabled cells, carries on to the next or previous row, and
@@ -272,7 +287,7 @@ rejected.
 A paste is all or nothing. It is rejected, and no cell changes, if it runs past
 the last row or column (paste never adds rows), touches a disabled cell, puts
 text in a depth or an unknown code in a lookup, empties a required field, or
-creates an inverted or duplicate interval. Planning is in `planPaste()`
+creates an inverted or overlapping interval. Planning is in `planPaste()`
 (`rawLithoClipboard.ts`); the edit is applied by `applyCellEdits()`
 (`rawLithoDocumentOperations.ts`).
 
@@ -291,7 +306,7 @@ Everything is stored in the browser's IndexedDB on this PC, in the database
 
 Dropdown lists are cached in a separate database, `raw-litho-lookup-cache-db`.
 The cached copy shows at once and the server copy replaces it; if the server is
-down, the cache stays. The `Ins` number is not stored; it is the row position.
+down, the cache stays. The `No.` number is not stored; it is the row position.
 
 ### Autosave and loading
 
@@ -337,7 +352,10 @@ toast shows at a time. How long it stays depends on its type
 | `draftSaveFailed` | Couldn't save your last edit on this PC. Keep this page open and try again. | error |
 | `draftLoadFailed` | Couldn't load the saved rows for this drillhole. Reload the page to try again. | error |
 | `missingRequiredFields` | Fill in the required (*) cells of the last row first | warning |
-| `duplicateInterval` | This From / To interval is already in the table | warning |
+| `overlappingInterval` | This From / To interval overlaps another row. Intervals may only touch at their ends. | warning |
+| `rowsRemoved` | Selected rows deleted | success |
+| `cellsCleared` | Selected cells cleared | success |
+| `deleteFailed` | Couldn't delete. Try again. | error |
 | `invalidDepthRange` | From must be less than To. The previous depth was kept. | warning |
 | `invalidLookupValue` | Some codes aren't in their list. Fix them, then save. | warning |
 | `cellsCopied` | Cells copied | info |

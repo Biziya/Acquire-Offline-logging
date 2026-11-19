@@ -77,6 +77,9 @@ function LookupAutocomplete({
   const validationId = `${instanceId}-validation`;
   const loadErrorId = `${instanceId}-load-error`;
   const inputRef = useRef<HTMLInputElement>(null);
+  // Set when Tab has just accepted a match, so the blur it causes does not
+  // judge the stale typed text before the new value arrives.
+  const acceptedOnTab = useRef(false);
   // null: table navigation; a list index: explicit option selection (F2).
   const [optionIndex, setOptionIndex] = useState<number | null>(null);
   const [query, setQuery] = useState(() => toInputValue(value));
@@ -210,6 +213,13 @@ function LookupAutocomplete({
   }
 
   function finishEditing() {
+    if (acceptedOnTab.current) {
+      acceptedOnTab.current = false;
+      setOptionIndex(null);
+      setIsOpen(false);
+      return;
+    }
+
     // Retain unmatched text for validation, but never commit on blur.
     const invalid = Boolean(query.trim() && !exactOption);
     setShowInvalidSelection(invalid);
@@ -265,7 +275,19 @@ function LookupAutocomplete({
       return;
     }
 
-    // Navigation never accepts a highlighted option or changes the value.
+    /*
+     * Tab accepts the highlighted option like Enter does, then moves on: the
+     * closest match for typed text ("bla" -> "black"), or the option browsed
+     * to with F2. Unmatched text is kept for validation, as before.
+     */
+    if (event.key === "Tab" && isOpen && highlightedSuggestion &&
+        (optionIndex !== null ||
+          (query.trim() !== "" && !exactOption && highlightedSuggestion.code !== ""))) {
+      acceptedOnTab.current = true;
+      selectSuggestion(highlightedSuggestion);
+    }
+
+    // Other navigation never accepts a highlighted option or changes the value.
     handleCellNavigation(event);
   }
 
@@ -278,6 +300,7 @@ function LookupAutocomplete({
   else if (options.length === 0) placeholder = "No values";
 
   function handleFocus() {
+    acceptedOnTab.current = false;
     setOptionIndex(null);
 
     setQuery(toInputValue(value));
@@ -361,7 +384,7 @@ function LookupAutocomplete({
         disabled={isDisabled}
         aria-label={`${lookup.label}, row ${rowIndex + 1}`}
         aria-autocomplete="list"
-        aria-description="Enter picks a value. F2 then arrow keys to browse. Escape closes the list."
+        aria-description="Enter or Tab picks a value. F2 then arrow keys to browse. Escape closes the list."
         aria-expanded={showSuggestions}
         aria-controls={suggestionListId}
         aria-activedescendant={

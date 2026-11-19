@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { RawLithoDocument } from "../src/types/domain";
@@ -89,8 +89,21 @@ describe("autocomplete and focus", () => {
 
   it.each([
     ["{Tab}", "After"], ["{Shift>}{Tab}{/Shift}", "Before"],
+  ])("confirms the closest typed match with %s and moves on", async (keys, label) => {
+    const user = userEvent.setup();
+    const change = vi.fn();
+    render(<AutocompleteHarness onChange={change} />);
+    const input = screen.getByRole("combobox");
+    await user.type(input, "Unk");
+    await user.keyboard(keys);
+    expect(change).toHaveBeenCalledWith("Unknown");
+    expect(input).toHaveValue("Unknown");
+    expect(screen.getByLabelText(label)).toHaveFocus();
+  });
+
+  it.each([
     ["{End}{ArrowRight}", "After"], ["{Home}{ArrowLeft}", "Before"],
-  ])("does not confirm a typed match on navigation %s", async (keys, label) => {
+  ])("does not confirm a typed match on arrow navigation %s", async (keys, label) => {
     const user = userEvent.setup();
     const change = vi.fn();
     render(<AutocompleteHarness onChange={change} />);
@@ -145,7 +158,7 @@ describe("autocomplete and focus", () => {
     expect(screen.getByRole("listbox")).toBeInTheDocument();
   });
 
-  it("only browses options after F2 and only commits on Enter", async () => {
+  it("only browses options after F2 and commits on Enter or Tab", async () => {
     const user = userEvent.setup();
     const change = vi.fn();
     render(<AutocompleteHarness onChange={change} />);
@@ -156,9 +169,10 @@ describe("autocomplete and focus", () => {
     expect(change).not.toHaveBeenCalled();
     expect(screen.getByRole("option", { name: "Other" })).toHaveClass("raw-litho-lookup-suggestion--active");
     await user.tab();
-    expect(change).not.toHaveBeenCalled();
+    expect(change).toHaveBeenLastCalledWith("Other");
+    // Reopened, F2 starts on the current value ("Other").
     await user.click(input);
-    await user.keyboard("{F2}{ArrowDown}{Enter}");
+    await user.keyboard("{F2}{ArrowUp}{Enter}");
     expect(change).toHaveBeenLastCalledWith("Unknown");
     await user.keyboard("{F2}{ArrowUp}{Enter}");
     expect(change).toHaveBeenLastCalledWith("");
@@ -240,6 +254,8 @@ function TableHarness() {
         showToast={toast}
         onAddRow={workspace.tryAddRow}
         onRemoveLastRow={removal.requestRemoveLastRow}
+        onRemoveRows={workspace.removeRows}
+        onClearCells={workspace.clearCells}
         isEnabled={workspace.isPageEnabled}
         isBlocked={removal.isConfirmOpen}
       />
@@ -776,7 +792,8 @@ describe("cell selection and clipboard", () => {
   it.each([
     ["abc", "invalidPasteValue"],
     ["5\t1", "invalidDepthRange"],
-    ["10\t20", "duplicateInterval"],
+    ["10\t20", "overlappingInterval"],
+    ["5\t15", "overlappingInterval"],
     ["0\t10\tNOPE", "invalidLookupValue"],
     ["\t10\t", "missingRequiredFields"],
     ["1\n2\n3", "pasteOutOfRange"],
@@ -803,5 +820,89 @@ describe("cell selection and clipboard", () => {
     paste("Colour, row 1", "\tx");
     expect(toast).toHaveBeenCalledWith(TOAST_NOTIFICATIONS.pasteNotEditable);
     expect(cell("Colour, row 1")).toHaveValue("Unknown");
+  });
+});
+
+describe("Tab accepts the closest lookup match", () => {
+  it("takes the highlighted match for partly typed text and moves on", async () => {
+    const user = userEvent.setup();
+    const change = vi.fn();
+    render(<AutocompleteHarness onChange={change} />);
+    const input = screen.getByRole("combobox");
+    await user.type(input, "unk");
+    await user.tab();
+    expect(change).toHaveBeenCalledWith("Unknown");
+    expect(input).toHaveValue("Unknown");
+    expect(input).not.toHaveAttribute("aria-invalid", "true");
+    expect(input).not.toHaveFocus();
+  });
+
+  it("keeps text with no match for validation", async () => {
+    const user = userEvent.setup();
+    const change = vi.fn();
+    render(<AutocompleteHarness onChange={change} />);
+    const input = screen.getByRole("combobox");
+    await user.type(input, "zzz");
+    await user.tab();
+    expect(change).not.toHaveBeenCalled();
+    expect(input).toHaveAttribute("aria-invalid", "true");
+  });
+});
+
+describe("row checkboxes, range selection and bulk delete", () => {
+  const numberCell = (row: number) =>
+    screen.getByLabelText(`Select row ${row}`).closest("td")!;
+
+  it("deletes only the ticked rows after confirmation", async () => {
+    const user = await table(pageRows(3));
+    await user.click(screen.getByLabelText("Select row 1"));
+    await user.click(screen.getByLabelText("Select row 3"));
+    await user.click(screen.getByRole("button", { name: /Delete selected \(2\)/ }));
+
+    expect(screen.getByRole("alertdialog", { name: "Delete 2 rows?" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(cell("Litho From (m), row 3")).toHaveValue(20);
+
+    await user.click(screen.getByRole("button", { name: /Delete selected \(2\)/ }));
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(screen.queryByLabelText("Litho From (m), row 2")).toBeNull());
+    expect(cell("Litho From (m), row 1")).toHaveValue(10);
+    expect(toast).toHaveBeenCalledWith(TOAST_NOTIFICATIONS.rowsRemoved);
+    await waitFor(async () => expect((await storedRows())?.map((row) => row.id)).toEqual(["r1"]));
+  });
+
+  it("selects the whole row on a double-click of its number", async () => {
+    const user = await table(pageRows(2));
+    await user.dblClick(within(numberCell(2)).getByText("2"));
+    expect(screen.getByLabelText("Select row 2")).toBeChecked();
+    // Focus stays in the table, so the next Delete reaches it.
+    expect(screen.getByLabelText("Select row 2")).toHaveFocus();
+    expect(cellOf("Litho From (m), row 2")).toHaveClass("raw-litho-cell--selected");
+    expect(cellOf("Lithology Comments, row 2")).toHaveClass("raw-litho-cell--selected");
+    expect(cellOf("Litho From (m), row 1")).not.toHaveClass("raw-litho-cell--selected");
+
+    fireEvent.keyDown(cell("Litho From (m), row 2"), { key: "Delete" });
+    expect(screen.getByRole("alertdialog", { name: "Delete 1 row?" })).toBeInTheDocument();
+  });
+
+  it("Shift + click selects a block; Delete clears it after confirmation", async () => {
+    const user = await table(pageRows(3));
+    fireEvent.mouseDown(cell("Litho To (m), row 1"));
+    cell("Litho To (m), row 1").focus();
+    fireEvent.mouseDown(cell("Litho Code, row 2"), { shiftKey: true });
+
+    for (const label of ["Litho To (m), row 1", "Litho Code, row 1", "Litho To (m), row 2", "Litho Code, row 2"]) {
+      expect(cellOf(label), label).toHaveClass("raw-litho-cell--selected");
+    }
+    expect(cellOf("Litho From (m), row 1")).not.toHaveClass("raw-litho-cell--selected");
+    expect(cellOf("Litho To (m), row 3")).not.toHaveClass("raw-litho-cell--selected");
+
+    fireEvent.keyDown(cell("Litho Code, row 2"), { key: "Delete" });
+    expect(screen.getByRole("alertdialog", { name: "Clear 4 cells?" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Clear" }));
+
+    await waitFor(() => expect(cell("Litho Code, row 2")).toHaveValue(""));
+    expect(cell("Litho Code, row 3")).toHaveValue("Unknown");
+    expect(toast).toHaveBeenCalledWith(TOAST_NOTIFICATIONS.cellsCleared);
   });
 });

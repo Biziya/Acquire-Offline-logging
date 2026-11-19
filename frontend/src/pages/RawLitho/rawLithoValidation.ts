@@ -83,7 +83,7 @@ export function hasInvalidLookupValues(
 export const ROW_VALIDATION_ISSUES = Object.freeze({
   missingRequiredFields: "missingRequiredFields",
   invalidDepthRange: "invalidDepthRange",
-  duplicateInterval: "duplicateInterval",
+  overlappingInterval: "overlappingInterval",
 });
 
 /*
@@ -187,53 +187,83 @@ export function findFirstConditionalRuleIssue(rows: readonly RawLithoRow[]) {
 }
 
 /*
- * Comparable key for a Litho From / Litho To pair. Numbers are compared by
- * value, so "120" and "120.0" count as the same interval. Returns null while
- * the interval is incomplete, which means partially typed rows are never
- * reported as duplicates.
+ * Numeric Litho From / Litho To of a row, or null while the interval is
+ * incomplete or inverted, which means partially typed rows are never reported
+ * as overlapping. Numbers are compared by value, so "120" equals "120.0".
  */
-function buildIntervalKey(row: RawLithoRow | undefined) {
+function toInterval(row: RawLithoRow | undefined) {
   if (!isValidDepth(row?.lithoFrom)) return null;
   if (!isValidDepth(row?.lithoTo)) return null;
 
-  return `${Number(row?.lithoFrom)}|${Number(row?.lithoTo)}`;
+  const from = Number(row?.lithoFrom);
+  const to = Number(row?.lithoTo);
+
+  return from <= to ? { from, to } : null;
 }
 
-export function isDuplicateInterval(
+/*
+ * Two intervals intersect when they share more than an end point: 0–10 and
+ * 5–12 overlap, 0–10 and 10–20 only touch and are fine. Identical intervals
+ * (including zero-length ones such as 5–5 twice) always count as overlapping.
+ */
+function intervalsOverlap(
+  first: { from: number; to: number },
+  second: { from: number; to: number },
+) {
+  if (first.from === second.from && first.to === second.to) return true;
+
+  return first.from < second.to && second.from < first.to;
+}
+
+export function overlapsAnotherInterval(
   currentRow: RawLithoRow | undefined,
   rows: RawLithoRow[],
 ) {
-  const intervalKey = buildIntervalKey(currentRow);
-  if (!intervalKey) return false;
+  const interval = toInterval(currentRow);
+  if (!interval) return false;
 
-  return rows.some(
-    (row) => row.id !== currentRow?.id && buildIntervalKey(row) === intervalKey,
-  );
+  return rows.some((row) => {
+    if (row.id === currentRow?.id) return false;
+    const other = toInterval(row);
+    return other !== null && intervalsOverlap(interval, other);
+  });
 }
 
-/* Ids of every row that shares its interval with another row. */
-export function findDuplicateIntervalRowIds(rows: RawLithoRow[]) {
-  const rowIdsByInterval = new Map<string, RowId[]>();
+/* Ids of every row whose interval intersects another row's interval. */
+export function findOverlappingIntervalRowIds(rows: RawLithoRow[]) {
+  const intervals = rows
+    .map((row) => ({ id: row.id, interval: toInterval(row) }))
+    .filter(
+      (entry): entry is { id: RowId; interval: { from: number; to: number } } =>
+        entry.interval !== null,
+    )
+    .sort((first, second) => first.interval.from - second.interval.from);
 
-  rows.forEach((row) => {
-    const intervalKey = buildIntervalKey(row);
-    if (!intervalKey) return;
+  const overlappingRowIds = new Set<RowId>();
 
-    const rowIds = rowIdsByInterval.get(intervalKey) ?? [];
+  // Sorted by From, so the scan can stop once a later row starts past this
+  // row's To: no row after it can intersect this one.
+  intervals.forEach((entry, index) => {
+    for (let next = index + 1; next < intervals.length; next += 1) {
+      const other = intervals[next];
+      if (!other || other.interval.from > entry.interval.to) break;
 
-    rowIds.push(row.id);
-    rowIdsByInterval.set(intervalKey, rowIds);
+      if (intervalsOverlap(entry.interval, other.interval)) {
+        overlappingRowIds.add(entry.id);
+        overlappingRowIds.add(other.id);
+      }
+    }
   });
 
-  const duplicateRowIds = new Set<RowId>();
+  return overlappingRowIds;
+}
 
-  rowIdsByInterval.forEach((rowIds) => {
-    if (rowIds.length < 2) return;
+/* The first row (table order) that overlaps another, for a blocking warning. */
+export function findFirstOverlappingRowIndex(rows: readonly RawLithoRow[]) {
+  const overlapping = findOverlappingIntervalRowIds([...rows]);
+  if (overlapping.size === 0) return -1;
 
-    rowIds.forEach((rowId) => duplicateRowIds.add(rowId));
-  });
-
-  return duplicateRowIds;
+  return rows.findIndex((row) => overlapping.has(row.id));
 }
 
 /*
@@ -261,9 +291,9 @@ export function findRowIssue(
     };
   }
 
-  if (isDuplicateInterval(row, rows)) {
+  if (overlapsAnotherInterval(row, rows)) {
     return {
-      issue: ROW_VALIDATION_ISSUES.duplicateInterval,
+      issue: ROW_VALIDATION_ISSUES.overlappingInterval,
       fieldKey: "lithoTo",
     };
   }

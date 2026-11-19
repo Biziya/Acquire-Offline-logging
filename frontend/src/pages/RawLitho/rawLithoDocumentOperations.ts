@@ -19,11 +19,11 @@ import {
 import {
   findRowIssue,
   getMissingRequiredFields,
-  isDuplicateInterval,
+  overlapsAnotherInterval,
   isInvertedDepthRange,
 } from "./rawLithoValidation";
 import { sortRowsByLithoFrom } from "./rawLithoSorting";
-import type { CellEdit } from "./rawLithoClipboard";
+import type { CellEdit, CellRef } from "./rawLithoClipboard";
 
 export function createBlankDocument(
   fallback: DocumentFallback = {},
@@ -80,7 +80,7 @@ function findEditIssue(
   if (getMissingRequiredFields(row).some((field) => !missingBefore.includes(field)))
     return "missingRequiredFields";
   if (isInvertedDepthRange(row)) return "invalidDepthRange";
-  if (isDuplicateInterval(row, rows)) return "duplicateInterval";
+  if (overlapsAnotherInterval(row, rows)) return "overlappingInterval";
   return null;
 }
 
@@ -89,7 +89,7 @@ function findEditIssue(
  * are re-sorted, or the document is returned unchanged with the reason.
  *
  * A paste may not empty a required field that has a value, invert a depth range
- * or create a duplicate interval. Rows keep their ids and complete objects.
+ * or make intervals overlap. Rows keep their ids and complete objects.
  */
 export function applyCellEdits(
   lithoDocument: RawLithoDocument,
@@ -164,4 +164,46 @@ export function removeDocumentLastRow(
   return lithoDocument.rows.length <= 1
     ? lithoDocument
     : touchRawLithoDocument(lithoDocument, { rows: lithoDocument.rows.slice(0, -1) });
+}
+
+/*
+ * Deletes the rows with these ids (row checkboxes). The table never ends up
+ * empty: deleting every row leaves one blank row, like a new document.
+ */
+export function removeDocumentRows(
+  lithoDocument: RawLithoDocument,
+  rowIds: readonly RowId[],
+): RawLithoDocument {
+  const ids = new Set(rowIds.map(String));
+  const rows = lithoDocument.rows.filter((row) => !ids.has(String(row.id)));
+  if (rows.length === lithoDocument.rows.length) return lithoDocument;
+
+  return touchRawLithoDocument(lithoDocument, {
+    rows: rows.length > 0 ? rows : [createSchemaRow(getNextRowId(lithoDocument.rows))],
+  });
+}
+
+/*
+ * Empties the selected cells after the user confirmed it. Unlike a paste, this
+ * may empty required cells: the missing-value highlight then shows what still
+ * needs filling in. Rows are re-sorted because a depth may have been cleared.
+ */
+export function clearDocumentCells(
+  lithoDocument: RawLithoDocument,
+  cells: readonly CellRef[],
+): RawLithoDocument {
+  let hasChanges = false;
+  const rows = lithoDocument.rows.map((row) => {
+    const fields = cells
+      .filter((cell) => cell.rowId === String(row.id) && row[cell.columnKey] !== "")
+      .map((cell) => cell.columnKey);
+    if (fields.length === 0) return row;
+
+    hasChanges = true;
+    return { ...row, ...Object.fromEntries(fields.map((field) => [field, ""])) };
+  });
+
+  return hasChanges
+    ? touchRawLithoDocument(lithoDocument, { rows: sortRowsByLithoFrom(rows) })
+    : lithoDocument;
 }

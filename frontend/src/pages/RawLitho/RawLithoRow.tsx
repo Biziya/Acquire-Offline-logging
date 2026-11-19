@@ -4,6 +4,7 @@ import type {
   LookupData,
   LookupStatuses,
   RowChange,
+  RowId,
 } from "../../types/domain";
 import { memo, useRef } from "react";
 import LookupAutocomplete from "./LookupAutocomplete";
@@ -28,21 +29,20 @@ interface RawLithoRowProps {
   onRowChange: RowChange;
   onDepthCommit: RowChange;
   isEnabled: boolean;
-  hasDuplicateInterval?: boolean;
+  hasOverlappingInterval?: boolean;
   selectedColumns?: ReadonlySet<RowField>;
+  /* Row checkbox in the No. column (Delete selected rows). */
+  isChecked?: boolean;
+  onToggleChecked?: (rowId: RowId) => void;
+  /* Double-click on the row number selects every cell of the row. */
+  onSelectRow?: (rowId: RowId) => void;
 }
 
-
-
-
-
-
-
-
+const OVERLAP_MESSAGE = "This interval overlaps another row";
 
 /*
  * One look per cell state, strongest first: the Ctrl + click selection stays
- * visible over the duplicate flag, which wins over a broken conditional rule
+ * visible over the overlapping-interval flag, which wins over a broken conditional rule
  * (red, message as tooltip), which wins over the missing-value flag. The
  * marker classes (`raw-litho-cell--*`) carry no styling; they name the state
  * for tests and for the README.
@@ -92,8 +92,11 @@ function RawLithoRow({
   onRowChange,
   onDepthCommit,
   isEnabled,
-  hasDuplicateInterval = false,
+  hasOverlappingInterval = false,
   selectedColumns,
+  isChecked = false,
+  onToggleChecked,
+  onSelectRow,
 }: RawLithoRowProps) {
   const valueBeforeEdit = useRef<Partial<Record<RowField, string>>>({});
   // Conditional rules on this row's current values (rawLithoValidation.ts);
@@ -120,7 +123,35 @@ function RawLithoRow({
       style={{ height: rawLithoConfig.rowHeight }}
       data-row-id={row.id}
     >
-      <td className={BODY_CELL}>{rowIndex + 1}</td>
+      <td
+        className={`${BODY_CELL} select-none ${isChecked ? "bg-rl-select" : ""}`}
+        data-row-number
+        title={onSelectRow ? "Double-click to select the whole row" : undefined}
+        onDoubleClick={(event) => {
+          // Double-clicking the checkbox itself only toggles it.
+          if (event.target instanceof HTMLInputElement) return;
+          onSelectRow?.(row.id);
+          // Keep focus in the table so Delete reaches its handler next.
+          event.currentTarget.querySelector<HTMLInputElement>("[data-row-select]")?.focus();
+        }}
+      >
+        <span className="inline-flex items-center justify-center gap-1">
+          {onToggleChecked && (
+            <input
+              type="checkbox"
+              className="size-3 cursor-pointer accent-rl-navy"
+              // Kept out of Tab / arrow navigation (tabIndex -1): it is not a cell.
+              tabIndex={-1}
+              data-row-select
+              checked={isChecked}
+              disabled={!isEnabled}
+              aria-label={`Select row ${rowIndex + 1}`}
+              onChange={() => onToggleChecked(row.id)}
+            />
+          )}
+          <span className="tabular-nums">{rowIndex + 1}</span>
+        </span>
+      </td>
 
       {tableColumns.map((column) => {
         const lookup = RAW_LITHO_LOOKUP_BY_FIELD[column.key];
@@ -134,7 +165,7 @@ function RawLithoRow({
           isRequired && isEnabled && !hasValue(row[column.key]);
         const ruleMessage = ruleMessages.get(column.key);
         const isDuplicateCell =
-          hasDuplicateInterval && isEnabled && DEPTH_FIELDS.has(column.key);
+          hasOverlappingInterval && isEnabled && DEPTH_FIELDS.has(column.key);
 
         const cellClassName = buildCellClassName({
           isMissingValue,
@@ -148,7 +179,7 @@ function RawLithoRow({
             key={column.key}
             className={cellClassName}
             data-column={column.key}
-            title={ruleMessage}
+            title={isDuplicateCell ? OVERLAP_MESSAGE : ruleMessage}
             data-rule-error={ruleMessage}
           >
             {lookup ? (

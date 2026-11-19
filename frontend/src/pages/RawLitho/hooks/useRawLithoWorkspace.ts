@@ -15,10 +15,12 @@ import {
   commitDepth,
   createBlankDocument,
   editRow,
+  clearDocumentCells,
   removeDocumentLastRow,
+  removeDocumentRows,
 } from "../rawLithoDocumentOperations";
 import { getPageForRowIndex } from "../rawLithoSorting";
-import type { CellEdit } from "../rawLithoClipboard";
+import type { CellEdit, CellRef } from "../rawLithoClipboard";
 import { useRawLithoDraftPersistence } from "./useRawLithoDraftPersistence";
 
 const totalPagesFor = (lithoDocument: RawLithoDocument) =>
@@ -181,6 +183,25 @@ export function useRawLithoWorkspace({
     return flushPendingSaves();
   };
 
+  /* Row checkboxes: deletes those rows, then waits for the draft write. */
+  const removeRows = async (ids: readonly RowId[]) => {
+    if (!canEdit(draftKey)) return false;
+    const next = removeDocumentRows(documentRef.current, ids);
+    if (next === documentRef.current) return false;
+    commitDocument(next);
+    setCurrentPage((page) => Math.min(page, totalPagesFor(next)));
+    return flushPendingSaves();
+  };
+
+  /* Shift / Ctrl selection + Delete: empties those cells (rows stay). */
+  const clearCells = async (cells: readonly CellRef[]) => {
+    if (!canEdit(draftKey)) return false;
+    const next = clearDocumentCells(documentRef.current, cells);
+    if (next === documentRef.current) return true;
+    commitDocument(next);
+    return flushPendingSaves();
+  };
+
   const totalPages = totalPagesFor(rawLithoDocument);
   const changeTablePage = useCallback(
     (page: number) => setCurrentPage(Math.min(Math.max(page, 1), totalPages)),
@@ -216,6 +237,8 @@ export function useRawLithoWorkspace({
     pasteCells,
     tryAddRow,
     removeLastRow,
+    removeRows,
+    clearCells,
     changeTablePage,
     setRawLithoDocument: commitDocument,
     flushPendingSaves,

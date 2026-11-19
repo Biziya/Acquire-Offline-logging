@@ -25,6 +25,7 @@ import {
 } from "./rawLithoHelpers";
 import {
   findFirstConditionalRuleIssue,
+  findFirstOverlappingRowIndex,
   hasInvalidLookupValues,
 } from "./rawLithoValidation";
 import { rawLithoConfig } from "./config";
@@ -112,6 +113,16 @@ function RawLitho() {
 
     if (hasInvalidLookupValues(rows, lookupData)) {
       showToast(TOAST_NOTIFICATIONS.invalidLookupValue);
+      return;
+    }
+
+    // Intervals may touch but never intersect (rawLithoValidation.ts).
+    const overlapIndex = findFirstOverlappingRowIndex(rows);
+    if (overlapIndex !== -1) {
+      showToast({
+        type: "warning",
+        message: `Row ${overlapIndex + 1}: its From / To interval overlaps another row. Fix it, then save.`,
+      });
       return;
     }
 
@@ -241,6 +252,8 @@ function RawLitho() {
       )}
 
       <RawLithoTable
+        // A new drillhole starts with no ticked rows or selected cells.
+        key={selectedHoleId}
         rows={rows}
         currentPage={currentPage}
         totalPages={totalPages}
@@ -253,6 +266,8 @@ function RawLitho() {
         showToast={showToast}
         onAddRow={workspace.tryAddRow}
         onRemoveLastRow={removal.requestRemoveLastRow}
+        onRemoveRows={workspace.removeRows}
+        onClearCells={workspace.clearCells}
         isEnabled={isPageEnabled}
         isBlocked={
           Boolean(importer.pendingImport) || removal.isConfirmOpen || isSaving

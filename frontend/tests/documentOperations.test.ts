@@ -5,7 +5,9 @@ import {
   commitDepth,
   createBlankDocument,
   editRow,
+  clearDocumentCells,
   removeDocumentLastRow,
+  removeDocumentRows,
   sortDocument,
 } from "../src/pages/RawLitho/rawLithoDocumentOperations";
 import {
@@ -13,7 +15,7 @@ import {
   exportRawLithoSnapshot,
   readRawLithoImport,
 } from "../src/pages/RawLitho/rawLithoHelpers";
-import { findDuplicateIntervalRowIds } from "../src/pages/RawLitho/rawLithoValidation";
+import { findOverlappingIntervalRowIds, overlapsAnotherInterval } from "../src/pages/RawLitho/rawLithoValidation";
 import {
   hasWorkingData,
   orderDrillholes,
@@ -112,8 +114,8 @@ describe("document operations", () => {
     const first = source.rows[0];
     if (!first) throw new Error("Expected the complete fixture row.");
     source.rows.push({ ...first, id: "second", lithoFrom: "10.0" });
-    expect(addDocumentRow(source).issue?.issue).toBe("duplicateInterval");
-    expect(findDuplicateIntervalRowIds(source.rows)).toEqual(
+    expect(addDocumentRow(source).issue?.issue).toBe("overlappingInterval");
+    expect(findOverlappingIntervalRowIds(source.rows)).toEqual(
       new Set(["legacy-id", "second"]),
     );
   });
@@ -214,5 +216,77 @@ describe("document operations", () => {
     expect(hasWorkingData({ rows: [{ ...createSchemaRow(1), lithoCode: "SS" }] })).toBe(true);
     expect(hasWorkingData(null)).toBe(false);
     expect(hasWorkingData({ rows: "broken" })).toBe(false);
+  });
+});
+
+describe("interval overlap", () => {
+  const interval = (id: string, from: string, to: string) => ({
+    ...createSchemaRow(id),
+    lithoFrom: from,
+    lithoTo: to,
+  });
+
+  it("flags intersecting and identical intervals, allows touching ends", () => {
+    const rows = [
+      interval("a", "0", "10"),
+      interval("b", "10", "20"), // touches a: fine
+      interval("c", "15", "18"), // inside b
+      interval("d", "30", "40"),
+      interval("e", "30", "40"), // identical to d
+      interval("f", "50", ""), // incomplete: never flagged
+      interval("g", "45", "50"), // touches f's From only
+    ];
+    expect(findOverlappingIntervalRowIds(rows)).toEqual(new Set(["b", "c", "d", "e"]));
+    expect(overlapsAnotherInterval(interval("x", "5", "12"), rows)).toBe(true);
+    expect(overlapsAnotherInterval(interval("x", "20", "30"), rows)).toBe(false);
+  });
+
+  it("finds an interval that contains a later one even past a shorter row", () => {
+    const rows = [interval("long", "0", "100"), interval("a", "1", "2"), interval("b", "50", "60")];
+    expect(findOverlappingIntervalRowIds(rows)).toEqual(new Set(["long", "a", "b"]));
+  });
+
+  it("refuses to add a row after an overlapping last row", () => {
+    const source = complete();
+    const first = source.rows[0]!;
+    source.rows.push({ ...first, id: "second", lithoFrom: "12", lithoTo: "20" });
+    expect(addDocumentRow(source).issue?.issue).toBe("overlappingInterval");
+  });
+});
+
+describe("bulk delete", () => {
+  const rows = (...ids: string[]) =>
+    ids.map((id, index) => ({
+      ...createSchemaRow(id),
+      lithoFrom: String(index * 10),
+      lithoTo: String(index * 10 + 10),
+      lithoCode: "L",
+    }));
+
+  it("removes only the ticked rows", () => {
+    const source = { ...createBlankDocument({ drillhole: "A" }), rows: rows("1", "2", "3") };
+    expect(removeDocumentRows(source, ["1", 3]).rows.map((row) => row.id)).toEqual(["2"]);
+    expect(removeDocumentRows(source, ["nope"])).toBe(source);
+  });
+
+  it("leaves one blank row when every row is deleted", () => {
+    const source = { ...createBlankDocument({ drillhole: "A" }), rows: rows("1", "2") };
+    const next = removeDocumentRows(source, ["1", "2"]);
+    expect(next.rows).toHaveLength(1);
+    expect(next.rows[0]).toMatchObject({ lithoFrom: "", lithoTo: "", lithoCode: "" });
+  });
+
+  it("clears selected cells, including required ones, and keeps the rows", () => {
+    const source = { ...createBlankDocument({ drillhole: "A" }), rows: rows("1", "2") };
+    const next = clearDocumentCells(source, [
+      { rowId: "1", columnKey: "lithoCode" },
+      { rowId: "2", columnKey: "lithoCode" },
+      { rowId: "2", columnKey: "lithoTo" },
+    ]);
+    expect(next.rows.map((row) => [row.id, row.lithoCode, row.lithoTo])).toEqual([
+      ["1", "", "10"],
+      ["2", "", ""],
+    ]);
+    expect(clearDocumentCells(next, [{ rowId: "1", columnKey: "lithoCode" }])).toBe(next);
   });
 });

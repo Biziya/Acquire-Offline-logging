@@ -90,8 +90,20 @@ export const TOAST_NOTIFICATIONS = {
     message: "Couldn't save. Your edits are still here, so try Save JSON again.",
     type: "error",
   },
+  rowsRemoved: {
+    message: "Selected rows deleted",
+    type: "success",
+  },
+  cellsCleared: {
+    message: "Selected cells cleared",
+    type: "success",
+  },
   actionFailed: {
     message: "Couldn't remove the row. Try again.",
+    type: "error",
+  },
+  deleteFailed: {
+    message: "Couldn't delete. Try again.",
     type: "error",
   },
   importSuccess: {
@@ -126,8 +138,8 @@ export const TOAST_NOTIFICATIONS = {
     message: "Fill in the required (*) cells of the last row first",
     type: "warning",
   },
-  duplicateInterval: {
-    message: "This From / To interval is already in the table",
+  overlappingInterval: {
+    message: "This From / To interval overlaps another row. Intervals may only touch at their ends.",
     type: "warning",
   },
   invalidDepthRange: {

@@ -85,7 +85,7 @@ export interface ToastState extends ToastNotification {
 export type Notify = (notification: ToastNotification) => void;
 
 export type RowIssueKind =
-  "missingRequiredFields" | "invalidDepthRange" | "duplicateInterval";
+  "missingRequiredFields" | "invalidDepthRange" | "overlappingInterval";
 
 export interface RowIssue {
   issue: RowIssueKind;
