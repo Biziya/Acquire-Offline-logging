@@ -110,11 +110,12 @@ describe("workspace persistence regression", () => {
     });
     expect(stored.get("A")?.rows[0]?.lithoFrom).toBe("88");
   });
-  it("restores an existing legacy draft and session page with stable string IDs", async () => {
+  it("restores an existing legacy draft and its session with stable string IDs", async () => {
+    // Older sessions also carry the table page they were on; it is ignored.
     vi.mocked(db.readRawLithoSession).mockResolvedValue({
       drillhole: "A",
       page: 2,
-    });
+    } as never);
     vi.mocked(db.readRawLithoDraft).mockResolvedValue({
       projectCode: "P",
       holeId: "A",
@@ -126,7 +127,7 @@ describe("workspace persistence regression", () => {
     });
     const { result } = mount();
     await waitFor(() => expect(result.current.isPageEnabled).toBe(true));
-    expect(result.current.currentPage).toBe(2);
+    expect(result.current.selectedHoleId).toBe("A");
     expect(result.current.rows[50]).toMatchObject({
       id: "old-50",
       lithoFrom: "50",

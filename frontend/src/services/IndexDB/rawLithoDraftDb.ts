@@ -57,14 +57,6 @@ export function writeRawLithoDraft(
   return writeValue(DRAFT_STORE, draftKey, lithoDocument);
 }
 
-function normalizePage(page: unknown) {
-  const parsedPage = Number(page);
-
-  return Number.isFinite(parsedPage) && parsedPage >= 1
-    ? Math.floor(parsedPage)
-    : 1;
-}
-
 export async function readRawLithoSession() {
   const storedValue = await readValue(SESSION_STORE, ACTIVE_SESSION_KEY);
 
@@ -73,10 +65,11 @@ export async function readRawLithoSession() {
   const drillhole = buildRawLithoDraftKey(storedValue.drillhole);
   if (!drillhole) return null;
 
-  return { drillhole, page: normalizePage(storedValue.page) };
+  // Older sessions also stored a table page; the table no longer pages.
+  return { drillhole };
 }
 
-export function writeRawLithoSession({ drillhole, page }: DraftSession) {
+export function writeRawLithoSession({ drillhole }: DraftSession) {
   const normalizedDrillhole = buildRawLithoDraftKey(drillhole);
 
   if (!normalizedDrillhole) {
@@ -85,7 +78,6 @@ export function writeRawLithoSession({ drillhole, page }: DraftSession) {
 
   return writeValue(SESSION_STORE, ACTIVE_SESSION_KEY, {
     drillhole: normalizedDrillhole,
-    page: normalizePage(page),
     updatedAt: new Date().toISOString(),
   });
 }

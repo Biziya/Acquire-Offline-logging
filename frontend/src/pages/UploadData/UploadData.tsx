@@ -19,6 +19,7 @@ import {
   applyCellEdits,
   cellText,
   getDocumentRows,
+  removeDocumentRows,
   serializeDocument,
   type CellEdit,
   type UploadDocument,
@@ -330,19 +331,88 @@ function UploadData() {
     }
   };
 
+  // A real edit records the trusted current user as the last editor; with
+  // no identity the file's own edited_by is kept, never guessed.
+  const stampEditor = (edited: UploadDocument) =>
+    currentUser && edited.edited_by !== currentUser
+      ? { ...edited, edited_by: currentUser }
+      : edited;
+
+  /*
+   * The document before the last delete / clear, and the one it produced.
+   * Undo restores `before` only while `after` is still the working document:
+   * any later edit, or another file, makes the undo stale. Read through refs
+   * because Undo is clicked in a toast created before later renders.
+   */
+  const lastUndo = useRef<{
+    before: UploadDocument;
+    beforePinned: ReadonlySet<number>;
+    wasEdited: boolean;
+    after: UploadDocument;
+  } | null>(null);
+  const current = useRef({ workingDocument, pinnedRows, isEdited, isImporting });
+  current.current = { workingDocument, pinnedRows, isEdited, isImporting };
+
+  function commitUndoable(next: UploadDocument, nextPinned: ReadonlySet<number>) {
+    const { workingDocument: before, pinnedRows: beforePinned, isEdited: wasEdited } = current.current;
+    if (!before) return false;
+    const stamped = stampEditor(next);
+    lastUndo.current = { before, beforePinned, wasEdited, after: stamped };
+    current.current = { ...current.current, workingDocument: stamped, pinnedRows: nextPinned };
+    setWorkingDocument(stamped);
+    setPinnedRows(nextPinned);
+    setIsEdited(true);
+    return true;
+  }
+
+  /* Deletes whole records (selection bar or Delete key, after confirming). */
+  const handleRemoveRows = (rowIndexes: number[]) => {
+    const { workingDocument: document, pinnedRows: pinned, isImporting: busy } = current.current;
+    if (!document || busy || rowIndexes.length === 0) return false;
+    const next = removeDocumentRows(document, rowIndexes);
+    if (next === document) return false;
+
+    // Pinned records keep their pin under their new, shifted index.
+    const removed = [...new Set(rowIndexes)].sort((first, second) => first - second);
+    const shifted = new Set<number>();
+    pinned.forEach((index) => {
+      if (removed.includes(index)) return;
+      shifted.add(index - removed.filter((gone) => gone < index).length);
+    });
+    return commitUndoable(next, shifted);
+  };
+
+  /* Empties the selected cells (the records stay). */
+  const handleClearCells = (edits: CellEdit[]) => {
+    const { workingDocument: document, pinnedRows: pinned, isImporting: busy } = current.current;
+    if (!document || busy) return false;
+    const next = applyCellEdits(document, edits);
+    if (next === document) return false;
+    return commitUndoable(next, pinned);
+  };
+
+  const handleUndo = () => {
+    const undo = lastUndo.current;
+    lastUndo.current = null;
+    const { workingDocument: document, isImporting: busy } = current.current;
+    if (!undo || busy || document !== undo.after) {
+      showToast({ type: "warning", message: "Can't undo: the records have changed since." });
+      return;
+    }
+    current.current = { ...current.current, workingDocument: undo.before, pinnedRows: undo.beforePinned };
+    setWorkingDocument(undo.before);
+    setPinnedRows(undo.beforePinned);
+    setIsEdited(undo.wasEdited);
+    showToast({ type: "success", message: "Restored" });
+  };
+
   const handleEdit = (edits: CellEdit[]) => {
     if (!workingDocument || isImporting) return;
 
     const edited = applyCellEdits(workingDocument, edits);
     if (edited === workingDocument) return;
 
-    // A real edit records the trusted current user as the last editor; with
-    // no identity the file's own edited_by is kept, never guessed.
-    const next =
-      currentUser && edited.edited_by !== currentUser
-        ? { ...edited, edited_by: currentUser }
-        : edited;
-    setWorkingDocument(next);
+    setWorkingDocument(stampEditor(edited));
     setIsEdited(true);
 
     if (search || statusFilter !== "all") {
@@ -553,6 +623,10 @@ function UploadData() {
                   lookups={lookups}
                   isReadOnly={isImporting}
                   onEdit={handleEdit}
+                  onRemoveRows={handleRemoveRows}
+                  onClearCells={handleClearCells}
+                  onUndo={handleUndo}
+                  showToast={showToast}
                 />
               </>
             ) : (
@@ -572,6 +646,7 @@ function UploadData() {
             key={toast.id}
             message={toast.message}
             type={toast.type}
+            action={toast.action}
             onClose={() => hideToast(toast.id)}
           />
         )}

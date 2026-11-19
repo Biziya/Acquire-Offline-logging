@@ -23,10 +23,9 @@ import { TOAST_NOTIFICATIONS } from "../constants";
 
 interface Options {
   selectedHoleId: string;
-  currentPage: number;
   buildFallback: (key: string) => DocumentFallback;
   /* `isNew`: no stored draft existed, so this is a freshly created document. */
-  onLoaded: (lithoDocument: RawLithoDocument, page: number, isNew: boolean) => void;
+  onLoaded: (lithoDocument: RawLithoDocument, isNew: boolean) => void;
   onSessionRestored: (session: DraftSession) => void;
   notify: Notify;
 }
@@ -41,7 +40,6 @@ export function useRawLithoDraftPersistence(options: Options) {
   const [loadError, setLoadError] = useState(false);
   const [saveError, setSaveError] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const restoredPage = useRef(1);
   const userSelected = useRef(false);
   const readyKey = useRef<string | null>(null);
   const mounted = useRef(false);
@@ -75,7 +73,6 @@ export function useRawLithoDraftPersistence(options: Options) {
   const prepareSelection = useCallback(() => {
     userSelected.current = true;
     readyKey.current = null;
-    restoredPage.current = 1;
     setLoadedKey(null);
     setLoadAttempt((attempt) => attempt + 1);
     void flushPendingSaves();
@@ -91,7 +88,6 @@ export function useRawLithoDraftPersistence(options: Options) {
     void readRawLithoSession()
       .then((session) => {
         if (active && session && !userSelected.current) {
-          restoredPage.current = session.page;
           latest.current.onSessionRestored(session);
         }
       })
@@ -113,7 +109,7 @@ export function useRawLithoDraftPersistence(options: Options) {
     setLoadedKey(null);
     setLoadError(false);
     if (!draftKey) {
-      latest.current.onLoaded(createBlankDocument(), 1, false);
+      latest.current.onLoaded(createBlankDocument(), false);
       return;
     }
     async function load(key: string) {
@@ -141,8 +137,7 @@ export function useRawLithoDraftPersistence(options: Options) {
         );
         if (lithoDocument.drillhole !== key)
           throw new Error("Stored draft does not match selected drillhole.");
-        latest.current.onLoaded(lithoDocument, restoredPage.current, saved == null);
-        restoredPage.current = 1;
+        latest.current.onLoaded(lithoDocument, saved == null);
         readyKey.current = key;
         reportedLoadError.current = null;
         setLoadedKey(key);
@@ -169,13 +164,10 @@ export function useRawLithoDraftPersistence(options: Options) {
 
   useEffect(() => {
     if (isRestoringSession || (draftKey && loadedKey !== draftKey)) return;
-    void writeRawLithoSession({
-      drillhole: draftKey ?? "",
-      page: options.currentPage,
-    }).catch((error) =>
+    void writeRawLithoSession({ drillhole: draftKey ?? "" }).catch((error) =>
       console.error("Unable to persist Raw Litho session.", error),
     );
-  }, [draftKey, isRestoringSession, loadedKey, options.currentPage]);
+  }, [draftKey, isRestoringSession, loadedKey]);
 
   const retryLoad = useCallback(
     () => setLoadAttempt((attempt) => attempt + 1),

@@ -215,6 +215,115 @@ describe("Upload Data page", () => {
   });
 });
 
+describe("Upload Data selection, delete and Undo", () => {
+  const threeRecords = () => ({
+    ...uploadDocument(),
+    rows: [row(1, 0, 10), row(2, 10, 20), row(3, 20, 30)],
+  });
+  const header = (record: number) => screen.getByLabelText(`Select record ${record}`);
+  const comments = (record: number) => screen.getByLabelText(`Lithology Comments, record ${record}`);
+  const isSelected = (element: HTMLElement) =>
+    element.closest("td")?.classList.contains("upload-cell--selected") ?? false;
+
+  it("selects records from their numbers with click, Shift and Ctrl", async () => {
+    render(<UploadData />);
+    await loadFile(jsonFile(threeRecords()));
+
+    fireEvent.mouseDown(header(1));
+    fireEvent.mouseUp(document);
+    expect(screen.getByText("1 record selected (1)")).toBeInTheDocument();
+    expect(isSelected(comments(1))).toBe(true);
+    expect(header(1)).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.mouseDown(header(3), { shiftKey: true });
+    fireEvent.mouseUp(document);
+    expect(screen.getByText("3 records selected (1–3)")).toBeInTheDocument();
+
+    fireEvent.mouseDown(header(2), { ctrlKey: true });
+    fireEvent.mouseUp(document);
+    expect(screen.getByText("2 records selected (1, 3)")).toBeInTheDocument();
+    expect(isSelected(comments(2))).toBe(false);
+  });
+
+  it("drags across cells to select a block", async () => {
+    render(<UploadData />);
+    await loadFile(jsonFile(threeRecords()));
+    const start = screen.getByLabelText("Litho From (m), record 1");
+    const end = screen.getByLabelText("Litho To (m), record 2");
+
+    fireEvent.mouseDown(start);
+    document.elementFromPoint = vi.fn(() => end);
+    fireEvent.mouseMove(document, { buttons: 1, clientX: 5, clientY: 5 });
+    fireEvent.mouseUp(document);
+
+    expect(screen.getByText("4 cells selected in 2 records")).toBeInTheDocument();
+    expect(isSelected(screen.getByLabelText("Litho To (m), record 1"))).toBe(true);
+    expect(isSelected(screen.getByLabelText("Litho From (m), record 3"))).toBe(false);
+  });
+
+  it("deletes selected records after confirming, and Undo puts them back", async () => {
+    const user = userEvent.setup();
+    render(<UploadData />);
+    await loadFile(jsonFile(threeRecords()));
+
+    fireEvent.mouseDown(header(2));
+    fireEvent.mouseUp(document);
+    fireEvent.keyDown(comments(2), { key: "Delete" });
+    const dialog = screen.getByRole("alertdialog", { name: "Delete 1 record?" });
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(screen.getByLabelText("Litho From (m), record 3")).toHaveValue("20");
+
+    await user.click(screen.getByRole("button", { name: "Delete record" }));
+    await user.click(
+      within(screen.getByRole("alertdialog")).getByRole("button", { name: "Delete 1 record" }),
+    );
+    expect(screen.queryByLabelText("Litho From (m), record 3")).toBeNull();
+    expect(screen.getByLabelText("Litho From (m), record 2")).toHaveValue("20");
+    expect(screen.getByText("Edited")).toBeInTheDocument();
+    expect(screen.getByText("1 record deleted")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Undo" }));
+    expect(screen.getByLabelText("Litho From (m), record 3")).toHaveValue("20");
+    expect(screen.getByLabelText("Litho From (m), record 2")).toHaveValue("10");
+    expect(screen.getByText("Restored")).toBeInTheDocument();
+    expect(screen.queryByText("Edited")).toBeNull();
+  });
+
+  it("clears a block from the bar; Cancel keeps the values", async () => {
+    const user = userEvent.setup();
+    render(<UploadData />);
+    await loadFile(jsonFile(threeRecords()));
+    const code = (record: number) => screen.getByLabelText(`Litho To (m), record ${record}`);
+
+    fireEvent.mouseDown(code(1));
+    fireEvent.mouseUp(document);
+    fireEvent.mouseDown(code(2), { shiftKey: true });
+    fireEvent.mouseUp(document);
+    await user.click(screen.getByRole("button", { name: "Clear values" }));
+    await user.click(
+      within(screen.getByRole("alertdialog", { name: "Clear 2 cells?" })).getByRole("button", { name: "Cancel" }),
+    );
+    expect(code(1)).toHaveValue("10");
+
+    await user.click(screen.getByRole("button", { name: "Clear values" }));
+    await user.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Clear values" }));
+    expect(code(1)).toHaveValue("");
+    expect(code(2)).toHaveValue("");
+    expect(code(3)).toHaveValue("30");
+    expect(screen.getByText("2 cells cleared")).toBeInTheDocument();
+  });
+
+  it("the No. header selects every listed record", async () => {
+    const user = userEvent.setup();
+    render(<UploadData />);
+    await loadFile(jsonFile(threeRecords()));
+    await user.click(screen.getByRole("button", { name: "Select all records" }));
+    expect(screen.getByText("3 records selected (1–3)")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Clear selection (Esc)" }));
+    expect(screen.getByText(/Click a record number to select records/)).toBeInTheDocument();
+  });
+});
+
 describe("Upload Data drag and drop", () => {
   beforeEach(() => vi.mocked(importUploadData).mockClear());
 

@@ -101,7 +101,7 @@ survives its row scrolling out of view and back.
 
 The table uses Raw Litho's columns, labels, widths, `rowHeight` (26 px),
 `minWidth` and `indexColumnWidth` from `RawLitho/config.yaml`, so both tables
-always match. The header starts with "Ins" (the record number), then Status,
+always match. The header starts with "No." (the record number), then Status,
 then the data columns. Required columns show a red `*`. Status shows a tick,
 `!` or a cross, with the messages as a tooltip.
 
@@ -116,8 +116,21 @@ then the data columns. Required columns show a red `*`. Status shows a tick,
   Left and right arrows do the same at the edge of the text. Up, Down and Enter
   move within the column. A cell outside the rendered rows is scrolled into
   view and then focused.
-- Ctrl (or Cmd) + click toggles a cell in the selection. A plain click outside
-  the selection clears it, and so does Escape.
+- Selection works as in Raw Litho (shared code in `src/components/dataTable/`):
+  drag across cells for a block, Shift + click to extend it, Ctrl (or Cmd) +
+  click or drag to add cells. Click a record number to select the record,
+  Shift + click for the records in between, Ctrl + click to add or remove one,
+  or drag down the numbers. The "No." header selects every listed record. A
+  plain click outside the selection clears it, and so does Escape. Ranges
+  follow the listed order, so they respect the search and Show filter.
+- The bar above the table names the selection and offers **Clear values** and,
+  for whole records, **Delete records**. `Delete` does the same (several cells
+  or whole records; a single cell is left to the input). Both ask first in a
+  dialog. Deleting removes the records from the working document only; nothing
+  reaches the database before Upload. Cells holding JSON objects or lists are
+  never cleared. After either, the toast offers **Undo** for 8 s, valid while
+  nothing else has changed (`handleUndo` in `UploadData.tsx`). Both are
+  disabled while an upload runs.
 - Ctrl+C with a selection copies its bounding rectangle as tab-separated text.
 - Pasting one value with a selection fills every selected cell. A block from
   Excel is pasted with its top-left corner on the focused cell and is refused

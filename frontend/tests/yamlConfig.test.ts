@@ -7,7 +7,6 @@ import { readUploadDataConfig } from "../src/pages/UploadData/config";
 import { readDatabaseViewerConfig } from "../src/pages/DatabaseViewer/config";
 import {
   INDEX_COLUMN_WIDTH,
-  RAW_LITHO_ROWS_PER_PAGE,
   tableColumns,
 } from "../src/pages/RawLitho/constants";
 import { toPercentWidths } from "../src/components/dataTableStyles";
@@ -15,7 +14,7 @@ import { toPercentWidths } from "../src/components/dataTableStyles";
 describe("YAML page configuration", () => {
   it("loads the shipped files with the previous defaults", () => {
     expect(rawLithoConfig.title).toBe("Raw Litho");
-    expect(RAW_LITHO_ROWS_PER_PAGE).toBe(50);
+    expect(rawLithoConfig.overscan).toBe(12);
     expect(tableColumns.map((column) => column.key)).toEqual([
       "lithoFrom", "lithoTo", "lithoCode", "colorCode", "ca", "om", "omFacies",
       "py", "ox", "sedim", "redoxCode", "lithologyComments", "granulo", "hardness",

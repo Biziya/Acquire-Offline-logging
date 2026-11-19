@@ -24,7 +24,7 @@ export function readRawLithoConfig(text: string) {
 
   return {
     title: reader.string(reader.root.title, "title"),
-    rowsPerPage: reader.integer(table.rowsPerPage, "table.rowsPerPage"),
+    overscan: reader.integer(table.overscan, "table.overscan"),
     rowHeight: reader.integer(table.rowHeight, "table.rowHeight"),
     minWidth: reader.integer(table.minWidth, "table.minWidth"),
     indexColumnWidth: reader.integer(

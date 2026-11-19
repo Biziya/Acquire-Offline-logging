@@ -26,6 +26,10 @@ import {
   focusCellInRow,
   getRowIdFromElement,
 } from "../src/pages/RawLitho/tableNavigation";
+import { stubDesktopViewport } from "./viewport";
+
+// The Raw Litho table is virtualized: give jsdom a desktop-sized box.
+stubDesktopViewport();
 
 function AutocompleteHarness({
   onChange = () => {},
@@ -233,9 +237,6 @@ function TableHarness() {
       </button>
       <RawLithoTable
         rows={workspace.rows}
-        currentPage={workspace.currentPage}
-        totalPages={workspace.totalPages}
-        onPageChange={workspace.changeTablePage}
         lookupData={{
           lithoCode: [{ lithoCode: "Unknown" }],
           colorCode: [{ colourCode: "Unknown" }],
@@ -338,6 +339,13 @@ const pageRows = (count: number) =>
   Array.from({ length: count }, (_, index) =>
     validRow(`r${index}`, index * 10, index * 10 + 10),
   );
+const renderedRowCount = () => document.querySelectorAll("tr[data-row-id]").length;
+/* Scrolls the virtualized table so (1-based) row `row` is rendered. */
+async function scrollToRow(row: number) {
+  const frame = document.querySelector("table")?.parentElement as HTMLElement;
+  frame.scrollTop = Math.max(0, (row - 10) * 26);
+  await waitFor(() => expect(screen.getByLabelText(`Litho From (m), row ${row}`)).toBeInTheDocument());
+}
 
 describe("Tab navigation", () => {
   it("moves backward one cell and stops repeatedly at the first cell without refocusing", async () => {
@@ -406,9 +414,12 @@ describe("Tab navigation", () => {
     expect(cell("Colour, row 1")).toHaveValue("Unknown");
     expect(screen.queryByLabelText("Litho From (m), row 3")).toBeNull();
   });
-  it("adds one row through Tab across a page boundary, scrolls to it, and persists existing values", async () => {
+  it("adds one row through Tab at the end of a long table, scrolls to it, and persists existing values", async () => {
     const existing = pageRows(50);
     const user = await table(existing);
+    // Virtualized: the end of the table is not rendered until scrolled to.
+    expect(screen.queryByLabelText("Hardness, row 50")).toBeNull();
+    await scrollToRow(50);
     const descriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollIntoView");
     const scroll = vi.fn();
     Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: scroll });
@@ -462,6 +473,7 @@ describe("Tab navigation", () => {
     await user.click(cell("Litho From (m), row 1"));
     await user.tab({ shift: true });
     expect(cell("Litho From (m), row 1")).toHaveFocus();
+    await scrollToRow(50);
     await user.click(cell("Hardness, row 50"));
     await user.tab();
     await waitFor(() => expect(cell("Litho From (m), row 51")).toHaveFocus());
@@ -645,13 +657,34 @@ describe("Tab navigation", () => {
     expect(screen.queryByLabelText("Litho From (m), row 3")).toBeNull();
   });
 
-  it("crosses table pages in both directions", async () => {
-    const user = await table(pageRows(51));
-    await user.click(cell("Hardness, row 50"));
+  it("moves past the rendered rows in both directions, scrolling them in", async () => {
+    const user = await table(pageRows(100));
+    const last = renderedRowCount();
+    expect(last).toBeLessThan(100);
+    expect(screen.queryByLabelText(`Litho From (m), row ${last + 1}`)).toBeNull();
+
+    // Tab from the last rendered cell continues on the next (unrendered) row.
+    await user.click(cell(`Hardness, row ${last}`));
     await user.tab();
-    await waitFor(() => expect(cell("Litho From (m), row 51")).toHaveFocus());
+    await waitFor(() => expect(cell(`Litho From (m), row ${last + 1}`)).toHaveFocus());
     await user.tab({ shift: true });
-    await waitFor(() => expect(cell("Hardness, row 50")).toHaveFocus());
+    await waitFor(() => expect(cell(`Hardness, row ${last}`)).toHaveFocus());
+
+    // ArrowDown from the last rendered row keeps the column.
+    const lastRendered = Number(screen.getAllByRole("button", { name: /^Select row/ }).at(-1)?.textContent);
+    await user.click(cell(`Litho To (m), row ${lastRendered}`));
+    const focusedRow = () => Number(document.activeElement?.getAttribute("aria-label")?.split("row ")[1]);
+    const before = focusedRow();
+    expect(screen.queryByLabelText(`Litho To (m), row ${before + 1}`)).toBeNull();
+    await user.keyboard("{ArrowDown}");
+    await waitFor(() => expect(cell(`Litho To (m), row ${before + 1}`)).toHaveFocus());
+
+    // PageDown moves one screen of rows in the same column, PageUp back.
+    await user.keyboard("{PageDown}");
+    await waitFor(() => expect(focusedRow()).toBeGreaterThan(before + 10));
+    expect(document.activeElement).toHaveAccessibleName(/^Litho To \(m\)/);
+    await user.keyboard("{PageUp}");
+    await waitFor(() => expect(focusedRow()).toBe(before + 1));
   });
 });
 

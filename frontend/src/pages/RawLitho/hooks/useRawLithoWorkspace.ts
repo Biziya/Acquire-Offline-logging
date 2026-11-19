@@ -8,7 +8,7 @@ import type {
   RowField,
   RowId,
 } from "../../../types/domain";
-import { TOAST_NOTIFICATIONS, RAW_LITHO_ROWS_PER_PAGE } from "../constants";
+import { TOAST_NOTIFICATIONS } from "../constants";
 import {
   addDocumentRow,
   applyCellEdits,
@@ -18,12 +18,8 @@ import {
   clearDocumentCells,
   removeDocumentRows,
 } from "../rawLithoDocumentOperations";
-import { getPageForRowIndex } from "../rawLithoSorting";
 import type { CellEdit, CellRef } from "../rawLithoClipboard";
 import { useRawLithoDraftPersistence } from "./useRawLithoDraftPersistence";
-
-const totalPagesFor = (lithoDocument: RawLithoDocument) =>
-  Math.max(1, Math.ceil(lithoDocument.rows.length / RAW_LITHO_ROWS_PER_PAGE));
 
 export function useRawLithoWorkspace({
   drillholes,
@@ -40,25 +36,22 @@ export function useRawLithoWorkspace({
 }) {
   const [selectedHoleId, setSelectedHoleId] = useState("");
   const [rawLithoDocument, setDocument] = useState(createBlankDocument);
-  const [currentPage, setCurrentPage] = useState(1);
   // One working document; the ref provides its synchronous value between React commits.
   const documentRef = useRef(rawLithoDocument);
   // Drillhole of a document created in this session that still lacks a
   // creator, because the identity had not arrived when it was created.
   const awaitingCreator = useRef<string | null>(null);
   const applyDocument = useCallback(
-    (lithoDocument: RawLithoDocument, page = 1, isNew = false) => {
+    (lithoDocument: RawLithoDocument, isNew = false) => {
       documentRef.current = lithoDocument;
       awaitingCreator.current =
         isNew && !lithoDocument.created_by ? lithoDocument.drillhole : null;
       setDocument(lithoDocument);
-      setCurrentPage(Math.min(Math.max(1, page), totalPagesFor(lithoDocument)));
     },
     [],
   );
   const persistence = useRawLithoDraftPersistence({
     selectedHoleId,
-    currentPage,
     notify: showToast,
     onLoaded: applyDocument,
     onSessionRestored: (session: DraftSession) =>
@@ -161,13 +154,6 @@ export function useRawLithoWorkspace({
     if (operation.issue) showToast(TOAST_NOTIFICATIONS[operation.issue.issue]);
     if (operation.result.created) {
       commitDocument(operation.document);
-      const id = operation.result.rowId;
-      setCurrentPage(
-        getPageForRowIndex(
-          operation.document.rows.findIndex((row) => row.id === id),
-          RAW_LITHO_ROWS_PER_PAGE,
-        ),
-      );
       showToast(TOAST_NOTIFICATIONS.rowAdded);
     }
     return operation.result;
@@ -193,7 +179,6 @@ export function useRawLithoWorkspace({
     const next = removeDocumentRows(documentRef.current, ids);
     if (next === documentRef.current) return false;
     commitUndoable(next);
-    setCurrentPage((page) => Math.min(page, totalPagesFor(next)));
     return flushPendingSaves();
   };
 
@@ -215,17 +200,10 @@ export function useRawLithoWorkspace({
       return false;
     }
     commitDocument(undo.before);
-    setCurrentPage((page) => Math.min(page, totalPagesFor(undo.before)));
     const saved = await flushPendingSaves();
     showToast(saved ? TOAST_NOTIFICATIONS.undoDone : TOAST_NOTIFICATIONS.draftSaveFailed);
     return saved;
   };
-
-  const totalPages = totalPagesFor(rawLithoDocument);
-  const changeTablePage = useCallback(
-    (page: number) => setCurrentPage(Math.min(Math.max(page, 1), totalPages)),
-    [totalPages],
-  );
 
   /*
    * Every table row receives these two. Stable identities let the memoized
@@ -247,8 +225,6 @@ export function useRawLithoWorkspace({
     selectedHoleId,
     rawLithoDocument,
     rows: rawLithoDocument.rows,
-    currentPage,
-    totalPages,
     isPageEnabled,
     selectDrillhole,
     updateRow: stableUpdateRow,
@@ -258,7 +234,6 @@ export function useRawLithoWorkspace({
     removeRows,
     undoLast,
     clearCells,
-    changeTablePage,
     setRawLithoDocument: commitDocument,
     flushPendingSaves,
     retryDraftLoad: persistence.retryLoad,

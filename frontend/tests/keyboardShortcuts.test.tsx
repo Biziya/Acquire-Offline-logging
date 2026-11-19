@@ -45,7 +45,7 @@ describe("keyboard shortcuts popup", () => {
     await user.click(screen.getByRole("button", { name: "Help and shortcuts" }));
     const popup = screen.getByRole("dialog");
     expect(within(popup).getAllByRole("heading", { level: 3 }).map(h => h.textContent))
-      .toEqual(["Move around", "Edit and select", "RowsRaw Litho only", "Drillhole searchRaw Litho only"]);
+      .toEqual(["Move around", "Edit and select", "Select and delete rows", "RowsRaw Litho only", "Drillhole searchRaw Litho only"]);
     const shiftTab = popup.querySelector('[aria-label="Shift + Tab"]')!;
     expect(shiftTab).toHaveTextContent("Shift+Tab");
     expect(within(shiftTab as HTMLElement).getByText("+")).toBeInTheDocument();

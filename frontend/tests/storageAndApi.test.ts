@@ -49,8 +49,8 @@ describe("IndexedDB compatibility", () => {
     },
   );
   it("round-trips sessions, drillhole caches and lookup caches", async () => {
-    await writeRawLithoSession({ drillhole: "A", page: 3 });
-    expect(await readRawLithoSession()).toEqual({ drillhole: "A", page: 3 });
+    await writeRawLithoSession({ drillhole: "A" });
+    expect(await readRawLithoSession()).toEqual({ drillhole: "A" });
     const holes = [{ holeId: "A", projectCode: "P", campaign: "C" }];
     await saveDrillholes(holes);
     expect((await readDrillholeCache())?.records).toEqual(holes);

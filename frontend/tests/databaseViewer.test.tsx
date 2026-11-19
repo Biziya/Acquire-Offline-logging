@@ -126,7 +126,7 @@ describe("Database Viewer page", () => {
 
     const headers = Array.from(container.querySelectorAll("thead th"));
     expect(headers.map((th) => th.textContent)).toEqual([
-      "Ins",
+      "No.",
       ...tableColumns.map((column) => column.label),
     ]);
     // Compared as numbers: the browser writes "6.900%" back as "6.9%".

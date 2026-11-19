@@ -14,6 +14,10 @@ import {
 } from "../src/pages/RawLitho/rawLithoValidation";
 import { validateUploadDocument } from "../src/pages/UploadData/uploadDataValidation";
 import { writeRawLithoDraft } from "../src/services/IndexDB/rawLithoDraftDb";
+import { stubDesktopViewport } from "./viewport";
+
+// The Raw Litho table is virtualized: give jsdom a desktop-sized box.
+stubDesktopViewport();
 
 const issues = (row: Partial<RawLithoRow>) => findConditionalRuleIssues(row);
 
@@ -131,9 +135,6 @@ function Harness() {
       <button onClick={() => workspace.selectDrillhole(HOLE)}>Select</button>
       <RawLithoTable
         rows={workspace.rows}
-        currentPage={workspace.currentPage}
-        totalPages={workspace.totalPages}
-        onPageChange={workspace.changeTablePage}
         lookupData={lookupData}
         lookupStatus={{}}
         onRowChange={workspace.updateRow}

@@ -1,4 +1,4 @@
-import type { RawLithoRow, RawLithoDocument, RowId } from "../../types/domain";
+import type { RawLithoRow, RawLithoDocument } from "../../types/domain";
 import { isValidDepth } from "./rawLithoValidation";
 
 /*
@@ -76,24 +76,4 @@ export function sortRawLithoDocumentRows(lithoDocument: RawLithoDocument) {
   if (sortedRows === lithoDocument.rows) return lithoDocument;
 
   return { ...lithoDocument, rows: sortedRows };
-}
-
-/* 1-based page holding `rowIndex`, given a page size. */
-export function getPageForRowIndex(rowIndex: number, rowsPerPage: number) {
-  if (rowIndex < 0) return 1;
-
-  return Math.floor(rowIndex / rowsPerPage) + 1;
-}
-
-/* 1-based page holding the row with `rowId`, or null when it is not present. */
-export function findRowPage(
-  rows: RawLithoRow[],
-  rowId: RowId,
-  rowsPerPage: number,
-) {
-  const rowIndex = rows.findIndex((row) => String(row.id) === String(rowId));
-
-  if (rowIndex === -1) return null;
-
-  return getPageForRowIndex(rowIndex, rowsPerPage);
 }

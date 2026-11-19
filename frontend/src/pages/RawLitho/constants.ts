@@ -176,8 +176,6 @@ export const TOAST_NOTIFICATIONS = {
   },
 } satisfies Record<string, ToastNotification>;
 
-export const RAW_LITHO_ROWS_PER_PAGE = rawLithoConfig.rowsPerPage;
-
 /*
  * Builds the row that follows `previousRow`.
  *

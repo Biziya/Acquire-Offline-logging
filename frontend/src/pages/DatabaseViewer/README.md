@@ -60,7 +60,7 @@ The backend turns the database's one row per attribute (`NAME` / `VALUE`)
 into one row per interval (see *Data Viewer* in the backend README). The
 table uses Raw Litho's `tableColumns` and `INDEX_COLUMN_WIDTH` from
 `RawLitho/constants.ts`, and `rowHeight` and `minWidth` from
-`RawLitho/config.yaml`, so headers, order, widths, the "Ins" column and row
+`RawLitho/config.yaml`, so headers, order, widths, the "No." column and row
 height match Raw Litho. Frame, header, cells, zebra rows and hover come from
 `components/dataTableStyles.ts`.
 

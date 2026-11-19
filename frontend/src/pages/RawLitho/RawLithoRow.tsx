@@ -19,6 +19,7 @@ import { BODY_CELL, bodyRowClass } from "../../components/dataTableStyles";
 import { RAW_LITHO_LOOKUP_BY_FIELD } from "../../services/rawLithoLookupConfig";
 import { findConditionalRuleIssues, hasValue } from "./rawLithoValidation";
 import { DEPTH_FIELDS } from "../../types/rawLithoSchema";
+import RowHeaderCell from "../../components/dataTable/RowHeaderCell";
 
 interface RawLithoRowProps {
   row: RawLithoRowRecord;
@@ -38,13 +39,6 @@ interface RawLithoRowProps {
 }
 
 const OVERLAP_MESSAGE = "This interval overlaps another row";
-
-/* The row number cell: a hover tint, and a navy edge plus the selection colour when the whole row is selected. */
-const ROW_HEADER_STATES = {
-  normal: "text-rl-text-muted hover:bg-rl-navy-soft hover:text-rl-navy",
-  selected:
-    "raw-litho-row--selected bg-rl-select font-bold text-rl-navy shadow-[inset_3px_0_0_var(--color-rl-navy)]",
-};
 
 /*
  * One look per cell state, strongest first: the Ctrl + click selection stays
@@ -127,29 +121,7 @@ function RawLithoRow({
       style={{ height: rawLithoConfig.rowHeight }}
       data-row-id={row.id}
     >
-      {/*
-        Row header, like Excel's: the table's mousedown listener reads
-        `data-row-number` for click, Shift + click, Ctrl + click and drag over
-        the numbers, so the row needs no callback of its own. Kept out of Tab
-        and arrow navigation (tabIndex -1): it is not a cell.
-      */}
-      <td
-        className={`${BODY_CELL} select-none p-0 ${ROW_HEADER_STATES[isRowSelected ? "selected" : "normal"]}`}
-        data-row-number
-      >
-        <button
-          type="button"
-          tabIndex={-1}
-          data-row-select
-          className="block size-full cursor-pointer border-0 bg-transparent p-0 text-center font-[inherit] text-inherit tabular-nums disabled:cursor-default"
-          disabled={!isEnabled}
-          aria-label={`Select row ${rowIndex + 1}`}
-          aria-pressed={isRowSelected}
-          title="Click to select this row. Shift + click selects a range, Ctrl + click adds a row."
-        >
-          {rowIndex + 1}
-        </button>
-      </td>
+      <RowHeaderCell number={rowIndex + 1} isSelected={isRowSelected} isEnabled={isEnabled} />
 
       {tableColumns.map((column) => {
         const lookup = RAW_LITHO_LOOKUP_BY_FIELD[column.key];

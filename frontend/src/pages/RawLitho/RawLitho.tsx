@@ -44,8 +44,6 @@ function RawLitho() {
     selectedHoleId,
     rawLithoDocument,
     rows,
-    currentPage,
-    totalPages,
     isPageEnabled,
     selectDrillhole,
   } = workspace;
@@ -235,12 +233,9 @@ function RawLitho() {
       )}
 
       <RawLithoTable
-        // A new drillhole starts with no selected cells or rows.
+        // A new drillhole starts at the top, with nothing selected.
         key={selectedHoleId}
         rows={rows}
-        currentPage={currentPage}
-        totalPages={totalPages}
-        onPageChange={workspace.changeTablePage}
         lookupData={lookupData}
         lookupStatus={lookupStatus}
         onRowChange={workspace.updateRow}

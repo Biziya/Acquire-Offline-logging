@@ -39,6 +39,36 @@ const MENU_STATUS = `text-[0.8125rem] ${DROPDOWN_MUTED}`;
 const CELL_ERROR =
   "absolute top-[calc(100%+2px)] left-1 z-10 rounded-sm bg-rl-danger-soft px-[5px] py-0.5 text-[0.75rem] whitespace-nowrap text-rl-danger";
 
+/*
+ * The distinct codes of one lookup list. Every cell of a column shares the
+ * same `records` array, so the list is built once per array and code
+ * property, not once per cell (a long drillhole has thousands of cells).
+ */
+const optionCache = new WeakMap<readonly LookupRecord[], Map<string, { code: string }[]>>();
+
+function getOptions(records: readonly LookupRecord[], codeProperty: string) {
+  let byProperty = optionCache.get(records);
+  if (!byProperty) {
+    byProperty = new Map();
+    optionCache.set(records, byProperty);
+  }
+  const cached = byProperty.get(codeProperty);
+  if (cached) return cached;
+
+  const seen = new Set();
+  const options = records.flatMap((record) => {
+    const code = record?.[codeProperty];
+    const normalizedCode = normalize(code);
+
+    if (typeof code !== "string" || !normalizedCode || seen.has(normalizedCode))
+      return [];
+    seen.add(normalizedCode);
+    return [{ code: code.trim() }];
+  });
+  byProperty.set(codeProperty, options);
+  return options;
+}
+
 function normalize(value: unknown) {
   return value === null || value === undefined
     ? ""
@@ -87,23 +117,7 @@ function LookupAutocomplete({
   const [showAllOptions, setShowAllOptions] = useState(false);
   const [showInvalidSelection, setShowInvalidSelection] = useState(false);
 
-  const options = useMemo(() => {
-    const seen = new Set();
-
-    return records.flatMap((record) => {
-      const code = record?.[lookup.codeProperty];
-      const normalizedCode = normalize(code);
-
-      if (
-        typeof code !== "string" ||
-        !normalizedCode ||
-        seen.has(normalizedCode)
-      )
-        return [];
-      seen.add(normalizedCode);
-      return [{ code: code.trim() }];
-    });
-  }, [lookup.codeProperty, records]);
+  const options = getOptions(records, lookup.codeProperty);
 
   const exactOption = useMemo(() => {
     const normalizedQuery = normalize(query);
@@ -147,7 +161,10 @@ function LookupAutocomplete({
     setShowInvalidSelection(false);
   }, [value]);
 
+  // Only an open list listens, so thousands of closed cells add no listeners.
   useEffect(() => {
+    if (!isOpen) return undefined;
+
     function closeWhenAnotherLookupOpens(event: Event) {
       if (event instanceof CustomEvent && event.detail !== instanceId) {
         setIsOpen(false);
@@ -160,7 +177,7 @@ function LookupAutocomplete({
         LOOKUP_OPEN_EVENT,
         closeWhenAnotherLookupOpens,
       );
-  }, [instanceId]);
+  }, [instanceId, isOpen]);
 
   const getAnchor = useCallback(() => inputRef.current, []);
   const menuStyle = useAnchoredMenuStyle(showSuggestions, getAnchor);

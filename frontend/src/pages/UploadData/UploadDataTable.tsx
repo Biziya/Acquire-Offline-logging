@@ -1,8 +1,8 @@
-import type { RowField } from "../../types/domain";
-import { useEffect, useRef, useState } from "react";
+import type { Notify, RowField } from "../../types/domain";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { isRecord } from "../../types/validation";
-import { canLeaveCell, isKeyAlreadyHandled } from "../RawLitho/tableNavigation";
+import { canLeaveCell, isKeyAlreadyHandled, markKeyAsHandled } from "../RawLitho/tableNavigation";
 import { parseClipboardText } from "../RawLitho/rawLithoClipboard";
 import LookupAutocomplete from "../RawLitho/LookupAutocomplete";
 import { rawLithoConfig } from "../RawLitho/config";
@@ -15,6 +15,15 @@ import { RAW_LITHO_LOOKUP_BY_FIELD } from "../../services/rawLithoLookupConfig";
 import { cellText, isEditableValue, type CellEdit } from "./uploadDataDocument";
 import type { RowStatus, UploadLookups, UploadValidation } from "./uploadDataValidation";
 import { uploadDataConfig } from "./config";
+import ConfirmDialog from "../../components/ConfirmDialog";
+import SelectionBar from "../../components/dataTable/SelectionBar";
+import RowHeaderCell, { SelectAllHeaderCell } from "../../components/dataTable/RowHeaderCell";
+import { useTableSelection } from "../../components/dataTable/useTableSelection";
+import {
+  countLabel,
+  formatRowNumbers,
+  type CellRef,
+} from "../../components/dataTable/tableSelection";
 import {
   BODY_CELL,
   CELL_INPUT,
@@ -34,6 +43,15 @@ interface UploadDataTableProps {
   lookups: UploadLookups;
   isReadOnly: boolean;
   onEdit: (edits: CellEdit[]) => void;
+  /*
+   * Deleting selected records / emptying selected cells, after the table has
+   * asked for confirmation. Both return false when nothing could change.
+   */
+  onRemoveRows?: (rowIndexes: number[]) => boolean;
+  onClearCells?: (edits: CellEdit[]) => boolean;
+  /* Offered as Undo in the toast after a delete or clear. */
+  onUndo?: () => unknown;
+  showToast?: Notify;
 }
 
 interface CellPosition {
@@ -45,15 +63,17 @@ interface CellPosition {
 // Same columns, widths and row height as Raw Litho, plus the Status column.
 const { rowHeight, minWidth, indexColumnWidth } = rawLithoConfig;
 const { overscan, maxHeightVh, statusColumnWidth } = uploadDataConfig;
-const [indexWidth, statusWidth, ...columnWidths] = toPercentWidths([
+const [indexWidth = "auto", statusWidth, ...columnWidths] = toPercentWidths([
   indexColumnWidth,
   statusColumnWidth,
   ...rawLithoConfig.columns
     .filter((column) => column.visible)
     .map((column) => column.width),
 ]);
+const COLUMN_KEYS: readonly RowField[] = columns.map((column) => column.key);
+const RECORD = "record";
 
-// Strongest first: the Ctrl + click selection shows over error / warning.
+// Strongest first: the selection shows over error / warning.
 const CELL_STATES = {
   selected:
     "upload-cell--selected bg-rl-select shadow-[inset_0_0_0_2px_var(--color-rl-select-ring)]",
@@ -71,10 +91,6 @@ const STATUS_MARKS: Record<RowStatus, { icon: string; className: string; text: s
   error: { icon: "m7 7 10 10M17 7 7 17", className: "text-rl-danger", text: "Invalid" },
 };
 
-function selectionKey(rowIndex: number, field: RowField) {
-  return `${rowIndex}:${field}`;
-}
-
 function getCellPosition(target: EventTarget | null): CellPosition | null {
   const input =
     target instanceof Element ? target.closest<HTMLElement>("[data-cell]") : null;
@@ -89,7 +105,12 @@ function getCellPosition(target: EventTarget | null): CellPosition | null {
  * The editable preview. Only the rows in view (plus `overscan`) are in the
  * DOM; every value is read from the working document on render, so an edit
  * survives its row scrolling out of view and back. Rows are keyed by their
- * record index, which never changes for a loaded file.
+ * record index.
+ *
+ * Selection works as in Raw Litho (useTableSelection): drag across cells,
+ * Shift / Ctrl + click, the record number for whole records, and the No.
+ * header for every listed record. The bar above the table clears values or
+ * deletes records, after a confirmation, with Undo in the toast.
  */
 function UploadDataTable({
   rows,
@@ -98,11 +119,28 @@ function UploadDataTable({
   lookups,
   isReadOnly,
   onEdit,
+  onRemoveRows,
+  onClearCells,
+  onUndo,
+  showToast,
 }: UploadDataTableProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const bodyRef = useRef<HTMLTableSectionElement>(null);
   const pendingFocus = useRef<CellPosition | null>(null);
-  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [notice, setNotice] = useState("");
+  const [pendingDelete, setPendingDelete] = useState<
+    | { kind: "rows"; rowIndexes: number[] }
+    | { kind: "cells"; cells: CellRef<RowField>[] }
+    | null
+  >(null);
+  const isBlocked = isReadOnly || pendingDelete !== null;
+
+  // Selection row ids are record indices as text, in display order.
+  const rowIds = useMemo(() => visibleRows.map(String), [visibleRows]);
+  const positionByRow = useMemo(
+    () => new Map(visibleRows.map((rowIndex, position) => [rowIndex, position])),
+    [visibleRows],
+  );
 
   const virtualizer = useVirtualizer({
     count: visibleRows.length,
@@ -111,6 +149,37 @@ function UploadDataTable({
     overscan,
     getItemKey: (position) => visibleRows[position] ?? position,
     initialRect: { width: minWidth, height: rowHeight * 20 },
+  });
+
+  const focusRenderedCell = useCallback((rowId: string, columnKey: RowField) => {
+    const input = scrollRef.current?.querySelector<HTMLInputElement>(
+      `input[data-row-index="${rowId}"][data-field="${columnKey}"]`,
+    );
+    if (!input) return false;
+    if (input !== document.activeElement) {
+      input.focus();
+      input.select();
+    }
+    return true;
+  }, []);
+
+  const {
+    selectedCells,
+    selectedColumnsByRow,
+    fullRowIds,
+    fullRowIdSet,
+    selectedRowCount,
+    isWholeRowSelection,
+    selectAll,
+    clearSelection,
+    noteFocus,
+  } = useTableSelection({
+    rowIds,
+    columnKeys: COLUMN_KEYS,
+    frameRef: scrollRef,
+    bodyRef,
+    isBlocked,
+    focusRenderedCell,
   });
 
   function focusRendered({ position, column }: CellPosition) {
@@ -147,6 +216,65 @@ function UploadDataTable({
     };
   }
 
+  const recordNumbers = (indexes: readonly (number | string)[]) =>
+    formatRowNumbers(indexes.map((index) => Number(index) + 1));
+
+  /*
+   * Delete key: whole selected records ask to be deleted, several selected
+   * cells ask to be emptied. One cell (or none) is left to the input.
+   */
+  function requestBulkDelete() {
+    if (isBlocked) return false;
+    if (isWholeRowSelection && onRemoveRows) return requestDeleteRows();
+    if (selectedCells.length > 1 && onClearCells) return requestClearCells();
+    return false;
+  }
+
+  function requestDeleteRows() {
+    if (isBlocked || !onRemoveRows || fullRowIds.length === 0) return false;
+    setPendingDelete({ kind: "rows", rowIndexes: fullRowIds.map(Number) });
+    return true;
+  }
+
+  function requestClearCells() {
+    if (isBlocked || !onClearCells || selectedCells.length === 0) return false;
+    setPendingDelete({ kind: "cells", cells: selectedCells });
+    return true;
+  }
+
+  // Cells holding a JSON object or list are shown read-only and never changed.
+  function isWritable(rowIndex: number, field: RowField) {
+    const row = rows[rowIndex];
+    return isRecord(row) && isEditableValue(row[field]);
+  }
+
+  function confirmDelete() {
+    if (!pendingDelete) return;
+    const isRows = pendingDelete.kind === "rows";
+    const edits = isRows
+      ? []
+      : pendingDelete.cells
+          .map((cell) => ({ rowIndex: Number(cell.rowId), field: cell.columnKey, text: "" }))
+          .filter((edit) => isWritable(edit.rowIndex, edit.field));
+    const count = isRows ? pendingDelete.rowIndexes.length : edits.length;
+    const changed = isRows
+      ? (onRemoveRows?.(pendingDelete.rowIndexes) ?? false)
+      : edits.length > 0 && (onClearCells?.(edits) ?? false);
+
+    setPendingDelete(null);
+    clearSelection();
+    if (!changed) {
+      setNotice(isRows ? "Nothing was deleted." : "The selected cells were already empty or read-only.");
+      return;
+    }
+
+    showToast?.({
+      type: "success",
+      message: `${countLabel(count, isRows ? RECORD : "cell")} ${isRows ? "deleted" : "cleared"}`,
+      ...(onUndo ? { action: { label: "Undo", onClick: () => void onUndo() } } : {}),
+    });
+  }
+
   /*
    * Tab / Shift + Tab: next / previous cell, wrapping across records.
    * ArrowLeft / ArrowRight: the same, once the caret is at the edge of the text.
@@ -156,7 +284,7 @@ function UploadDataTable({
    */
   function handleKeyDown(event: React.KeyboardEvent<HTMLTableSectionElement>) {
     if (event.key === "Escape") {
-      setSelected(new Set());
+      clearSelection();
       return;
     }
     if (isKeyAlreadyHandled(event)) return;
@@ -191,63 +319,34 @@ function UploadDataTable({
     focusCell(target);
   }
 
-  // Ctrl / ⌘ + click toggles a cell in the selection; a plain click on a cell
-  // outside the selection clears it.
-  function handleMouseDown(event: React.MouseEvent<HTMLTableSectionElement>) {
-    if (event.button !== 0) return;
-    const input =
-      event.target instanceof Element
-        ? event.target.closest<HTMLInputElement>("input[data-cell]")
-        : null;
-    if (!input) return;
-
-    const key = selectionKey(
-      Number(input.dataset.rowIndex),
-      input.dataset.field as RowField,
-    );
-
-    if (event.ctrlKey || event.metaKey) {
-      event.preventDefault();
-      input.focus();
-      setSelected((current) => {
-        const next = new Set(current);
-        if (!next.delete(key)) next.add(key);
-        return next;
-      });
-    } else if (!selected.has(key) && selected.size > 0) {
-      setSelected(new Set());
-    }
-  }
-
   /*
    * Ctrl + C with a selection copies its bounding rectangle (display order) as
    * tab-separated text; unselected cells inside it are written empty.
    */
   function handleCopy(event: React.ClipboardEvent<HTMLTableSectionElement>) {
-    if (selected.size === 0) return;
+    if (selectedCells.length === 0) return;
 
-    const positionByRow = new Map(visibleRows.map((row, position) => [row, position]));
-    const cells = Array.from(selected).flatMap((key) => {
-      const [rowText, field] = key.split(":");
-      const position = positionByRow.get(Number(rowText));
-      const column = columns.findIndex((item) => item.key === field);
-      return position === undefined || column === -1 ? [] : [{ position, column }];
+    let [top, bottom, left, right] = [Infinity, -Infinity, Infinity, -Infinity];
+    selectedCells.forEach(({ rowId, columnKey }) => {
+      const position = positionByRow.get(Number(rowId));
+      const column = COLUMN_KEYS.indexOf(columnKey);
+      if (position === undefined || column === -1) return;
+      top = Math.min(top, position);
+      bottom = Math.max(bottom, position);
+      left = Math.min(left, column);
+      right = Math.max(right, column);
     });
-    if (cells.length === 0) return;
-
-    const positions = cells.map((cell) => cell.position);
-    const cols = cells.map((cell) => cell.column);
-    const [top, bottom] = [Math.min(...positions), Math.max(...positions)];
-    const [left, right] = [Math.min(...cols), Math.max(...cols)];
+    if (top === Infinity) return;
 
     const lines: string[] = [];
     for (let position = top; position <= bottom; position += 1) {
       const rowIndex = visibleRows[position] ?? -1;
+      const selectedColumns = selectedColumnsByRow.get(String(rowIndex));
       const values: string[] = [];
       for (let column = left; column <= right; column += 1) {
-        const field = columns[column]?.key;
+        const field = COLUMN_KEYS[column];
         values.push(
-          field && selected.has(selectionKey(rowIndex, field))
+          field && selectedColumns?.has(field)
             ? cellText(rows[rowIndex], field).replace(/[\t\r\n]+/g, " ")
             : "",
         );
@@ -257,7 +356,7 @@ function UploadDataTable({
 
     event.preventDefault();
     event.clipboardData.setData("text/plain", lines.join("\n"));
-    setNotice(`Copied ${cells.length} cell${cells.length === 1 ? "" : "s"}.`);
+    setNotice(`Copied ${countLabel(selectedCells.length, "cell")}.`);
   }
 
   /*
@@ -272,7 +371,7 @@ function UploadDataTable({
     try {
       text = event.clipboardData.getData("text/plain");
     } catch {
-      if (selected.size === 0) return;
+      if (selectedCells.length === 0) return;
       event.preventDefault();
       setNotice("The clipboard could not be read; nothing was changed.");
       return;
@@ -282,11 +381,10 @@ function UploadDataTable({
     const isBlock = grid.length > 1 || (grid[0]?.length ?? 0) > 1;
     const edits: CellEdit[] = [];
 
-    if (!isBlock && selected.size > 0) {
+    if (!isBlock && selectedCells.length > 0) {
       const text = grid[0]?.[0] ?? "";
-      selected.forEach((key) => {
-        const [rowText, field] = key.split(":");
-        edits.push({ rowIndex: Number(rowText), field: field as RowField, text });
+      selectedCells.forEach(({ rowId, columnKey }) => {
+        edits.push({ rowIndex: Number(rowId), field: columnKey, text });
       });
     } else if (isBlock) {
       const anchor = getCellPosition(event.target);
@@ -314,19 +412,45 @@ function UploadDataTable({
 
     event.preventDefault();
 
-    // Cells holding a JSON object or list are shown read-only and never pasted over.
-    const writable = edits.filter((edit) => {
-      const row = rows[edit.rowIndex];
-      return isRecord(row) && isEditableValue(row[edit.field]);
-    });
+    const writable = edits.filter((edit) => isWritable(edit.rowIndex, edit.field));
     const skipped = edits.length - writable.length;
 
     onEdit(writable);
     setNotice(
-      `Pasted into ${writable.length} cell${writable.length === 1 ? "" : "s"}.` +
+      `Pasted into ${countLabel(writable.length, "cell")}.` +
         (skipped > 0 ? ` ${skipped} read-only cell${skipped === 1 ? " was" : "s were"} left unchanged.` : ""),
     );
   }
+
+  const deleteDialog = pendingDelete && (() => {
+    if (pendingDelete.kind === "rows") {
+      const label = countLabel(pendingDelete.rowIndexes.length, RECORD);
+      return (
+        <ConfirmDialog
+          title={`Delete ${label}?`}
+          message={`${pendingDelete.rowIndexes.length === 1 ? "This record is" : "These records are"} removed from the file before upload. Nothing is sent to the database. You can undo this right after.`}
+          facts={[["Records", recordNumbers(pendingDelete.rowIndexes)]]}
+          confirmLabel={`Delete ${label}`}
+          onConfirm={confirmDelete}
+          onCancel={() => setPendingDelete(null)}
+        />
+      );
+    }
+    const label = countLabel(pendingDelete.cells.length, "cell");
+    return (
+      <ConfirmDialog
+        title={`Clear ${label}?`}
+        message="The values in the selected cells will be emptied. The records stay, and cells holding JSON objects or lists are left unchanged. You can undo this right after."
+        facts={[
+          ["Cells", String(pendingDelete.cells.length)],
+          ["Records", recordNumbers([...new Set(pendingDelete.cells.map((cell) => cell.rowId))])],
+        ]}
+        confirmLabel="Clear values"
+        onConfirm={confirmDelete}
+        onCancel={() => setPendingDelete(null)}
+      />
+    );
+  })();
 
   const items = virtualizer.getVirtualItems();
   const paddingTop = items[0]?.start ?? 0;
@@ -336,6 +460,18 @@ function UploadDataTable({
 
   return (
     <>
+      {deleteDialog}
+      <SelectionBar
+        cellCount={selectedCells.length}
+        rowCount={selectedRowCount}
+        wholeRowCount={isWholeRowSelection ? fullRowIds.length : 0}
+        wholeRowNumbers={isWholeRowSelection ? recordNumbers(fullRowIds) : ""}
+        isEnabled={!isBlocked}
+        onClearValues={onClearCells ? requestClearCells : undefined}
+        onDeleteRows={onRemoveRows ? requestDeleteRows : undefined}
+        onDismiss={clearSelection}
+        rowNoun={RECORD}
+      />
       <div
         ref={scrollRef}
         className={TABLE_FRAME}
@@ -349,9 +485,13 @@ function UploadDataTable({
         >
           <thead>
             <tr>
-              <th className={HEADER_CELL} style={{ width: indexWidth }}>
-                Ins
-              </th>
+              <SelectAllHeaderCell
+                className={HEADER_CELL}
+                width={indexWidth}
+                isEnabled={!isBlocked && visibleRows.length > 0}
+                onSelectAll={selectAll}
+                rowNoun={RECORD}
+              />
               <th className={HEADER_CELL} style={{ width: statusWidth }}>
                 Status
               </th>
@@ -373,13 +513,23 @@ function UploadDataTable({
           </thead>
 
           <tbody
+            ref={bodyRef}
+            onKeyDownCapture={(event) => {
+              // Bulk Delete runs before the input's own text delete.
+              if (event.key === "Delete" && !event.altKey && !event.ctrlKey &&
+                  !event.metaKey && !event.shiftKey && requestBulkDelete()) {
+                event.preventDefault();
+                event.stopPropagation();
+                markKeyAsHandled(event);
+              }
+            }}
             onKeyDown={handleKeyDown}
-            onMouseDown={handleMouseDown}
+            onFocus={(event) => noteFocus(event.target)}
             onCopy={handleCopy}
             onPaste={handlePaste}
           >
             {paddingTop > 0 && (
-              <tr aria-hidden="true" style={{ height: paddingTop }}>
+              <tr aria-hidden="true" data-spacer style={{ height: paddingTop }}>
                 <td colSpan={columnCount} />
               </tr>
             )}
@@ -389,6 +539,8 @@ function UploadDataTable({
               if (rowIndex === undefined) return null;
 
               const row = rows[rowIndex];
+              const rowId = String(rowIndex);
+              const selectedColumns = selectedColumnsByRow.get(rowId);
               const issues = validation?.rowIssues[rowIndex];
               const status = validation?.rowStatus[rowIndex];
               const mark = status ? STATUS_MARKS[status] : null;
@@ -402,8 +554,14 @@ function UploadDataTable({
                   className={bodyRowClass(item.index)}
                   style={{ height: rowHeight }}
                   aria-rowindex={item.index + 2}
+                  data-row-id={rowId}
                 >
-                  <td className={BODY_CELL}>{rowIndex + 1}</td>
+                  <RowHeaderCell
+                    number={rowIndex + 1}
+                    isSelected={fullRowIdSet.has(rowId)}
+                    isEnabled={!isReadOnly}
+                    rowNoun={RECORD}
+                  />
                   <td
                     className={`${BODY_CELL} font-bold ${mark?.className ?? ""}`}
                     title={messages.join("\n") || mark?.text}
@@ -430,9 +588,7 @@ function UploadDataTable({
                       : cellIssues?.length
                         ? "warning"
                         : null;
-                    const isSelected = selected.has(
-                      selectionKey(rowIndex, column.key),
-                    );
+                    const isSelected = selectedColumns?.has(column.key) ?? false;
                     const state = isSelected
                       ? CELL_STATES.selected
                       : (severity && CELL_STATES[severity]) || CELL_STATES.normal;
@@ -453,6 +609,7 @@ function UploadDataTable({
                         key={column.key}
                         className={`${BODY_CELL} focus-within:relative focus-within:z-[1] ${state}`}
                         title={cellIssues?.map((issue) => issue.message).join("\n")}
+                        data-column={column.key}
                       >
                         {lookup && isEditable ? (
                           <LookupAutocomplete
@@ -503,7 +660,7 @@ function UploadDataTable({
             })}
 
             {paddingBottom > 0 && (
-              <tr aria-hidden="true" style={{ height: paddingBottom }}>
+              <tr aria-hidden="true" data-spacer style={{ height: paddingBottom }}>
                 <td colSpan={columnCount} />
               </tr>
             )}

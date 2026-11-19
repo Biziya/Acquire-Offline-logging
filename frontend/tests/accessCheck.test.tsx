@@ -2,6 +2,10 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { deleteValue, SESSION_STORE } from "../src/services/IndexDB/rawLithoDatabase";
+import { stubDesktopViewport } from "./viewport";
+
+// The Raw Litho table is virtualized: give jsdom a desktop-sized box.
+stubDesktopViewport();
 
 // The pages themselves are tested elsewhere; here only whether the app opens.
 vi.mock("../src/pages/RawLitho/RawLitho", () => ({ default: () => <h1>Raw Litho page</h1> }));

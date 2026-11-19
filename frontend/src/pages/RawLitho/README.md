@@ -17,7 +17,7 @@ RawLitho/
   RawLithoTable.tsx               table, row buttons, paging, copy and paste
   RawLithoRow.tsx                 one editable row and its cell highlights
   LookupAutocomplete.tsx          dropdown cell (also used by Upload Data)
-  config.yaml / config.ts         title, rows per page, row height, columns
+  config.yaml / config.ts         title, overscan, row height, columns
   constants.ts                    visible columns, required fields, toasts
   drillholeOrdering.ts            order of the drillhole list
   rawLithoValidation.ts           validation and conditional rules (pure)
@@ -34,7 +34,7 @@ RawLitho/
     useRawLithoLookups.ts         dropdown lists, cache first
     useDrillholes.ts              drillhole list and selection history
     useWorkingDrillholes.ts       which drillholes have saved data
-    useRawLithoShortcuts.ts       F4, F5, PageUp, PageDown
+    useRawLithoShortcuts.ts       F4, F5, PageUp, PageDown (one screen)
     useRawLithoRowFocus.ts        keeps the caret on the right row
 ```
 
@@ -65,7 +65,7 @@ row, or `↓` on the last row. All four go through `tryAddRow()` in
 `useRawLithoWorkspace.ts`, so they validate and behave the same way. A new row
 is only created when the current last row is valid (see "Data rules" below). If
 it is not, no row is added, a warning toast appears, and the caret moves to the
-cell that needs fixing, switching page first if needed.
+cell that needs fixing, scrolling to it first if needed.
 
 A new row takes Litho From from the previous row's Litho To and copies
 `lithoCode`, `colorCode`, `redoxCode` and `ox` (`ROW_COPY_FIELD_KEYS` in
@@ -90,7 +90,9 @@ cells ask to be cleared, a single cell is cleared at once. `F5` selects the last
 row and asks to delete it. Every delete or clear opens a dialog first (rows and
 depth span, focus on Cancel). After it, the toast offers **Undo** for 8 s; Undo
 works while nothing else has changed since. Deleting every row leaves one blank
-row. See `RawLithoSelectionBar.tsx`, `removeDocumentRows()` and
+row. The selection itself is shared with Upload Data:
+`src/components/dataTable/` (`useTableSelection.ts`, `tableSelection.ts`,
+`SelectionBar.tsx`, `RowHeaderCell.tsx`). See also `removeDocumentRows()` and
 `clearDocumentCells()` in `rawLithoDocumentOperations.ts`, and `undoLast()` in
 `useRawLithoWorkspace.ts`.
 
@@ -104,15 +106,23 @@ rows with an empty or non-numeric Litho From at the bottom.
 Sorting waits until a depth is committed: on blur, on Enter, after adding a
 row, on paste, on import and on restore. It never runs while you type, so a row
 does not jump out from under the caret. Whole rows move together, and the caret
-follows its row by id, even across pages.
+follows its row by id, even when it moves out of view.
 
-### Paging
+### Scrolling
 
-The table shows 50 rows per page (`table.rowsPerPage` in `config.yaml`,
-exported as `RAW_LITHO_ROWS_PER_PAGE`). Use Previous and Next under the table,
-or `PageUp` and `PageDown`. Paging only slices the sorted rows for display, so
-edits on other pages are kept. Adding a row jumps to the page that holds it. The
-current page is remembered and restored when you come back.
+Every row is in one scrolling table; there are no pages. The table is
+virtualized with `@tanstack/react-virtual`: only the rows in view plus
+`table.overscan` (`config.yaml`) are in the DOM, and two spacer rows stand in
+for the rest, so a 2000-row drillhole scrolls and types as fast as a short one.
+Rows have a fixed height (`table.rowHeight`). `PageUp` and `PageDown` move the
+caret one screen of rows in the same column. Any move to a row out of view
+(arrow keys, Tab, Add row, a validation jump, Undo) scrolls it in first
+(`useRawLithoRowFocus.ts`). Opening a drillhole starts at the top. The row
+count is shown under the table.
+
+Keeping it fast: rows are memoized, so a keystroke re-renders one row; the
+overlap check runs on a deferred copy of the rows; dropdown cells build their
+option list once per lookup and only listen for events while open.
 
 ### Save JSON
 
@@ -251,7 +261,7 @@ The Shortcuts popup (the "Help and shortcuts" button,
 | `Tab` / `Shift`+`Tab` | next or previous cell |
 | `←` / `→` | cell left or right when the caret is at the edge of the text |
 | `↑` / `↓` | row above or below |
-| `PgUp` / `PgDn` | previous or next page |
+| `PgUp` / `PgDn` | move one screen of rows up or down |
 | `Esc` then `Tab` | leave the table |
 | `Tab` in a dropdown cell | take the highlighted (closest) match, then move on; unmatched text is kept and flagged |
 | `F2` | move through a dropdown list (Up and Down browse, Enter confirms, Esc cancels) |
@@ -270,7 +280,7 @@ The Shortcuts popup (the "Help and shortcuts" button,
 | `↑` / `↓`, `Esc` in drillhole search | move through or close the list |
 
 Navigation skips disabled cells, carries on to the next or previous row, and
-crosses pages; `Shift`+`Tab` stops at the first cell. A cell focused from the
+scrolls rows out of view into it; `Shift`+`Tab` stops at the first cell. A cell focused from the
 keyboard has its whole value selected, so one arrow press moves on; click into
 the text for normal editing. Enter in a depth cell commits and re-sorts without
 leaving the cell.
@@ -279,7 +289,7 @@ leaving the cell.
 (`useRawLithoShortcuts.ts`), and any modifier lets the key through, so
 `Ctrl`+`F5` still reloads. A plain `F5` never refreshes the page, so it cannot
 lose edits waiting for autosave. While a dialog is open or Save runs, `F4` and
-paging are ignored.
+`PageUp` / `PageDown` are ignored.
 
 ### Copy and paste
 
@@ -307,7 +317,7 @@ Everything is stored in the browser's IndexedDB on this PC, in the database
 | Store | Key | Holds |
 | --- | --- | --- |
 | `drafts` | drillhole id | that drillhole's document, rows in Litho From order |
-| `session` | `active-raw-litho-session` | the open drillhole and page |
+| `session` | `active-raw-litho-session` | the open drillhole (an older stored `page` is ignored) |
 | `session` | `recent-drillholes` | selection history, most recent first |
 | `drillholeCache` | `all-drillholes` | last drillhole list from the server |
 
@@ -326,7 +336,7 @@ and two browser tabs on the same drillhole do not coordinate.
 
 If a draft cannot be read, editing stays disabled and nothing is written over
 it. Loading retries every 2 seconds, or at once when you select the drillhole
-again. Coming back to the page restores the last drillhole and page.
+again. Coming back to the page restores the last drillhole, scrolled to the top.
 
 ### Who created and edited it
 
@@ -392,7 +402,7 @@ The conditional-rule warning on Save is built in `RawLitho.tsx` from
 
 | To change | Look in |
 | --- | --- |
-| rows per page, column order, labels, widths, hidden columns | `config.yaml` |
+| overscan, column order, labels, widths, hidden columns | `config.yaml` |
 | the stored fields and their defaults | `src/types/rawLithoSchema.ts` (`columnByKey`, `createSchemaRow`, `DEPTH_FIELDS`) |
 | required fields | `REQUIRED_COLUMN_KEY_LIST` in `constants.ts` |
 | fields copied to a new row | `ROW_COPY_FIELD_KEYS` in `constants.ts` |
@@ -403,7 +413,7 @@ The conditional-rule warning on Save is built in `RawLitho.tsx` from
 | row sorting | `sortRowsByLithoFrom()` in `rawLithoSorting.ts` |
 | drillhole list order, recent limit | `drillholeOrdering.ts` |
 | shortcuts | `hooks/useRawLithoShortcuts.ts`, and the list in `src/components/KeyboardShortcuts.tsx` |
-| cell navigation | `tableNavigation.ts`, page crossing in `RawLithoTable.tsx` |
+| cell navigation | `tableNavigation.ts`, moving past the rendered rows in `RawLithoTable.tsx` |
 | copy and paste | `rawLithoClipboard.ts`, handlers in `RawLithoTable.tsx` |
 | dropdown behaviour | `LookupAutocomplete.tsx` (affects Upload Data too) |
 | dropdown sources | `src/services/rawLithoLookupConfig.ts` |

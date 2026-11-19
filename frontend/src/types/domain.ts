@@ -113,7 +113,6 @@ export interface ImportResult {
 
 export interface DraftSession {
   drillhole: string;
-  page: number;
 }
 
 export interface LookupCache {

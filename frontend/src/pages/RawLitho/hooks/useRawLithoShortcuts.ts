@@ -6,13 +6,12 @@ interface ShortcutsOptions {
   canRemoveLastRow: boolean;
   onRemoveLastRow: () => void;
   onAddRow: () => void;
-  currentPage: number;
-  totalPages: number;
-  onPageChange: (page: number) => void;
+  /* PageUp / PageDown: move the caret one screen of rows up (-1) or down (1). */
+  onScreenMove: (direction: -1 | 1) => void;
 }
 
 
-const PAGINATION_KEYS = new Set(["PageUp", "PageDown"]);
+const SCREEN_KEYS = new Set(["PageUp", "PageDown"]);
 
 function hasModifier(event: KeyboardEvent) {
   return event.altKey || event.ctrlKey || event.metaKey || event.shiftKey;
@@ -27,18 +26,6 @@ function removeLastRow({
   if (isBlocked || !isEnabled || !canRemoveLastRow) return;
 
   onRemoveLastRow();
-}
-
-function changePage(
-  key: string,
-  { currentPage, totalPages, onPageChange }: ShortcutsOptions,
-) {
-  const nextPage = key === "PageUp" ? currentPage - 1 : currentPage + 1;
-
-  // First page + PageUp and last page + PageDown do nothing.
-  if (nextPage < 1 || nextPage > totalPages) return;
-
-  onPageChange(nextPage);
 }
 
 function handleShortcut(event: KeyboardEvent, options: ShortcutsOptions) {
@@ -62,10 +49,10 @@ function handleShortcut(event: KeyboardEvent, options: ShortcutsOptions) {
     return;
   }
 
-  if (!PAGINATION_KEYS.has(event.key)) return;
+  if (!SCREEN_KEYS.has(event.key)) return;
 
   event.preventDefault();
-  changePage(event.key, options);
+  options.onScreenMove(event.key === "PageUp" ? -1 : 1);
 }
 
 /*
@@ -74,8 +61,8 @@ function handleShortcut(event: KeyboardEvent, options: ShortcutsOptions) {
  *   F4        Add Row      (same validation path as the button)
  *   F5        Delete the last row (selects it and asks first), and never a
  *             browser refresh
- *   PageUp    previous table page
- *   PageDown  next table page
+ *   PageUp    caret one screen of rows up (same column)
+ *   PageDown  caret one screen of rows down
  *
  * The listener is attached on mount and removed on unmount, so the shortcuts
  * only exist while Raw Litho is the active route. Options are read through a

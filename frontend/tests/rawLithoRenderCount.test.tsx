@@ -7,6 +7,10 @@ import { createSchemaRow } from "../src/types/rawLithoSchema";
 import { createRawLithoDocument } from "../src/pages/RawLitho/rawLithoHelpers";
 import { writeRawLithoDraft } from "../src/services/IndexDB/rawLithoDraftDb";
 import type * as Validation from "../src/pages/RawLitho/rawLithoValidation";
+import { stubDesktopViewport } from "./viewport";
+
+// The Raw Litho table is virtualized: give jsdom a desktop-sized box.
+stubDesktopViewport();
 
 /*
  * RawLithoRow evaluates its conditional rules once per render, so counting
@@ -40,9 +44,6 @@ function Harness() {
       <button onClick={() => workspace.selectDrillhole(HOLE)}>Select</button>
       <RawLithoTable
         rows={workspace.rows}
-        currentPage={workspace.currentPage}
-        totalPages={workspace.totalPages}
-        onPageChange={workspace.changeTablePage}
         lookupData={NO_LOOKUPS}
         lookupStatus={NO_STATUS}
         onRowChange={workspace.updateRow}
@@ -58,8 +59,8 @@ function Harness() {
 }
 
 describe("Raw Litho editing render cost", () => {
-  it("re-renders only the edited row when one cell changes on a full page", async () => {
-    const rows = Array.from({ length: 50 }, (_, index) => ({
+  it("renders a 2000-row drillhole as a window, and a keystroke re-renders one row", async () => {
+    const rows = Array.from({ length: 2000 }, (_, index) => ({
       ...createSchemaRow(`r${index}`),
       lithoFrom: String(index),
       lithoTo: String(index + 1),
@@ -68,14 +69,20 @@ describe("Raw Litho editing render cost", () => {
     const user = userEvent.setup();
     render(<Harness />);
     await user.click(screen.getByRole("button", { name: "Select" }));
-    await waitFor(() => expect(screen.getByLabelText("Lithology Comments, row 50")).toBeEnabled());
+    await waitFor(() => expect(screen.getByLabelText("Lithology Comments, row 1")).toBeEnabled());
+    // Virtualized: only the rows in view plus the overscan are in the DOM.
+    const rendered = document.querySelectorAll("tr[data-row-id]").length;
+    expect(rendered).toBeGreaterThan(10);
+    expect(rendered).toBeLessThan(80);
+    expect(screen.queryByLabelText("Lithology Comments, row 2000")).toBeNull();
+    expect(screen.getByText("2000 rows")).toBeInTheDocument();
     const comments = screen.getByLabelText("Lithology Comments, row 1");
     await user.click(comments);
 
     ruleChecks.count = 0;
     await user.keyboard("a");
     expect(comments).toHaveValue("a");
-    // Before memoization and identity-preserving normalization: all 50 rows.
+    // Before memoization and identity-preserving normalization: every rendered row.
     expect(ruleChecks.count).toBe(1);
   });
 });

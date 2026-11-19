@@ -8,7 +8,7 @@ import {
   bodyRowClass,
 } from "../../components/dataTableStyles";
 // Appearance only: the Raw Litho table's own column list (order, labels,
-// widths), row height, minimum width and "Ins" column, so the two tables
+// widths), row height, minimum width and "No." column, so the two tables
 // cannot drift apart. Nothing from Raw Litho's editing code is used.
 import { rawLithoConfig } from "../RawLitho/config";
 import { INDEX_COLUMN_WIDTH, tableColumns } from "../RawLitho/constants";
@@ -111,7 +111,7 @@ function DatabaseViewerTable({
         <thead>
           <tr>
             <th className={HEADER_CELL} style={{ width: INDEX_COLUMN_WIDTH }}>
-              Ins
+              No.
             </th>
             {tableColumns.map((column) => (
               <th

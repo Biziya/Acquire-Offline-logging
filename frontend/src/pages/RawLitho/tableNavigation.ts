@@ -90,10 +90,10 @@ function focusEditable(cell: Element | null | undefined) {
 }
 
 /*
- * Moves to the previous / next editable cell of the rendered page, in reading
+ * Moves to the previous / next editable cell of the rendered rows, in reading
  * order: past the end of a row it continues on the next row, and before the
  * start of a row on the previous one. Disabled cells are skipped. Returns false
- * at the edge of the page, where the table decides what happens next.
+ * at the edge of the rendered rows, where the table decides what happens next.
  */
 function moveHorizontally(cell: HTMLTableCellElement, step: number) {
   const tbody = cell.closest("tbody");
@@ -280,9 +280,11 @@ export function handleCellNavigation(event: TableKeyEvent) {
 }
 
 /*
- * ArrowDown pressed inside the last rendered row. The caller has already
- * checked `isKeyAlreadyHandled`, so reaching here means no cell below exists
- * and the lookup dropdown did not want the key either.
+ * ArrowDown pressed inside the last rendered data row (spacer rows of the
+ * virtualized table are ignored). The caller has already checked
+ * `isKeyAlreadyHandled`, and checks that this is also the document's last
+ * row, so reaching here means no cell below exists and the lookup dropdown
+ * did not want the key either.
  */
 export function isLastRowArrowDown(
   event: TableKeyEvent,
@@ -294,7 +296,8 @@ export function isLastRowArrowDown(
   }
   if (!tbody) return false;
 
-  const lastRow = tbody.rows?.[tbody.rows.length - 1];
+  const dataRows = tbody.querySelectorAll("tr[data-row-id]");
+  const lastRow = dataRows[dataRows.length - 1];
   if (!lastRow) return false;
 
   return (
@@ -309,7 +312,7 @@ export function isLastRowArrowDown(
  * reordering by Litho From changes positions while the caret has to stay with
  * the same logical row. Falls back to the row's first editable cell when the
  * requested column is not currently displayed, and returns false when the row
- * is not rendered on this page.
+ * is not rendered (scrolled out of the virtualized window).
  */
 export function focusCellInRow(
   tbody: HTMLTableSectionElement | null,

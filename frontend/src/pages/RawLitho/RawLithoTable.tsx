@@ -7,7 +7,8 @@ import type {
   AddRowResult,
   Notify,
 } from "../../types/domain";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useMemo, useRef, useState } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import RawLithoRow from "./RawLithoRow";
 import { useRawLithoShortcuts } from "./hooks/useRawLithoShortcuts";
 import { useRawLithoRowFocus } from "./hooks/useRawLithoRowFocus";
@@ -25,13 +26,8 @@ import {
 import {
   buildClipboardText,
   formatRowNumbers,
-  getCellRange,
   getCellRef,
-  getFullySelectedRowIds,
   getRowCells,
-  getRowRange,
-  isSameCell,
-  mergeCells,
   isTabularClipboard,
   parseClipboardText,
   planPaste,
@@ -40,11 +36,13 @@ import {
 } from "./rawLithoClipboard";
 import { findOverlappingIntervalRowIds } from "./rawLithoValidation";
 import ConfirmDialog from "../../components/ConfirmDialog";
-import RawLithoSelectionBar from "./RawLithoSelectionBar";
+import SelectionBar from "../../components/dataTable/SelectionBar";
+import { countLabel } from "../../components/dataTable/tableSelection";
+import { SelectAllHeaderCell } from "../../components/dataTable/RowHeaderCell";
+import { useTableSelection } from "../../components/dataTable/useTableSelection";
 import type { RowId } from "../../types/domain";
 import {
   INDEX_COLUMN_WIDTH,
-  RAW_LITHO_ROWS_PER_PAGE,
   REQUIRED_COLUMN_KEYS,
   TOAST_NOTIFICATIONS,
   tableColumns,
@@ -70,9 +68,6 @@ function KeyHint({ children }: { children: string }) {
 
 interface RawLithoTableProps {
   rows: RawLithoRowRecord[];
-  currentPage: number;
-  totalPages: number;
-  onPageChange: (page: number) => void;
   lookupData: LookupData;
   lookupStatus: LookupStatuses;
   onRowChange: RowChange;
@@ -100,22 +95,8 @@ const FALLBACK_FOCUS_FIELD = "lithoTo";
 const FIRST_COLUMN_KEY = tableColumns[0]?.key ?? null;
 const LAST_COLUMN_KEY = tableColumns[tableColumns.length - 1]?.key ?? null;
 
-const PAGINATION_BUTTON = `${SECONDARY_BUTTON} min-w-[76px] max-sm:min-w-0`;
-
-// Distance from the table's top / bottom edge where a drag scrolls it.
-const AUTO_SCROLL_EDGE = 28;
-const AUTO_SCROLL_STEP = 14;
-
-/*
- * A mouse drag in progress. `cells`: started on a cell; it becomes a block
- * selection once the pointer reaches another cell (`active`), so a drag
- * inside one cell still selects that input's text. `rows`: started on a row
- * number; selects whole rows from the start. `base` is the selection kept
- * underneath (Ctrl adds the dragged block to it).
- */
-type DragState =
-  | { mode: "cells"; anchor: CellRef; last: CellRef; base: CellRef[]; active: boolean }
-  | { mode: "rows"; anchorRowId: string; lastRowId: string; base: CellRef[] };
+const COLUMN_KEYS: readonly RowField[] = tableColumns.map((column) => column.key);
+const { rowHeight, minWidth, overscan } = rawLithoConfig;
 
 /* "20 – 35 m": smallest to largest depth of the rows, for the delete dialog. */
 function describeDepthSpan(rows: readonly RawLithoRowRecord[]) {
@@ -131,9 +112,6 @@ function describeDepthSpan(rows: readonly RawLithoRowRecord[]) {
 
 function RawLithoTable({
   rows,
-  currentPage,
-  totalPages,
-  onPageChange,
   lookupData,
   lookupStatus,
   onRowChange,
@@ -151,13 +129,6 @@ function RawLithoTable({
   const tableWrapperRef = useRef<HTMLDivElement>(null);
   const tableBodyRef = useRef<HTMLTableSectionElement>(null);
   const tabNavigationActive = useRef(true);
-  // The one selection: cells by row id and column key, so it survives
-  // sorting. A row counts as selected when every one of its cells is.
-  const [selectedCells, setSelectedCells] = useState<CellRef[]>([]);
-  // Where Shift + click ranges start: the last cell clicked or focused, and
-  // the last row number clicked.
-  const anchorCell = useRef<CellRef | null>(null);
-  const anchorRowId = useRef<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<
     | { kind: "rows"; rowIds: RowId[] }
     | { kind: "cells"; cells: CellRef[] }
@@ -166,33 +137,64 @@ function RawLithoTable({
   const [isDeleting, setIsDeleting] = useState(false);
   const isBlocked = isBlockedOutside || pendingDelete !== null;
 
-  const rowIdSet = useMemo(() => new Set(rows.map((row) => String(row.id))), [rows]);
+  const rowIds = useMemo(() => rows.map((row) => String(row.id)), [rows]);
+  const rowIndexById = useMemo(
+    () => new Map(rowIds.map((rowId, index) => [rowId, index])),
+    [rowIds],
+  );
 
-  // Cells of rows that no longer exist (deleted, new drillhole) drop out.
-  useEffect(() => {
-    setSelectedCells((current) => {
-      const kept = current.filter((cell) => rowIdSet.has(cell.rowId));
-      return kept.length === current.length ? current : kept;
+  /*
+   * Every row lives in one scrolling table, but only the rows in view (plus
+   * `overscan`) are in the DOM: two spacer rows stand in for the rest, which
+   * keeps real <table> layout and the sticky header. Rows have a fixed height.
+   */
+  const virtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => tableWrapperRef.current,
+    estimateSize: () => rowHeight,
+    overscan,
+    getItemKey: (index) => rowIds[index] ?? index,
+    initialRect: { width: minWidth, height: rowHeight * 20 },
+  });
+  const scrollToRowIndex = useCallback(
+    (index: number) => virtualizer.scrollToIndex(index, { align: "auto" }),
+    [virtualizer],
+  );
+
+  const focusRenderedCell = useCallback(
+    (rowId: string, columnKey: RowField) =>
+      focusCellInRow(tableBodyRef.current, rowId, columnKey),
+    [],
+  );
+
+  // The one selection: cells by row id and column key, so it survives
+  // sorting and scrolling. A row counts as selected when every one of its
+  // cells is (useTableSelection: drag, Shift, Ctrl, row numbers).
+  const {
+    selectedCells,
+    setSelectedCells,
+    selectedColumnsByRow,
+    fullRowIds,
+    fullRowIdSet,
+    selectedRowCount,
+    isWholeRowSelection,
+    selectAll,
+    clearSelection,
+    noteFocus,
+  } = useTableSelection({
+    rowIds,
+    columnKeys: COLUMN_KEYS,
+    frameRef: tableWrapperRef,
+    bodyRef: tableBodyRef,
+    isBlocked,
+    focusRenderedCell,
+  });
+
+  function rowNumbersOf(ids: readonly (string | RowId)[]) {
+    return ids.flatMap((rowId) => {
+      const index = rowIndexById.get(String(rowId));
+      return index === undefined ? [] : [index + 1];
     });
-  }, [rowIdSet]);
-
-  const fullRowIds = useMemo(
-    () => getFullySelectedRowIds(rows, selectedCells),
-    [rows, selectedCells],
-  );
-  const fullRowIdSet = useMemo(() => new Set(fullRowIds), [fullRowIds]);
-  const selectedRowCount = useMemo(
-    () => new Set(selectedCells.map((cell) => cell.rowId)).size,
-    [selectedCells],
-  );
-  // The selection is whole rows and nothing else.
-  const isWholeRowSelection =
-    fullRowIds.length > 0 &&
-    fullRowIds.length * tableColumns.length === selectedCells.length;
-
-  function rowNumbersOf(rowIds: readonly (string | RowId)[]) {
-    const ids = new Set(rowIds.map(String));
-    return rows.flatMap((row, index) => (ids.has(String(row.id)) ? [index + 1] : []));
   }
 
   function requestDeleteRows(rowIds: RowId[] = fullRowIds) {
@@ -249,10 +251,9 @@ function RawLithoTable({
     setSelectedCells([]);
     const isRows = pendingDelete.kind === "rows";
     const count = isRows ? pendingDelete.rowIds.length : pendingDelete.cells.length;
-    const noun = isRows ? (count === 1 ? "row" : "rows") : (count === 1 ? "cell" : "cells");
     showToast({
       ...(isRows ? TOAST_NOTIFICATIONS.rowsRemoved : TOAST_NOTIFICATIONS.cellsCleared),
-      message: `${count} ${noun} ${isRows ? "deleted" : "cleared"}`,
+      message: `${countLabel(count, isRows ? "row" : "cell")} ${isRows ? "deleted" : "cleared"}`,
       ...(onUndo ? { action: { label: "Undo", onClick: () => void onUndo() } } : {}),
     });
   }
@@ -261,279 +262,18 @@ function RawLithoTable({
     if (!isDeleting) setPendingDelete(null);
   }
 
-  const pageStartIndex = (currentPage - 1) * RAW_LITHO_ROWS_PER_PAGE;
-  const visibleRows = useMemo(
-    () => rows.slice(pageStartIndex, pageStartIndex + RAW_LITHO_ROWS_PER_PAGE),
-    [pageStartIndex, rows],
-  );
+  // Deferred: typing never waits on the overlap check of a long drillhole.
+  const deferredRows = useDeferredValue(rows);
   const overlappingRowIds = useMemo(
-    () => findOverlappingIntervalRowIds(rows),
-    [rows],
+    () => findOverlappingIntervalRowIds(deferredRows),
+    [deferredRows],
   );
-  const selectedColumnsByRow = useMemo(() => {
-    const columnsByRow = new Map<string, Set<RowField>>();
-
-    selectedCells.forEach(({ rowId, columnKey }) => {
-      const columnKeys = columnsByRow.get(rowId) ?? new Set<RowField>();
-
-      columnKeys.add(columnKey);
-      columnsByRow.set(rowId, columnKeys);
-    });
-
-    return columnsByRow;
-  }, [selectedCells]);
-  const firstVisibleRow = rows.length === 0 ? 0 : pageStartIndex + 1;
-  const lastVisibleRow = Math.min(
-    pageStartIndex + visibleRows.length,
-    rows.length,
-  );
-
-  // The final row always lives on the final page.
-  const isLastRowVisible = currentPage === totalPages;
   const canDeleteLastRow = isEnabled && rows.length > 0 && Boolean(onRemoveRows);
 
-  useEffect(() => {
-    if (tableWrapperRef.current) {
-      tableWrapperRef.current.scrollTop = 0;
-    }
-  }, [currentPage]);
-
-  // Read by the document listeners below, which are registered once.
-  const latest = useRef({ rows, selectedCells, isBlocked });
-  latest.current = { rows, selectedCells, isBlocked };
-
-  /*
-   * Mouse selection, Excel style. Listening on the document covers presses
-   * outside the table too (a plain press there clears the selection).
-   *
-   *   On a cell        press and drag to another cell selects the block;
-   *                    Shift extends from the anchor, Ctrl adds a block or
-   *                    toggles one cell.
-   *   On a row number  click selects the row, Shift + click the rows between,
-   *                    Ctrl + click adds / removes a row; dragging over the
-   *                    numbers selects every row passed.
-   */
-  useEffect(() => {
-    let drag: DragState | null = null;
-    let pointer = { x: 0, y: 0 };
-    let scrollFrame = 0;
-
-    const tbody = () => tableBodyRef.current;
-
-    function elementAt(x: number, y: number) {
-      const body = tbody();
-      const element = document.elementFromPoint(x, y);
-      return body && element && body.contains(element) ? element : null;
-    }
-
-    // Applies the drag to the pointer's current position.
-    function updateDrag() {
-      if (!drag) return;
-      const currentRows = latest.current.rows;
-      const element = elementAt(pointer.x, pointer.y);
-
-      if (drag.mode === "rows") {
-        const rowId = element?.closest<HTMLTableRowElement>("tr[data-row-id]")?.dataset.rowId;
-        if (!rowId || rowId === drag.lastRowId) return;
-        drag.lastRowId = rowId;
-        setSelectedCells(mergeCells(drag.base, getRowRange(currentRows, drag.anchorRowId, rowId)));
-        return;
-      }
-
-      const cell = getCellRef(element);
-      if (!cell || isSameCell(cell, drag.last)) return;
-
-      if (!drag.active) {
-        drag.active = true;
-        // From here on it is a cell selection, not text selection.
-        const body = tbody();
-        if (body) body.style.userSelect = "none";
-        const focused = document.activeElement;
-        if (focused instanceof HTMLInputElement) {
-          try {
-            focused.setSelectionRange(focused.value.length, focused.value.length);
-          } catch {
-            // Number inputs have no text selection.
-          }
-        }
-        window.getSelection()?.removeAllRanges();
-      }
-
-      drag.last = cell;
-      setSelectedCells(mergeCells(drag.base, getCellRange(currentRows, drag.anchor, cell)));
-    }
-
-    // Scrolls the table while the pointer is held near its top or bottom edge.
-    function autoScroll() {
-      scrollFrame = 0;
-      const wrapper = tableWrapperRef.current;
-      if (!drag || !wrapper) return;
-      if (drag.mode === "cells" && !drag.active) return;
-
-      const bounds = wrapper.getBoundingClientRect();
-      // Too small (or not laid out) to have edges worth scrolling from.
-      if (bounds.height < AUTO_SCROLL_EDGE * 3) return;
-      const delta =
-        pointer.y < bounds.top + AUTO_SCROLL_EDGE
-          ? -AUTO_SCROLL_STEP
-          : pointer.y > bounds.bottom - AUTO_SCROLL_EDGE
-            ? AUTO_SCROLL_STEP
-            : 0;
-      if (delta === 0) return;
-
-      wrapper.scrollTop += delta;
-      // Select up to the row now under the pointer, kept inside the table.
-      const held = pointer;
-      pointer = {
-        x: held.x,
-        y: Math.min(Math.max(held.y, bounds.top + AUTO_SCROLL_EDGE), bounds.bottom - AUTO_SCROLL_EDGE),
-      };
-      updateDrag();
-      pointer = held;
-      scrollFrame = window.requestAnimationFrame(autoScroll);
-    }
-
-    function handleMouseMove(event: MouseEvent) {
-      if (!drag) return;
-      if ((event.buttons & 1) === 0) {
-        endDrag();
-        return;
-      }
-      pointer = { x: event.clientX, y: event.clientY };
-      updateDrag();
-      if (!scrollFrame) scrollFrame = window.requestAnimationFrame(autoScroll);
-    }
-
-    function endDrag() {
-      if (!drag) return;
-      const finished = drag;
-      drag = null;
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", endDrag);
-      if (scrollFrame) window.cancelAnimationFrame(scrollFrame);
-      scrollFrame = 0;
-      const body = tbody();
-      if (body) body.style.userSelect = "";
-
-      // Keep focus in the table so Delete / Ctrl + C reach its handlers. The
-      // anchor stays where the drag started, as in Excel.
-      if (finished.mode === "cells" && finished.active) {
-        focusCellInRow(body, finished.anchor.rowId, finished.anchor.columnKey);
-        anchorCell.current = finished.anchor;
-      }
-    }
-
-    function startDrag(state: DragState, event: MouseEvent) {
-      drag = state;
-      pointer = { x: event.clientX, y: event.clientY };
-      document.addEventListener("mousemove", handleMouseMove);
-      document.addEventListener("mouseup", endDrag);
-    }
-
-    function handleRowHeader(event: MouseEvent, rowId: string) {
-      event.preventDefault();
-      const { rows: currentRows, selectedCells: current } = latest.current;
-      const additive = event.ctrlKey || event.metaKey;
-      const rowCells = getRowCells(rowId);
-
-      if (additive && !event.shiftKey && getFullySelectedRowIds(currentRows, current).includes(rowId)) {
-        // Ctrl + click on a selected row takes it out of the selection.
-        setSelectedCells(current.filter((item) => item.rowId !== rowId));
-        anchorRowId.current = rowId;
-        return;
-      }
-
-      const anchor =
-        event.shiftKey && anchorRowId.current &&
-        currentRows.some((row) => String(row.id) === anchorRowId.current)
-          ? anchorRowId.current
-          : rowId;
-      const base = additive ? current : [];
-      anchorRowId.current = anchor;
-      setSelectedCells(mergeCells(base, getRowRange(currentRows, anchor, rowId)));
-      // Focus a cell of the row, so Delete, Ctrl + C and Esc reach the table.
-      focusCellInRow(tbody(), rowId, FIRST_COLUMN_KEY);
-      anchorCell.current = rowCells[0] ?? null;
-      startDrag({ mode: "rows", anchorRowId: anchor, lastRowId: rowId, base }, event);
-    }
-
-    function handleMouseDown(event: MouseEvent) {
-      if (event.button !== 0 || latest.current.isBlocked) return;
-
-      const target = event.target instanceof Element ? event.target : null;
-      // The selection bar acts on the selection; pressing it must not clear
-      // the selection first.
-      if (target?.closest("[data-keep-selection]")) return;
-
-      const body = tbody();
-      const inBody = Boolean(body && target && body.contains(target));
-
-      const rowHeader = inBody ? target?.closest("[data-row-number]") : null;
-      const headerRowId = rowHeader?.closest<HTMLTableRowElement>("tr[data-row-id]")?.dataset.rowId;
-      if (rowHeader && headerRowId) {
-        if (!rowHeader.querySelector("button:disabled")) handleRowHeader(event, headerRowId);
-        return;
-      }
-
-      const cell = inBody ? getCellRef(target) : null;
-      const { rows: currentRows, selectedCells: current } = latest.current;
-      const additive = event.ctrlKey || event.metaKey;
-
-      if (!cell) {
-        if (!additive && !event.shiftKey && current.length > 0) setSelectedCells([]);
-        return;
-      }
-
-      if (event.shiftKey) {
-        event.preventDefault();
-        const anchor =
-          anchorCell.current &&
-          currentRows.some((row) => String(row.id) === anchorCell.current?.rowId)
-            ? anchorCell.current
-            : cell;
-        const base = additive ? current : [];
-        setSelectedCells(mergeCells(base, getCellRange(currentRows, anchor, cell)));
-        focusCellInRow(body, cell.rowId, cell.columnKey);
-        // Focusing the clicked cell must not move the range's start.
-        anchorCell.current = anchor;
-        startDrag({ mode: "cells", anchor, last: cell, base, active: true }, event);
-        return;
-      }
-
-      if (additive) {
-        event.preventDefault();
-        anchorCell.current = cell;
-        const isSelected = current.some((item) => isSameCell(item, cell));
-        setSelectedCells(
-          isSelected ? current.filter((item) => !isSameCell(item, cell)) : [...current, cell],
-        );
-        focusCellInRow(body, cell.rowId, cell.columnKey);
-        startDrag({ mode: "cells", anchor: cell, last: cell, base: current, active: false }, event);
-        return;
-      }
-
-      // Plain press: the cell becomes the anchor. A click inside the current
-      // selection keeps it (to paste into it); anywhere else clears it.
-      anchorCell.current = cell;
-      if (current.length > 0 && !current.some((item) => isSameCell(item, cell))) {
-        setSelectedCells([]);
-      }
-      startDrag({ mode: "cells", anchor: cell, last: cell, base: [], active: false }, event);
-    }
-
-    document.addEventListener("mousedown", handleMouseDown);
-    return () => {
-      document.removeEventListener("mousedown", handleMouseDown);
-      endDrag();
-    };
-  }, []);
-
-  const { focusRowCell, requestFocus, handleTableFocus } = useRawLithoRowFocus({
+  const { focusRowCell, requestFocus, handleTableFocus, getPendingRowId } = useRawLithoRowFocus({
     tableBodyRef,
     rows,
-    currentPage,
-    rowsPerPage: RAW_LITHO_ROWS_PER_PAGE,
-    onPageChange,
+    scrollToRowIndex,
   });
 
   /*
@@ -552,34 +292,57 @@ function RawLithoTable({
       return result;
     }
 
-    // Focus locks onto the invalid cell, changing page if it is out of view.
+    // Focus locks onto the invalid cell, scrolling to it if it is out of view.
     if (result?.rowId === undefined) return result;
 
     focusRowCell(result.rowId, result.focusField ?? FALLBACK_FOCUS_FIELD);
     return result;
   }, [focusRowCell, onAddRow, requestFocus]);
 
+  /*
+   * PageUp / PageDown: the caret moves one screen of rows in the same column,
+   * scrolling with it. Without a focused cell the table just scrolls.
+   */
+  function moveOneScreen(direction: -1 | 1) {
+    const frame = tableWrapperRef.current;
+    const screenRows = Math.max(1, Math.floor((frame?.clientHeight ?? 0) / rowHeight) - 1);
+    const focused = document.activeElement;
+    const rowId = tableBodyRef.current?.contains(focused)
+      ? (getPendingRowId() ?? getRowIdFromElement(focused))
+      : null;
+    const index = rowId === null ? undefined : rowIndexById.get(rowId);
+
+    if (index === undefined) {
+      if (frame) frame.scrollTop += direction * screenRows * rowHeight;
+      return;
+    }
+
+    const target = rows[Math.min(Math.max(index + direction * screenRows, 0), rows.length - 1)];
+    if (target && String(target.id) !== rowId) {
+      focusRowCell(target.id, getColumnKeyFromElement(focused) ?? FIRST_COLUMN_KEY);
+    }
+  }
+
   useRawLithoShortcuts({
     isEnabled,
     isBlocked,
-    currentPage,
-    totalPages,
     canRemoveLastRow: canDeleteLastRow,
     onAddRow: requestAddRow,
     onRemoveLastRow: requestDeleteLastRow,
-    onPageChange,
+    onScreenMove: moveOneScreen,
   });
 
   /*
-   * Tab / Shift + Tab / ArrowRight / ArrowLeft at the edge of the rendered page:
-   * the cell handler found no neighbour, so continue in the adjacent row on the
-   * next or previous page. Shift + Tab stops at the first editable cell;
-   * forward Tab at the final cell reaches the shared row-creation path.
+   * Tab / Shift + Tab / ArrowRight / ArrowLeft at the edge of the rendered
+   * rows: the cell handler found no neighbour, so continue in the adjacent
+   * row, scrolling it into the rendered window. Shift + Tab stops at the first
+   * editable cell; forward Tab at the final cell reaches the shared
+   * row-creation path.
    */
-  function focusAdjacentPageRow(element: EventTarget, step: number) {
+  function focusAdjacentRow(element: EventTarget, step: number) {
     const rowId = getRowIdFromElement(element);
     const sourceCell = element instanceof Element ? element.closest("td") : null;
-    const index = rows.findIndex((row) => String(row.id) === rowId);
+    const index = rowId === null ? -1 : (rowIndexById.get(rowId) ?? -1);
     if (index === -1) return false;
 
     for (let distance = 1; distance <= rows.length; distance += 1) {
@@ -587,9 +350,9 @@ function RawLithoTable({
       if (position < 0 || position >= rows.length) return false;
       const target = rows[position];
       if (!target) return false;
-      const rendered = Array.from(tableBodyRef.current?.rows ?? []).find(
-        row => row.dataset.rowId === String(target.id),
-      );
+      const rendered = Array.from(
+        tableBodyRef.current?.querySelectorAll<HTMLTableRowElement>("tr[data-row-id]") ?? [],
+      ).find((row) => row.dataset.rowId === String(target.id));
       if (rendered) {
         const editables = getEditableElements(rendered);
         const input = step > 0 ? editables[0] : editables.at(-1);
@@ -606,14 +369,14 @@ function RawLithoTable({
   function handleTableKeyDown(
     event: React.KeyboardEvent<HTMLTableSectionElement>,
   ) {
-    if (event.key === "Escape") setSelectedCells([]);
+    if (event.key === "Escape") clearSelection();
 
     if (!isEnabled || isBlocked) return;
 
     // A cell handler (arrow navigation, lookup dropdown) already used this key.
     if (isKeyAlreadyHandled(event)) return;
     // Secondary controls and wrappers may not have their own cell handler.
-    // Resolve them from the same logical cell before considering page edges.
+    // Resolve them from the same logical cell before considering the edges.
     if (handleCellNavigation(event)) return;
 
     const step = getHorizontalStep(event);
@@ -623,7 +386,7 @@ function RawLithoTable({
     const editors = step !== 0 && tbody ? getEditableElements(tbody) : [];
     const isEditableCell = Boolean(sourceCell && editors.some(editor => editor.closest("td") === sourceCell));
     if (step !== 0 && isEditableCell &&
-        focusAdjacentPageRow(event.target, step)) {
+        focusAdjacentRow(event.target, step)) {
       event.preventDefault();
       markKeyAsHandled(event);
       return;
@@ -637,8 +400,28 @@ function RawLithoTable({
       return;
     }
 
-    // Only the final page ends at the final row of the document.
-    if (!isLastRowVisible) return;
+    const focusedRowId = getRowIdFromElement(event.target);
+    const focusedIndex = focusedRowId === null ? -1 : (rowIndexById.get(focusedRowId) ?? -1);
+
+    // ArrowUp / ArrowDown past the rendered rows: the neighbour is scrolled
+    // into view and focused in the same column. A row still being scrolled
+    // to counts as the current one, so a held arrow key loses no presses.
+    const pendingRowId = getPendingRowId();
+    const rowIndex = pendingRowId === null ? focusedIndex : (rowIndexById.get(pendingRowId) ?? focusedIndex);
+    const isVertical = (event.key === "ArrowDown" || event.key === "ArrowUp") &&
+      !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey;
+    const neighbour = isVertical && sourceCell && rowIndex !== -1
+      ? rows[rowIndex + (event.key === "ArrowDown" ? 1 : -1)]
+      : undefined;
+    if (neighbour) {
+      event.preventDefault();
+      markKeyAsHandled(event);
+      focusRowCell(neighbour.id, getColumnKeyFromElement(event.target));
+      return;
+    }
+
+    // Only the document's final row creates a new row.
+    if (focusedIndex === -1 || focusedIndex !== rows.length - 1) return;
     const isFinalCellTab = event.key === "Tab" && step === 1 && isEditableCell &&
       editors.at(-1)?.closest("td") === sourceCell;
     if (!isFinalCellTab && !isLastRowArrowDown(event, tbody)) return;
@@ -716,7 +499,7 @@ function RawLithoTable({
       const count = pendingDelete.rowIds.length;
       const ids = new Set(pendingDelete.rowIds.map(String));
       const depthSpan = describeDepthSpan(rows.filter((row) => ids.has(String(row.id))));
-      const rowsLabel = count === 1 ? "1 row" : `${count} rows`;
+      const rowsLabel = countLabel(count, "row");
       return (
         <ConfirmDialog
           title={`Delete ${rowsLabel}?`}
@@ -743,7 +526,7 @@ function RawLithoTable({
     const rowIds = [...new Set(pendingDelete.cells.map((cell) => cell.rowId))];
     return (
       <ConfirmDialog
-        title={`Clear ${count === 1 ? "1 cell" : `${count} cells`}?`}
+        title={`Clear ${countLabel(count, "cell")}?`}
         message="The values in the selected cells will be emptied. The rows stay. You can undo this right after."
         facts={[
           ["Cells", String(count)],
@@ -759,11 +542,15 @@ function RawLithoTable({
   })();
 
   const canSelectAll = isEnabled && rows.length > 0;
+  const items = virtualizer.getVirtualItems();
+  const paddingTop = items[0]?.start ?? 0;
+  const paddingBottom = virtualizer.getTotalSize() - (items.at(-1)?.end ?? 0);
+  const columnCount = tableColumns.length + 1;
 
   return (
     <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col">
       {deleteDialog}
-      <RawLithoSelectionBar
+      <SelectionBar
         cellCount={selectedCells.length}
         rowCount={selectedRowCount}
         wholeRowCount={isWholeRowSelection ? fullRowIds.length : 0}
@@ -771,36 +558,22 @@ function RawLithoTable({
         isEnabled={isEnabled && !isBlocked}
         onClearValues={onClearCells ? requestClearCells : undefined}
         onDeleteRows={onRemoveRows ? () => requestDeleteRows() : undefined}
-        onDismiss={() => setSelectedCells([])}
+        onDismiss={clearSelection}
       />
-      <div ref={tableWrapperRef} className={`${TABLE_FRAME} scroll-smooth`}>
-        <table className={TABLE} style={{ minWidth: rawLithoConfig.minWidth }}>
+      <div ref={tableWrapperRef} className={TABLE_FRAME}>
+        <table
+          className={TABLE}
+          style={{ minWidth }}
+          aria-rowcount={rows.length + 1}
+        >
           <thead>
             <tr>
-              <th
-                className={`${HEADER_CELL} p-0`}
-                style={{ width: INDEX_COLUMN_WIDTH }}
-              >
-                {/* Like Excel's corner cell: selects every row. */}
-                <button
-                  type="button"
-                  tabIndex={-1}
-                  className="block size-full cursor-pointer border-0 bg-transparent px-1 font-[inherit] text-inherit hover:bg-rl-navy-soft disabled:cursor-default disabled:hover:bg-transparent"
-                  disabled={!canSelectAll}
-                  onClick={() => {
-                    setSelectedCells(rows.flatMap((row) => getRowCells(String(row.id))));
-                    anchorRowId.current = rows[0] ? String(rows[0].id) : null;
-                    const firstVisible = visibleRows[0];
-                    if (firstVisible) {
-                      focusCellInRow(tableBodyRef.current, firstVisible.id, FIRST_COLUMN_KEY);
-                    }
-                  }}
-                  title="Row number. Click to select all rows; click a number to select that row."
-                  aria-label="Select all rows"
-                >
-                  No.
-                </button>
-              </th>
+              <SelectAllHeaderCell
+                className={HEADER_CELL}
+                width={INDEX_COLUMN_WIDTH}
+                isEnabled={canSelectAll}
+                onSelectAll={selectAll}
+              />
 
               {tableColumns.map((column) => {
                 const isRequired = REQUIRED_COLUMN_KEYS.has(column.key);
@@ -853,37 +626,53 @@ function RawLithoTable({
                   !event.currentTarget.contains(event.relatedTarget)) {
                 tabNavigationActive.current = true;
               }
-              anchorCell.current = getCellRef(event.target) ?? anchorCell.current;
+              noteFocus(event.target);
               handleTableFocus(event);
             }}
             onCopy={handleCopy}
             onPaste={handlePaste}
           >
-            {visibleRows.map((row, pageRowIndex) => (
-              <RawLithoRow
-                key={row.id}
-                row={row}
-                rowIndex={pageStartIndex + pageRowIndex}
-                lookupData={lookupData}
-                lookupStatus={lookupStatus}
-                onRowChange={onRowChange}
-                onDepthCommit={onDepthCommit}
-                isEnabled={isEnabled}
-                hasOverlappingInterval={overlappingRowIds.has(row.id)}
-                selectedColumns={selectedColumnsByRow.get(String(row.id))}
-                isRowSelected={fullRowIdSet.has(String(row.id))}
-              />
-            ))}
+            {paddingTop > 0 && (
+              <tr aria-hidden="true" data-spacer style={{ height: paddingTop }}>
+                <td colSpan={columnCount} />
+              </tr>
+            )}
+
+            {items.map((item) => {
+              const row = rows[item.index];
+              if (!row) return null;
+              const rowId = String(row.id);
+              return (
+                <RawLithoRow
+                  key={row.id}
+                  row={row}
+                  rowIndex={item.index}
+                  lookupData={lookupData}
+                  lookupStatus={lookupStatus}
+                  onRowChange={onRowChange}
+                  onDepthCommit={onDepthCommit}
+                  isEnabled={isEnabled}
+                  hasOverlappingInterval={overlappingRowIds.has(row.id)}
+                  selectedColumns={selectedColumnsByRow.get(rowId)}
+                  isRowSelected={fullRowIdSet.has(rowId)}
+                />
+              );
+            })}
+
+            {paddingBottom > 0 && (
+              <tr aria-hidden="true" data-spacer style={{ height: paddingBottom }}>
+                <td colSpan={columnCount} />
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
 
       {/*
-        One bar under the table: Add row on the left, pagination centred,
+        One bar under the table: Add row on the left, the row count centred,
         and the page's own controls (Save JSON) on the right. Deleting lives
-        in the selection bar above the table. Three columns keep the
-        pagination centred; on narrow screens it takes its own centred line
-        below the buttons instead of overflowing.
+        in the selection bar above the table. On narrow screens the count
+        takes its own centred line below the buttons.
       */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pt-2 lg:grid lg:grid-cols-[1fr_auto_1fr]">
         <div className="flex gap-4">
@@ -903,42 +692,12 @@ function RawLithoTable({
           </button>
         </div>
 
-        <nav
-          className="flex items-center justify-center gap-3 max-lg:order-last max-lg:w-full max-sm:gap-2 lg:justify-self-center"
-          aria-label="Raw Litho table pages"
+        <p
+          className="m-0 text-center text-[0.8125rem] font-semibold text-rl-text tabular-nums max-lg:order-last max-lg:w-full lg:justify-self-center"
+          aria-live="polite"
         >
-          <button
-            className={PAGINATION_BUTTON}
-            type="button"
-            onClick={() => onPageChange(currentPage - 1)}
-            disabled={currentPage <= 1}
-            aria-label={`Show previous ${RAW_LITHO_ROWS_PER_PAGE} Raw Litho rows (PageUp)`}
-          >
-            Previous
-          </button>
-
-          <div
-            className="grid min-w-[140px] gap-px text-center text-[0.8125rem] font-semibold text-rl-text"
-            aria-live="polite"
-          >
-            <span>
-              Page {currentPage} of {totalPages}
-            </span>
-            <span className="text-[0.75rem] font-normal text-rl-text-muted">
-              Rows {firstVisibleRow}–{lastVisibleRow} of {rows.length}
-            </span>
-          </div>
-
-          <button
-            className={PAGINATION_BUTTON}
-            type="button"
-            onClick={() => onPageChange(currentPage + 1)}
-            disabled={currentPage >= totalPages}
-            aria-label={`Show next ${RAW_LITHO_ROWS_PER_PAGE} Raw Litho rows (PageDown)`}
-          >
-            Next
-          </button>
-        </nav>
+          {countLabel(rows.length, "row")}
+        </p>
 
         {footerEnd && (
           <div className="ml-auto flex items-center gap-2 lg:justify-self-end">

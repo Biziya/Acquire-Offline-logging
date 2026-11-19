@@ -6,7 +6,6 @@ import {
   getRowIdFromElement,
   hasLostFocus,
 } from "../tableNavigation";
-import { findRowPage } from "../rawLithoSorting";
 
 interface FocusRequest {
   rowId: RowId;
@@ -16,18 +15,21 @@ interface FocusRequest {
 
 
 
+// Renders to wait for a scrolled-to row before giving up on focusing it.
+const MAX_FOCUS_ATTEMPTS = 5;
+
 /*
  * Keeps the caret attached to a logical row rather than to a table position.
  *
  * Rows are reordered by Litho From, so a row the user is editing can change
- * index — and can move to another page. Everything here addresses rows by their
- * stable `row.id`.
+ * index — and can scroll out of the rendered (virtualized) window. Everything
+ * here addresses rows by their stable `row.id`.
  *
  * Two focus paths:
  *   requestFocus(rowId, columnKey)  focus after the next render (a new row that
  *                                   does not exist in the DOM yet)
- *   focusRowCell(rowId, columnKey)  focus now, switching page first if the row
- *                                   is not on the current one
+ *   focusRowCell(rowId, columnKey)  focus now, scrolling the row into the
+ *                                   rendered window first when it is not in it
  *
  * On top of that, a reorder that drops focus restores it to the cell the user
  * was last in.
@@ -35,37 +37,46 @@ interface FocusRequest {
 export function useRawLithoRowFocus({
   tableBodyRef,
   rows,
-  currentPage,
-  rowsPerPage,
-  onPageChange,
+  scrollToRowIndex,
 }: {
   tableBodyRef: React.RefObject<HTMLTableSectionElement | null>;
   rows: RawLithoRow[];
-  currentPage: number;
-  rowsPerPage: number;
-  onPageChange: (page: number) => void;
+  /* Brings the row at this index into the rendered window. */
+  scrollToRowIndex: (index: number) => void;
 }) {
   const pendingFocus = useRef<FocusRequest | null>(null);
+  const attempts = useRef(0);
   const lastFocusedCell = useRef<FocusRequest | null>(null);
   const previousRowOrder = useRef<string | null>(null);
 
   const focusRowCell = useCallback(
     (rowId: RowId, columnKey: string | null = null) => {
-      if (focusCellInRow(tableBodyRef.current, rowId, columnKey)) return true;
+      if (focusCellInRow(tableBodyRef.current, rowId, columnKey)) {
+        attempts.current = 0;
+        return true;
+      }
 
-      // Not rendered: find the page holding it and try again after the switch.
-      const page = findRowPage(rows, rowId, rowsPerPage);
-      if (!page || page === currentPage) return false;
+      // Not rendered: scroll it into the window and try again after rendering.
+      const index = rows.findIndex((row) => String(row.id) === String(rowId));
+      // A new target restarts the count; retries of the same one are capped.
+      if (String(pendingFocus.current?.rowId) !== String(rowId)) attempts.current = 0;
+      if (index === -1 || attempts.current >= MAX_FOCUS_ATTEMPTS) {
+        attempts.current = 0;
+        pendingFocus.current = null;
+        return false;
+      }
 
+      attempts.current += 1;
       pendingFocus.current = { rowId, columnKey };
-      onPageChange(page);
+      scrollToRowIndex(index);
       return false;
     },
-    [currentPage, onPageChange, rows, rowsPerPage, tableBodyRef],
+    [rows, scrollToRowIndex, tableBodyRef],
   );
 
   const requestFocus = useCallback(
     (rowId: RowId, columnKey: string | null = null) => {
+      attempts.current = 0;
       pendingFocus.current = { rowId, columnKey };
     },
     [],
@@ -84,13 +95,15 @@ export function useRawLithoRowFocus({
     [],
   );
 
+  // After every render: a requested row may have just been rendered (a new
+  // row, or one the virtualized table has scrolled to).
   useEffect(() => {
     const focusRequest = pendingFocus.current;
     if (!focusRequest) return;
 
     pendingFocus.current = null;
     focusRowCell(focusRequest.rowId, focusRequest.columnKey);
-  }, [focusRowCell]);
+  });
 
   useEffect(() => {
     const rowOrder = rows.map((row) => row.id).join("|");
@@ -111,5 +124,15 @@ export function useRawLithoRowFocus({
     focusRowCell(target.rowId, target.columnKey);
   }, [focusRowCell, rows]);
 
-  return { focusRowCell, requestFocus, handleTableFocus };
+  /*
+   * The row a focus request is still scrolling to, if any. Keys pressed
+   * before it renders (a held arrow key) move on from there, not from the
+   * row that still has the caret, so no key press is lost.
+   */
+  const getPendingRowId = useCallback(
+    () => (pendingFocus.current ? String(pendingFocus.current.rowId) : null),
+    [],
+  );
+
+  return { focusRowCell, requestFocus, handleTableFocus, getPendingRowId };
 }

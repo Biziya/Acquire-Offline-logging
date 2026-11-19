@@ -72,6 +72,18 @@ export function applyCellEdits(
   return nextRows ? { ...document, rows: nextRows } : document;
 }
 
+/* The document without the records at `rowIndexes`; unchanged when none exist. */
+export function removeDocumentRows(
+  document: UploadDocument,
+  rowIndexes: readonly number[],
+): UploadDocument {
+  const rows = getDocumentRows(document);
+  const removed = new Set(rowIndexes.filter((index) => index >= 0 && index < rows.length));
+  if (removed.size === 0) return document;
+
+  return { ...document, rows: rows.filter((_, index) => !removed.has(index)) };
+}
+
 /* The JSON uploaded for an edited document; same layout as a Raw Litho export. */
 export function serializeDocument(document: UploadDocument) {
   return JSON.stringify(document, null, 2);

@@ -3,6 +3,10 @@ import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import App from "../src/App";
 import { uiConfig } from "../src/config/uiConfig";
+import { stubDesktopViewport } from "./viewport";
+
+// The Raw Litho table is virtualized: give jsdom a desktop-sized box.
+stubDesktopViewport();
 
 // The pages themselves are tested elsewhere; here only which one opens.
 vi.mock("../src/pages/RawLitho/RawLitho", () => ({ default: () => <h1>Raw Litho page</h1> }));

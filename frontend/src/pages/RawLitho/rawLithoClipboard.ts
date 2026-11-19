@@ -3,10 +3,7 @@ import { RAW_LITHO_LOOKUP_BY_FIELD } from "../../services/rawLithoLookupConfig";
 import { COMMENT_FIELD_KEYS, tableColumns } from "./constants";
 import { isValidDepth, normalizeLookupCode } from "./rawLithoValidation";
 import { normalizeFieldValue } from "./rawLithoHelpers";
-import {
-  getColumnKeyFromElement,
-  getRowIdFromElement,
-} from "./tableNavigation";
+import * as shared from "../../components/dataTable/tableSelection";
 
 /*
  * Copy and paste for the Raw Litho table.
@@ -17,10 +14,7 @@ import {
  * rows and sorting them is the document operation's job.
  */
 
-export interface CellRef {
-  rowId: string;
-  columnKey: RowField;
-}
+export type CellRef = shared.CellRef<RowField>;
 
 export interface CellEdit extends CellRef {
   value: string;
@@ -39,118 +33,36 @@ const COLUMN_KEYS: readonly RowField[] = tableColumns.map(
   (column) => column.key,
 );
 
-export function isSameCell(first: CellRef, second: CellRef) {
-  return (
-    first.rowId === second.rowId && first.columnKey === second.columnKey
-  );
-}
+export { isSameCell, mergeCells, formatRowNumbers } from "../../components/dataTable/tableSelection";
+
+const idsOf = (rows: readonly RawLithoRow[]) => rows.map((row) => String(row.id));
 
 /*
- * Every cell of the rectangle between two cells (Shift + click), inclusive.
- * Rows span the full `rows` order, so a range may cross table pages; columns
- * span the visible table columns. Empty when either corner is unknown.
+ * The shared selection helpers (components/dataTable/tableSelection.ts),
+ * bound to Raw Litho's rows and visible columns. Rows span the full `rows`
+ * order, including rows scrolled out of the rendered window.
  */
-export function getCellRange(
-  rows: readonly RawLithoRow[],
-  anchor: CellRef,
-  target: CellRef,
-): CellRef[] {
-  const rowIds = rows.map((row) => String(row.id));
-  const rowIndexes = [rowIds.indexOf(anchor.rowId), rowIds.indexOf(target.rowId)];
-  const columnIndexes = [
-    COLUMN_KEYS.indexOf(anchor.columnKey),
-    COLUMN_KEYS.indexOf(target.columnKey),
-  ];
-  if ([...rowIndexes, ...columnIndexes].some((index) => index === -1)) return [];
-
-  const [firstRow, lastRow] = [Math.min(...rowIndexes), Math.max(...rowIndexes)];
-  const [firstColumn, lastColumn] = [Math.min(...columnIndexes), Math.max(...columnIndexes)];
-
-  return rowIds.slice(firstRow, lastRow + 1).flatMap((rowId) =>
-    COLUMN_KEYS.slice(firstColumn, lastColumn + 1).map((columnKey) => ({ rowId, columnKey })),
-  );
+export function getCellRange(rows: readonly RawLithoRow[], anchor: CellRef, target: CellRef) {
+  return shared.getCellRange(idsOf(rows), COLUMN_KEYS, anchor, target);
 }
 
 /* Every visible cell of one row (a click on the row number). */
 export function getRowCells(rowId: string): CellRef[] {
-  return COLUMN_KEYS.map((columnKey) => ({ rowId, columnKey }));
+  return shared.getRowCells(rowId, COLUMN_KEYS);
 }
 
-/*
- * Every cell of every row between two rows, inclusive, in table order
- * (Shift + click or a drag on the row numbers). Empty when a row is unknown.
- */
-export function getRowRange(
-  rows: readonly RawLithoRow[],
-  anchorRowId: string,
-  targetRowId: string,
-): CellRef[] {
-  const rowIds = rows.map((row) => String(row.id));
-  const indexes = [rowIds.indexOf(anchorRowId), rowIds.indexOf(targetRowId)];
-  if (indexes.some((index) => index === -1)) return [];
-
-  return rowIds
-    .slice(Math.min(...indexes), Math.max(...indexes) + 1)
-    .flatMap(getRowCells);
+export function getRowRange(rows: readonly RawLithoRow[], anchorRowId: string, targetRowId: string) {
+  return shared.getRowRange(idsOf(rows), COLUMN_KEYS, anchorRowId, targetRowId);
 }
 
-/* Rows (table order) whose every visible cell is in `selection`. */
-export function getFullySelectedRowIds(
-  rows: readonly RawLithoRow[],
-  selection: readonly CellRef[],
-): string[] {
-  const columnsByRow = new Map<string, Set<RowField>>();
-  selection.forEach(({ rowId, columnKey }) => {
-    const columns = columnsByRow.get(rowId) ?? new Set<RowField>();
-    columns.add(columnKey);
-    columnsByRow.set(rowId, columns);
-  });
-
-  return rows
-    .map((row) => String(row.id))
-    .filter((rowId) => columnsByRow.get(rowId)?.size === COLUMN_KEYS.length);
-}
-
-/* Merges a cell list with more cells, keeping each cell once. */
-export function mergeCells(base: readonly CellRef[], added: readonly CellRef[]) {
-  const seen = new Set(base.map((cell) => `${cell.rowId}\u0000${cell.columnKey}`));
-  const merged = [...base];
-  added.forEach((cell) => {
-    const key = `${cell.rowId}\u0000${cell.columnKey}`;
-    if (seen.has(key)) return;
-    seen.add(key);
-    merged.push(cell);
-  });
-  return merged;
-}
-
-/* 1-based row numbers as short ranges: [4, 5, 6, 9] → "4–6, 9". */
-export function formatRowNumbers(numbers: readonly number[]) {
-  const sorted = [...new Set(numbers)].sort((first, second) => first - second);
-  const parts: string[] = [];
-
-  for (let index = 0; index < sorted.length; ) {
-    const start = sorted[index] as number;
-    let end = start;
-    while (sorted[index + 1] === end + 1) {
-      end += 1;
-      index += 1;
-    }
-    parts.push(start === end ? String(start) : `${start}–${end}`);
-    index += 1;
-  }
-
-  return parts.join(", ");
+/* Rows (table order) whose every visible cell is in `cells`. */
+export function getFullySelectedRowIds(rows: readonly RawLithoRow[], cells: readonly CellRef[]) {
+  return shared.getFullySelectedRowIds(idsOf(rows), COLUMN_KEYS, cells);
 }
 
 /* The table cell containing `element`, or null outside the data columns. */
 export function getCellRef(element: EventTarget | null): CellRef | null {
-  const rowId = getRowIdFromElement(element);
-  const columnKey = COLUMN_KEYS.find(
-    (key) => key === getColumnKeyFromElement(element),
-  );
-
-  return rowId === null || !columnKey ? null : { rowId, columnKey };
+  return shared.getCellRefFromElement(element, COLUMN_KEYS);
 }
 
 interface CellPosition {
@@ -159,8 +71,10 @@ interface CellPosition {
 }
 
 function locateCells(rows: RawLithoRow[], cells: CellRef[]) {
+  // One lookup table, so selecting all of a long drillhole stays linear.
+  const rowIndexById = new Map(rows.map((item, index) => [String(item.id), index]));
   return cells.flatMap((cell): CellPosition[] => {
-    const row = rows.findIndex((item) => String(item.id) === cell.rowId);
+    const row = rowIndexById.get(cell.rowId) ?? -1;
     const column = COLUMN_KEYS.indexOf(cell.columnKey);
 
     return row === -1 || column === -1 ? [] : [{ row, column }];
@@ -168,17 +82,16 @@ function locateCells(rows: RawLithoRow[], cells: CellRef[]) {
 }
 
 function getBounds(positions: CellPosition[]) {
-  const rowIndexes = positions.map((position) => position.row);
-  const columnIndexes = positions.map((position) => position.column);
-  const top = Math.min(...rowIndexes);
-  const left = Math.min(...columnIndexes);
+  // A loop, not Math.min(...): a whole-table selection is tens of thousands of cells.
+  let [top, left, bottom, right] = [Infinity, Infinity, -Infinity, -Infinity];
+  positions.forEach(({ row, column }) => {
+    top = Math.min(top, row);
+    bottom = Math.max(bottom, row);
+    left = Math.min(left, column);
+    right = Math.max(right, column);
+  });
 
-  return {
-    top,
-    left,
-    height: Math.max(...rowIndexes) - top + 1,
-    width: Math.max(...columnIndexes) - left + 1,
-  };
+  return { top, left, height: bottom - top + 1, width: right - left + 1 };
 }
 
 /*
